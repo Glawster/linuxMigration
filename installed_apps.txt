@@ -1,0 +1,170 @@
+Installed Applications
+A
+ABBYY FineReader
+Access
+Acronis
+Acronis True Image
+Adobe Acrobat DC
+Advanced Renamer *
+Anaconda3 (64-bit)
+Apple Software Update
+AudibleManager
+Avidemux
+Avidemux 2.7 VC++ 64-bit
+
+B
+Backblaze
+Battle.net *
+Blackmagic Design
+Blend for Visual Studio 2019
+BMWDownloadManager
+
+C
+calibre – E-book Management
+Canon Inkjet Print Utility *
+Canon MG4200 series *
+Canon Utilities *
+CHIRP
+ComicRack
+Copy Handler
+Creative
+
+D
+DeepSkyStacker (64-bit)
+Discord Inc *
+
+E
+Epic Games Launcher
+ESET *
+Excel
+ExpressVPN
+
+F
+ffdshow x64
+FileCenter *
+Firefox
+FLAC Frontend
+
+G
+Garmin
+Git
+GoodSync
+GoPro
+Guild Wars 2 *
+Google Chrome
+Google Drive
+
+H
+HCS VoicePacks
+
+I
+iCloud
+iCloud Passwords
+iCloud Shared Albums
+iTunes *
+
+J
+Java
+
+L
+LaserSoft Imaging *
+
+M
+Media Center Master *
+Microsoft Corporation
+Microsoft Edge
+Microsoft Office 2016 Tools
+Microsoft Office Tools
+Microsoft Silverlight
+Microsoft Store
+Microsoft Teams
+Microsoft Visual C++ Redistributables
+MinGW-W64 project
+MKVToolNix
+Mp3tag *
+
+N
+NEOPro
+
+O
+OneDrive
+OneNote
+OneNote for Windows 10
+Optional Features
+Outlook
+
+P
+Paint 3D
+Paprika Recipe Manager 
+Passwords Plus CS
+PC Health Check
+Photos
+Picasa 3
+Plex Media Server
+Plustek OpticFilm 7600i *
+PowerPoint
+Publisher
+
+Q
+qBittorrent
+
+R
+R
+Radmin Viewer 3
+Recover My Files v5
+Recover My Files v6
+Registrar Registry Manager
+Return of Reckoning
+Revo Uninstaller Pro *
+ROCCAT
+
+S
+ScanSnap Manager *
+ScanSnap Manuals
+ScanSnap Online Update
+ScanSnap Organizer
+Settings
+Skype for Business
+Sonos
+Spotify
+Steam *
+Sticky Notes
+
+T
+The Elder Scrolls Online
+Topaz Labs
+Topaz Labs LLC
+Topaz Video Enhance AI
+TreeSize Free
+Tracker Software
+
+V
+Video Editor
+VideoLAN
+Vim 8.0
+Visual Studio 2019
+Visual Studio Installer
+VMware Horizon Client
+
+W
+Wargaming.net
+WhatsApp
+Windows Accessories
+Windows Administrative Tools
+Windows Ease of Access
+Windows Kits
+Windows PowerShell
+Windows Security
+Windows System
+WinMerge
+WinRAR
+Word
+World of Warcraft *
+World of Warcraft Public Test Realm
+WoWmapper
+
+X
+XMedia Recode 64bit *
+
+Z
+Zoom

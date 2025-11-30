@@ -1,184 +1,164 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
 # Configuration
+sourceRoot="$HOME/pst_mbox"
+imports=("andyw@glawster.com.2025" "kathyMail" "myMail")
 
-ROOT="/mnt/home/Andy/Documents/myCabinets"
-INBOX="$ROOT/Inbox"
+# Override profile manually if needed (leave empty for auto-detect)
+profileDir="~/.var/app/org.mozilla.Thunderbird/.thunderbird/r0q0pjdo.default-esr"
 
-DOC_TYPES=(
-"Invoice"
-"Statement"
-"Receipt"
-"Policy Documents"
-"P60"
-"Payslip"
-"LetterTo"
-"LetterFrom"
-"Renewal"
-"Certificate of Insurance"
-"Keep Original Name"
-"Other"
-)
+# Flags
+dryRun=0
+if [[ "${1-}" == "--dry-run" ]]; then
+  dryRun=1
+  echo "Dry-run mode enabled — no changes will be written."
+  echo
+fi
 
-# Functions
-
-extract_date_from_pdf() {
-    local file="$1"
-    local text date d m y tmp dummy
-
-    # Text layer first
-    text=$(pdftotext -f 1 -l 1 "$file" - 2>/dev/null || true)
-
-    # OCR fallback
-    if [ -z "$text" ] && command -v ocrmypdf >/dev/null 2>&1; then
-        tmp=$(mktemp)
-        dummy=$(mktemp --suffix=.pdf)
-        ocrmypdf --sidecar "$tmp" "$file" "$dummy" >/dev/null 2>&1 || true
-        text=$(cat "$tmp" 2>/dev/null || true)
-        rm -f "$tmp" "$dummy"
-    fi
-
-    # YYYY-MM-DD or YYYY/MM/DD
-    date=$(echo "$text" | grep -Eo '[0-9]{4}[-/][0-9]{2}[-/][0-9]{2}' | head -1)
-    if [ -n "$date" ]; then
-        echo "${date//\//-}"
-        return 0
-    fi
-
-    # DD/MM/YYYY or DD-MM-YYYY
-    date=$(echo "$text" | grep -Eo '[0-9]{2}[/-][0-9]{2}[/-][0-9]{4}' | head -1)
-    if [ -n "$date" ]; then
-        d=${date:0:2}
-        m=${date:3:2}
-        y=${date:6:4}
-        echo "$y-$m-$d"
-        return 0
-    fi
-
-    return 1
+# Run command (respects dry-run)
+run() {
+  echo "+ $*"
+  if [[ "${dryRun}" -eq 0 ]]; then
+    eval "$@"
+  fi
 }
 
-closePreviewWindow() {
-    local title="$1"
-    wmctrl -c "$title" 2>/dev/null || true
+# Find Thunderbird profile
+findThunderbirdProfile() {
+  if [[ -n "${profileDir}" ]]; then
+    return 0
+  fi
+
+  local candidates=(
+    "$HOME/.thunderbird"
+    "$HOME/snap/thunderbird/common/.thunderbird"
+    "$HOME/.var/app/org.mozilla.Thunderbird/.thunderbird"
+  )
+
+  for root in "${candidates[@]}"; do
+    if [[ -d "${root}" ]]; then
+      profileDir="$(ls -d "${root}"/*.default* 2>/dev/null | head -n1 || true)"
+      if [[ -n "${profileDir}" ]]; then
+        return 0
+      fi
+    fi
+  done
+
+  echo "Error: Could not detect Thunderbird profile directory."
+  exit 1
 }
 
-# Main Loop (Batch Mode)
-while true; do
+# Backup the profile Mail directory
+backupMailDir() {
+  local mailDir="${profileDir}/Mail"
+  if [[ "${dryRun}" -eq 1 ]]; then
+    echo "[DRY-RUN] Would back up: ${mailDir}"
+    echo
+    return
+  fi
 
-    FILE=$(ls -t "$INBOX"/*.pdf 2>/dev/null | tail -1 || true)
+  if [[ -d "${mailDir}" ]]; then
+    local timestamp
+    timestamp=$(date +%Y%m%d-%H%M%S)
+    local backupDir="${mailDir}.backup-${timestamp}"
+    echo "Backing up: ${mailDir}"
+    echo "     to:    ${backupDir}"
+    run "cp -a \"${mailDir}\" \"${backupDir}\""
+    echo
+  else
+    echo "Warning: Mail directory not found at ${mailDir}"
+    echo
+  fi
+}
 
-    if [ -z "$FILE" ]; then
-        zenity --info --text="Inbox is empty. All documents processed."
-        exit 0
+# Combine message files into mbox format
+createMboxFromDirectory() {
+  local srcDir="$1"
+  local destFile="$2"
+
+  if [[ "${dryRun}" -eq 1 ]]; then
+    echo "[DRY-RUN] Would create mbox: ${destFile}"
+    return
+  fi
+
+  (
+    cd "${srcDir}" || exit 1
+    ls | sort -n | xargs cat -- 
+  ) > "${destFile}"
+}
+
+# Import an individual tree (Inbox, Sent Items, etc.)
+importTree() {
+  local importName="$1"
+  local srcBase="${sourceRoot}/${importName}"
+
+  if [[ ! -d "${srcBase}" ]]; then
+    echo "Skipping missing import: ${importName}"
+    echo
+    return
+  fi
+
+  echo "=== Importing ${importName} ==="
+
+  local localFolders="${profileDir}/Mail/Local Folders"
+  local rootMailbox="${localFolders}/${importName}"
+  local rootSbd="${rootMailbox}.sbd"
+
+  if [[ "${dryRun}" -eq 1 ]]; then
+    echo "[DRY-RUN] Would create mailbox and folder: ${rootMailbox}"
+  else
+    touch "${rootMailbox}"
+    mkdir -p "${rootSbd}"
+  fi
+
+  # Walk subdirectories
+  while IFS= read -r -d '' dir; do
+    local relPath="${dir#${srcBase}}"
+    relPath="${relPath#/}"
+
+    [[ -z "${relPath}" ]] && continue
+
+    if ! find "${dir}" -maxdepth 1 -type f -print -quit | grep -q .; then
+      continue
     fi
 
-    BASENAME_ORIG=$(basename "$FILE")
+    IFS='/' read -r -a parts <<< "${relPath}"
+    local parent="${rootSbd}"
 
-    # Generate Preview
-    TMPDIR=$(mktemp -d)
-    pdftoppm -png -f 1 -l 1 "$FILE" "$TMPDIR/page" >/dev/null 2>&1
+    for (( i=0; i<${#parts[@]}-1; i++ )); do
+      local folder="${parts[$i]}"
+      if [[ "${dryRun}" -eq 1 ]]; then
+        echo "[DRY-RUN] Would create parent mailbox: ${parent}/${folder}"
+      else
+        touch "${parent}/${folder}"
+        mkdir -p "${parent}/${folder}.sbd"
+      fi
+      parent="${parent}/${folder}.sbd"
+    done
 
-    TMPPNG="$TMPDIR/page-1.png"
+    local leaf="${parts[-1]}"
+    local destMbox="${parent}/${leaf}"
 
-    if [ ! -f "$TMPPNG" ]; then
-        zenity --warning --text="Preview could not be generated for $BASENAME_ORIG"
-    fi
+    echo "  -> ${relPath} => ${destMbox}"
+    createMboxFromDirectory "${dir}" "${destMbox}"
 
-    # Show persistent preview
-    zenity --info \
-      --title="Preview - $BASENAME_ORIG" \
-      --width=600 --height=800 \
-      --text="Preview of first page.\nThis stays open until filing completes.\n\nDocument: $BASENAME_ORIG" \
-      --window-icon="$TMPPNG" \
-      &
-    PREVIEW_PID=$!
+  done < <(find "${srcBase}" -type d -print0)
 
-    # Give preview window time to appear
-    sleep 0.3
-    command -v wmctrl >/dev/null && wmctrl -r "Preview - $BASENAME_ORIG" -b add,above
+  echo
+}
 
-    # Choose Folder
-    FOLDER=$(zenity --file-selection \
-            --directory \
-            --title="Choose Filing Folder" \
-            --filename="$ROOT/")
+# Main Execution
+findThunderbirdProfile
+echo "Using profile:       ${profileDir}"
+echo "Local Folders path:  ${profileDir}/Mail/Local Folders"
+echo
 
-    if [ $? -ne 0 ]; then
-        closePreviewWindow "Preview - $BASENAME_ORIG"
-        rm -rf "$TMPDIR"
-        exit 0
-    fi
+backupMailDir
 
-    case "$FOLDER" in
-        "$ROOT"/*) ;;
-        *)
-            zenity --error --text="Folder must be inside $ROOT"
-            closePreviewWindow "Preview - $BASENAME_ORIG"
-            rm -rf "$TMPDIR"
-            continue
-        ;;
-    esac
-
-    FOLDERNAME=$(basename "$FOLDER")
-
-    # Choose Document Type
-    DOC_TYPE=$(zenity --list \
-        --title="Document Type" \
-        --text="Choose document type for $BASENAME_ORIG" \
-        --column="Type" \
-        --width=400 \
-        --height=600 \
-        "${DOC_TYPES[@]}")
-
-    if [ $? -ne 0 ]; then
-        closePreviewWindow "Preview - $BASENAME_ORIG"
-        rm -rf "$TMPDIR"
-        exit 0
-    fi
-
-    # sanitise and handle "Keep Original Name" specially
-    ORIG_NAME_NO_EXT="${BASENAME_ORIG%.pdf}"
-
-    if [[ "$DOC_TYPE" == "Keep Original Name" ]]; then
-        # use original document name (without extension), sanitised
-        NAME_PART=$(echo "$ORIG_NAME_NO_EXT" | sed 's/[\/:*?"<>|]/-/g')
-    else
-        # use chosen document type
-        NAME_PART=$(echo "$DOC_TYPE" | sed 's/[\/:*?"<>|]/-/g')
-    fi
-
-    # build final filename
-    FINAL="$DATE - $FOLDERNAME - $NAME_PART.pdf"
-    DEST="$FOLDER/$FINAL"
-
-    # Extract Date
-    if DATE_EXTRACTED=$(extract_date_from_pdf "$FILE"); then
-        DATE="$DATE_EXTRACTED"
-    else
-        DATE=$(date +%Y-%m-%d)
-    fi
-
-    # Build Final Name
-    FINAL="$DATE - $FOLDERNAME - $NAME_PART.pdf"
-    DEST="$FOLDER/$FINAL"
-
-    zenity --question --text="File:\n$BASENAME_ORIG\n\nAs:\n$DEST\n\nProceed?"
-
-    if [ $? -ne 0 ]; then
-        closePreviewWindow "Preview - $BASENAME_ORIG"
-        rm -rf "$TMPDIR"
-        continue
-    fi
-
-    # Move File
-    mv "$FILE" "$DEST"
-
-    #zenity --info --text="Filed:\n$DEST"
-
-    # Cleanup
-    closePreviewWindow "Preview - $BASENAME_ORIG"
-    rm -rf "$TMPDIR"
-
+for importName in "${imports[@]}"; do
+  importTree "${importName}"
 done
+
+echo "Import complete. Restart Thunderbird to see:"
+printf "  - %s\n" "${imports[@]}"
