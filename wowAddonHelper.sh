@@ -8,7 +8,7 @@ PREFIX="/mnt/games2/prefixes/battlenet"
 INSTALLER="/mnt/games2/installers"
 
 # Wine runner used by Lutris for Battle.net
-WINE="$HOME/.local/share/lutris/runners/wine/lutris-GE-Proton8-26-x86_64/bin/wine"
+WINE="$HOME/.local/share/lutris/runners/wine/wine-10.20-staging-tkg-amd64/bin/wine"
 
 # Zygor installer you already downloaded
 ZYGOR_INSTALLER="$INSTALLER/Zygor_Setup_4.8.0.exe"
