@@ -19,9 +19,8 @@ Default paths (can be overridden):
     source: /home/andy/Recovery
     target: /mnt/games1/Recovery
 """
-
-import argparse
 import hashlib
+import argparse
 import shutil
 import sys
 import re
@@ -42,18 +41,6 @@ def isImage(path: Path) -> bool:
 
 def isVideo(path: Path) -> bool:
     return path.suffix.lower() in VIDEO_EXTS
-
-
-def hashFile(path: Path, chunkSize: int = 1024 * 1024) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as f:
-        while True:
-            chunk = f.read(chunkSize)
-            if not chunk:
-                break
-            digest.update(chunk)
-    return digest.hexdigest()
-
 
 def analyseImage(path: Path, blackMeanThresh: float, blackStdThresh: float) -> Tuple[bool, bool]:
     """
@@ -163,6 +150,16 @@ def formatEta(seconds: float) -> str:
         return "99:59:59"
     return f"{h:02d}:{m:02d}:{s:02d}"
 
+def hashFile(path: Path, chunkSize: int = 1024 * 1024) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        while True:
+            chunk = f.read(chunkSize)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
 
 def printProgress(done: int, total: int, startTime: float, width: int = 40):
     if total == 0:
@@ -196,10 +193,7 @@ def processFiles(
 ):
 
     imgsDir, vidsDir, othDir = ensureTargetSubdirs(targetRoot)
-    # Seed hashesSeen with anything we've already copied into the target.
-    # This means if we kill the script and re-run it, previously copied
-    # files are recognised as duplicates and skipped instead of re-copied.
-    hashesSeen: Set[str] = set()
+    hashesSeen: set[str] = set()
 
     stats = dict(
         totalFiles=0,
@@ -279,15 +273,20 @@ def processFiles(
                     stats["duplicatesSkipped"] += 1
                     continue
 
-            # For images and other smaller files, do full SHA256 dedupe.
-            # Videos are *not* hashed here to avoid doubling I/O cost;
-            # we just copy them and handle any dedupe/triage later.
-            if kind != "video":
+            # ---- SHA-256 dedupe (for both images & videos & other) ----
+            try:
                 fileHash = hashFile(path)
-                if fileHash in hashesSeen:
-                    stats["duplicatesSkipped"] += 1
-                    continue
-                hashesSeen.add(fileHash)
+            except Exception:
+                # If unreadable, treat as skipped but don't crash hashing
+                stats["duplicatesSkipped"] += 1
+                continue
+
+            if fileHash in hashesSeen:
+                stats["duplicatesSkipped"] += 1
+                continue
+
+            hashesSeen.add(fileHash)
+            # -------------------------------------------------------------
 
             if dryRun:
                 if kind == "image":
@@ -299,6 +298,7 @@ def processFiles(
                 index += 1
                 continue
 
+            # the copy...
             if kind == "image":
                 copyFile(path, imgsDir, index)
                 stats["imagesCopied"] += 1
