@@ -102,6 +102,26 @@ def ensureTargetSubdirs(targetRoot: Path):
     othr.mkdir(parents=True, exist_ok=True)
     return imgs, vids, othr
 
+def seedExistingHashes(imgsDir: Path, vidsDir: Path, othDir: Path) -> Set[str]:
+    """
+    Pre-populate the hash set with any files that already exist
+    in the target Images/Videos/Other folders. This lets us 'resume'
+    across multiple runs without re-copying files we already wrote.
+    """
+    hashes: Set[str] = set()
+    for d in (imgsDir, vidsDir, othDir):
+        if not d.is_dir():
+            continue
+        for p in d.rglob("*"):
+            if not p.is_file():
+                continue
+            try:
+                h = hashFile(p)
+            except Exception:
+                # If we can't hash an existing file, just skip it
+                continue
+            hashes.add(h)
+    return hashes
 
 def copyFile(src: Path, targetDir: Path, index: int) -> Path:
     name = f"{src.stem}_{index}{src.suffix.lower()}"
@@ -172,9 +192,13 @@ def processFiles(
     dryRun: bool,
     blackMean: float,
     blackStd: float,
+    progressLog=None,
 ):
 
     imgsDir, vidsDir, othDir = ensureTargetSubdirs(targetRoot)
+    # Seed hashesSeen with anything we've already copied into the target.
+    # This means if we kill the script and re-run it, previously copied
+    # files are recognised as duplicates and skipped instead of re-copied.
     hashesSeen: Set[str] = set()
 
     stats = dict(
@@ -213,6 +237,9 @@ def processFiles(
             done += 1
             printProgress(done, total, startTime)
 
+            if progressLog is not None:
+                progressLog.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {path}\n")
+
             stats["totalFiles"] += 1
             kind = classifyFile(path, minVideoSize)
 
@@ -235,11 +262,32 @@ def processFiles(
             else:
                 stats["othersSeen"] += 1
 
-            fileHash = hashFile(path)
-            if fileHash in hashesSeen:
-                stats["duplicatesSkipped"] += 1
-                continue
-            hashesSeen.add(fileHash)
+            # Cheap resume/exists check:
+            # if we've already copied *any* file derived from this PhotoRec file
+            # (same stem, any index), skip it. This avoids re-copying on reruns
+            # without needing to hash the entire target.
+            if not dryRun:
+                if kind == "image":
+                    destDir = imgsDir
+                elif kind == "video":
+                    destDir = vidsDir
+                else:
+                    destDir = othDir
+
+                pattern = f"{path.stem}_*{path.suffix.lower()}"
+                if any(destDir.glob(pattern)):
+                    stats["duplicatesSkipped"] += 1
+                    continue
+
+            # For images and other smaller files, do full SHA256 dedupe.
+            # Videos are *not* hashed here to avoid doubling I/O cost;
+            # we just copy them and handle any dedupe/triage later.
+            if kind != "video":
+                fileHash = hashFile(path)
+                if fileHash in hashesSeen:
+                    stats["duplicatesSkipped"] += 1
+                    continue
+                hashesSeen.add(fileHash)
 
             if dryRun:
                 if kind == "image":
@@ -301,6 +349,11 @@ def main():
 
     tgt.mkdir(parents=True, exist_ok=True)
 
+    # NEW: open a simple progress log you can tail -f
+    progressLogPath = tgt / "cleanup_progress.log"
+    progressLog = progressLogPath.open("a", encoding="utf-8", buffering=1)
+    print(f"writing progress to {progressLogPath}")
+
     stats = processFiles(
         sourceRoot=src,
         targetRoot=tgt,
@@ -308,7 +361,10 @@ def main():
         dryRun=args.dry_run,
         blackMean=args.blackMean,
         blackStd=args.blackStd,
+        progressLog=progressLog,
     )
+
+    progressLog.close()
 
     print("\nDone.\n")
     for k, v in stats.items():
