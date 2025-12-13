@@ -41,12 +41,23 @@ def main():
         raise SystemExit(f"Source directory does not exist: {sourceDir}")
 
     dupesDir = sourceDir / "Duplicates"
+    blackDir = sourceDir / "BlackImages"
     dupesDir.mkdir(exist_ok=True)
 
     log = openStepLog(sourceDir, "dedupeImages")
 
-    # Collect image files
-    images = [p for p in sourceDir.rglob("*") if p.is_file() and isImage(p) and not p.is_relative_to(dupesDir)]
+    # Collect image files (exclude special directories)
+    images = []
+    for p in sourceDir.rglob("*"):
+        if not p.is_file() or not isImage(p):
+            continue
+        # Skip files already in Duplicates or BlackImages
+        try:
+            if p.is_relative_to(dupesDir) or p.is_relative_to(blackDir):
+                continue
+        except ValueError:
+            pass
+        images.append(p)
     total = len(images)
 
     print(f"Found {total} image files to dedupe")

@@ -63,12 +63,23 @@ def main():
         raise SystemExit(f"Source directory does not exist: {sourceDir}")
 
     blackDir = sourceDir / "BlackImages"
+    dupesDir = sourceDir / "Duplicates"
     blackDir.mkdir(exist_ok=True)
 
     log = openStepLog(sourceDir, "filterBlackImages")
 
-    # Collect image files (excluding already moved black images)
-    images = [p for p in sourceDir.rglob("*") if p.is_file() and isImage(p) and not p.is_relative_to(blackDir)]
+    # Collect image files (excluding already moved black images and duplicates)
+    images = []
+    for p in sourceDir.rglob("*"):
+        if not p.is_file() or not isImage(p):
+            continue
+        # Skip files already in BlackImages or Duplicates
+        try:
+            if p.is_relative_to(blackDir) or p.is_relative_to(dupesDir):
+                continue
+        except ValueError:
+            pass
+        images.append(p)
     total = len(images)
 
     print(f"Found {total} image files to check")
