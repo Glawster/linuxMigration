@@ -32,6 +32,18 @@ def isVideo(path: Path) -> bool:
     return path.suffix.lower() in VIDEO_EXTS
 
 
+def isRelativeTo(path: Path, parent: Path) -> bool:
+    """
+    Check if path is relative to parent directory.
+    Compatible with Python 3.8+ (is_relative_to was added in 3.9).
+    """
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
 # ----------------------------------------------------------------------
 # Progress bar helpers
 # ----------------------------------------------------------------------

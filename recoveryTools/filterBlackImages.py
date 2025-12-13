@@ -2,10 +2,11 @@
 """
 filterBlackImages.py
 
-Move near-black or invalid images out of the main Images folder
-into BlackImages, with progress feedback and logging.
+Move near-black or invalid images into BlackImages subfolder,
+preserving directory structure.
 """
 
+import argparse
 import time
 from pathlib import Path
 from PIL import Image, ImageStat
@@ -14,6 +15,7 @@ from recoveryCommon import (
     isImage,
     printProgress,
     openStepLog,
+    isRelativeTo,
 )
 
 # Thresholds (can later move to a config module)
@@ -46,15 +48,39 @@ def analyseImage(path: Path, blackMean: float, blackStd: float):
 
 
 def main():
-    root = Path("/mnt/games1/Recovery")
-    imagesDir = root / "Images"
-    blackDir = root / "BlackImages"
+    parser = argparse.ArgumentParser(
+        description="Filter out black or invalid images in place."
+    )
+    parser.add_argument(
+        "--source",
+        required=True,
+        help="Source directory to scan for images",
+    )
+    args = parser.parse_args()
+
+    try:
+        sourceDir = Path(args.source).expanduser().resolve()
+    except (OSError, RuntimeError, ValueError) as e:
+        raise SystemExit(f"Error resolving source directory path: {e}")
+    
+    if not sourceDir.is_dir():
+        raise SystemExit(f"Source directory does not exist: {sourceDir}")
+
+    blackDir = sourceDir / "BlackImages"
+    dupesDir = sourceDir / "Duplicates"
     blackDir.mkdir(exist_ok=True)
 
-    log = openStepLog(root, "filterBlackImages")
+    log = openStepLog(sourceDir, "filterBlackImages")
 
-    # Collect image files
-    images = [p for p in imagesDir.rglob("*") if p.is_file() and isImage(p)]
+    # Collect image files (excluding already moved black images and duplicates)
+    images = []
+    for p in sourceDir.rglob("*"):
+        if not p.is_file() or not isImage(p):
+            continue
+        # Skip files already in BlackImages or Duplicates
+        if isRelativeTo(p, blackDir) or isRelativeTo(p, dupesDir):
+            continue
+        images.append(p)
     total = len(images)
 
     print(f"Found {total} image files to check")
@@ -75,10 +101,14 @@ def main():
         isValid, isBlack = analyseImage(imgPath, BLACK_MEAN, BLACK_STD)
 
         if not isValid or isBlack:
-            target = blackDir / imgPath.name
+            # Preserve directory structure relative to source
+            relPath = imgPath.relative_to(sourceDir)
+            target = blackDir / relPath
+            target.parent.mkdir(parents=True, exist_ok=True)
+            
             counter = 1
             while target.exists():
-                target = blackDir / f"{imgPath.stem}_{counter}{imgPath.suffix}"
+                target = target.parent / f"{imgPath.stem}_{counter}{imgPath.suffix}"
                 counter += 1
 
             imgPath.rename(target)

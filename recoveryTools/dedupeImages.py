@@ -3,10 +3,11 @@
 dedupeImages.py
 
 Perceptual deduplication of images using pHash.
-Keeps one copy of visually-identical images in Images/
-Moves duplicates into Duplicates/, with progress feedback and logging.
+Keeps one copy of visually-identical images in the source directory.
+Moves duplicates into Duplicates/ subfolder, preserving directory structure.
 """
 
+import argparse
 import time
 from pathlib import Path
 from PIL import Image
@@ -16,6 +17,7 @@ from recoveryCommon import (
     isImage,
     printProgress,
     openStepLog,
+    isRelativeTo,
 )
 
 # pHash distance threshold
@@ -24,15 +26,39 @@ PHASH_THRESHOLD = 0
 
 
 def main():
-    root = Path("/mnt/games1/Recovery")
-    imagesDir = root / "Images"
-    dupesDir = root / "Duplicates"
+    parser = argparse.ArgumentParser(
+        description="Deduplicate images in place using perceptual hashing."
+    )
+    parser.add_argument(
+        "--source",
+        required=True,
+        help="Source directory to scan for images",
+    )
+    args = parser.parse_args()
+
+    try:
+        sourceDir = Path(args.source).expanduser().resolve()
+    except (OSError, RuntimeError, ValueError) as e:
+        raise SystemExit(f"Error resolving source directory path: {e}")
+    
+    if not sourceDir.is_dir():
+        raise SystemExit(f"Source directory does not exist: {sourceDir}")
+
+    dupesDir = sourceDir / "Duplicates"
+    blackDir = sourceDir / "BlackImages"
     dupesDir.mkdir(exist_ok=True)
 
-    log = openStepLog(root, "dedupeImages")
+    log = openStepLog(sourceDir, "dedupeImages")
 
-    # Collect image files
-    images = [p for p in imagesDir.rglob("*") if p.is_file() and isImage(p)]
+    # Collect image files (exclude special directories)
+    images = []
+    for p in sourceDir.rglob("*"):
+        if not p.is_file() or not isImage(p):
+            continue
+        # Skip files already in Duplicates or BlackImages
+        if isRelativeTo(p, dupesDir) or isRelativeTo(p, blackDir):
+            continue
+        images.append(p)
     total = len(images)
 
     print(f"Found {total} image files to dedupe")
@@ -72,10 +98,14 @@ def main():
             seen[phash] = imgPath
             kept += 1
         else:
-            target = dupesDir / imgPath.name
+            # Preserve directory structure relative to source
+            relPath = imgPath.relative_to(sourceDir)
+            target = dupesDir / relPath
+            target.parent.mkdir(parents=True, exist_ok=True)
+            
             counter = 1
             while target.exists():
-                target = dupesDir / f"{imgPath.stem}_{counter}{imgPath.suffix}"
+                target = target.parent / f"{imgPath.stem}_{counter}{imgPath.suffix}"
                 counter += 1
 
             imgPath.rename(target)
