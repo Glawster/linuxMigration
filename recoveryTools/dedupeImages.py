@@ -1,65 +1,99 @@
 #!/usr/bin/env python3
-import argparse
+"""
+dedupeImages.py
+
+Perceptual deduplication of images using pHash.
+Keeps one copy of visually-identical images in Images/
+Moves duplicates into Duplicates/, with progress feedback and logging.
+"""
+
+import time
 from pathlib import Path
 from PIL import Image
 import imagehash
 
+from recoveryCommon import (
+    isImage,
+    printProgress,
+    openStepLog,
+)
+
+# pHash distance threshold
+# 0 = identical hash, higher = more tolerant
+PHASH_THRESHOLD = 0
+
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Perceptually deduplicate JPG images using pHash."
-    )
-    parser.add_argument(
-        "--source",
-        default="/mnt/games1/Recovery/Images",
-        help="Source directory containing images (default: /mnt/games1/Recovery/Images)",
-    )
-    parser.add_argument(
-        "--dest",
-        default="/mnt/games1/Recovery/Duplicates",
-        help="Destination for duplicate images (default: /mnt/games1/Recovery/Duplicates)",
-    )
-    parser.add_argument(
-        "--hashSize",
-        type=int,
-        default=16,
-        help="Hash size for pHash (default: 16). Larger = slower but more precise.",
-    )
-    args = parser.parse_args()
+    root = Path("/mnt/games1/Recovery")
+    imagesDir = root / "Images"
+    dupesDir = root / "Duplicates"
+    dupesDir.mkdir(exist_ok=True)
 
-    srcDir = Path(args.source).expanduser().resolve()
-    dupeDir = Path(args.dest).expanduser().resolve()
+    log = openStepLog(root, "dedupeImages")
 
-    if not srcDir.is_dir():
-        raise SystemExit(f"Source directory does not exist: {srcDir}")
+    # Collect image files
+    images = [p for p in imagesDir.rglob("*") if p.is_file() and isImage(p)]
+    total = len(images)
 
-    dupeDir.mkdir(parents=True, exist_ok=True)
+    print(f"Found {total} image files to dedupe")
 
+    done = 0
+    startTime = time.time()
+    printProgress(done, total, startTime, label="Dedupe images")
+
+    # Map pHash -> kept image path
     seen = {}
+
+    kept = 0
     moved = 0
+    errors = 0
 
-    for f in srcDir.iterdir():
-        if f.suffix.lower() not in [".jpg", ".jpeg"]:
-            continue
+    for imgPath in images:
+        done += 1
+        printProgress(done, total, startTime, label="Dedupe images")
+
+        log.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} CHECK {imgPath}\n")
+
         try:
-            h = imagehash.phash(Image.open(f), hash_size=args.hashSize)
-        except Exception:
-            # Skip unreadable images silently; filterBlackImages.py should have caught most
+            with Image.open(imgPath) as img:
+                phash = imagehash.phash(img)
+        except Exception as e:
+            errors += 1
+            log.write(f"ERROR {imgPath}: {e}\n")
             continue
 
-        hStr = str(h)
-        if hStr in seen:
-            target = dupeDir / f.name
-            i = 1
-            while target.exists():
-                target = dupeDir / f"{f.stem}_{i}{f.suffix}"
-                i += 1
-            f.rename(target)
-            moved += 1
-        else:
-            seen[hStr] = f
+        matched = None
+        for existingHash, existingPath in seen.items():
+            if phash - existingHash <= PHASH_THRESHOLD:
+                matched = existingPath
+                break
 
-    print(f"Moved {moved} duplicate images to {dupeDir}.")
+        if matched is None:
+            seen[phash] = imgPath
+            kept += 1
+        else:
+            target = dupesDir / imgPath.name
+            counter = 1
+            while target.exists():
+                target = dupesDir / f"{imgPath.stem}_{counter}{imgPath.suffix}"
+                counter += 1
+
+            imgPath.rename(target)
+            moved += 1
+            log.write(
+                f"{time.strftime('%Y-%m-%d %H:%M:%S')} MOVE {imgPath} -> {target} (dup of {matched})\n"
+            )
+
+    print()  # finish progress line
+
+    log.write(
+        f"SUMMARY total={total} kept={kept} moved={moved} errors={errors}\n"
+    )
+    log.close()
+
+    print(
+        f"dedupeImages complete: total={total}, kept={kept}, moved={moved}, errors={errors}"
+    )
 
 
 if __name__ == "__main__":

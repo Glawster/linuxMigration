@@ -10,10 +10,10 @@ def run(cmd):
 
 def main():
     # 1) filter black images
-    run(["python", "filterBlackImages.py"])
+#    run(["python", "filterBlackImages.py"])
 
     # 2) perceptual dedupe
-    run(["python", "dedupeImages.py"])
+#    run(["python", "dedupeImages.py"])
 
     # 3) sort images by resolution
     run(["python", "sortImagesByResolution.py"])

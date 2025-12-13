@@ -25,22 +25,20 @@ import shutil
 import sys
 import re
 import time
+
 from pathlib import Path
 from typing import Dict, Set, Tuple
 
 from PIL import Image, ImageStat, UnidentifiedImageError
 
-
-IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".gif", ".webp"}
-VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".mpg", ".mpeg", ".mts", ".m2ts", ".wmv"}
-
-
-def isImage(path: Path) -> bool:
-    return path.suffix.lower() in IMAGE_EXTS
-
-
-def isVideo(path: Path) -> bool:
-    return path.suffix.lower() in VIDEO_EXTS
+from recoveryCommon import (
+    IMAGE_EXTS,
+    VIDEO_EXTS,
+    isImage,
+    isVideo,
+    printProgress,
+    openStepLog
+)
 
 def analyseImage(path: Path, blackMeanThresh: float, blackStdThresh: float) -> Tuple[bool, bool]:
     """
@@ -138,18 +136,6 @@ def countTotalFiles(recupDirs) -> int:
                 total += 1
     return total
 
-
-def formatEta(seconds: float) -> str:
-    if seconds <= 0 or seconds != seconds:  # NaN or negative
-        return "--:--:--"
-    seconds = int(seconds)
-    h = seconds // 3600
-    m = (seconds % 3600) // 60
-    s = seconds % 60
-    if h > 99:
-        return "99:59:59"
-    return f"{h:02d}:{m:02d}:{s:02d}"
-
 def hashFile(path: Path, chunkSize: int = 1024 * 1024) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as f:
@@ -159,28 +145,6 @@ def hashFile(path: Path, chunkSize: int = 1024 * 1024) -> str:
                 break
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def printProgress(done: int, total: int, startTime: float, width: int = 40):
-    if total == 0:
-        return
-    ratio = done / total
-    if ratio > 1:
-        ratio = 1
-    filled = int(width * ratio)
-    bar = "#" * filled + "-" * (width - filled)
-    pct = int(ratio * 100)
-
-    elapsed = time.time() - startTime
-    if done > 0:
-        perFile = elapsed / done
-        remaining = (total - done) * perFile
-    else:
-        remaining = 0
-    etaStr = formatEta(remaining)
-
-    print(f"\rScanning: [{bar}] {pct:3d}% ({done}/{total}) ETA {etaStr}", end="", flush=True)
-
 
 def processFiles(
     sourceRoot: Path,
@@ -350,9 +314,8 @@ def main():
     tgt.mkdir(parents=True, exist_ok=True)
 
     # NEW: open a simple progress log you can tail -f
-    progressLogPath = tgt / "cleanup_progress.log"
-    progressLog = progressLogPath.open("a", encoding="utf-8", buffering=1)
-    print(f"writing progress to {progressLogPath}")
+    progressLog = openStepLog(tgt, "cleanupProgress")
+    print(f"writing progress to {progressLog.name}")
 
     stats = processFiles(
         sourceRoot=src,
