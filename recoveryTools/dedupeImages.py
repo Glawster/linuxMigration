@@ -17,6 +17,7 @@ from recoveryCommon import (
     isImage,
     printProgress,
     openStepLog,
+    isRelativeTo,
 )
 
 # pHash distance threshold
@@ -35,7 +36,10 @@ def main():
     )
     args = parser.parse_args()
 
-    sourceDir = Path(args.source).expanduser().resolve()
+    try:
+        sourceDir = Path(args.source).expanduser().resolve()
+    except (OSError, RuntimeError) as e:
+        raise SystemExit(f"Error resolving source directory path: {e}")
     
     if not sourceDir.is_dir():
         raise SystemExit(f"Source directory does not exist: {sourceDir}")
@@ -52,11 +56,8 @@ def main():
         if not p.is_file() or not isImage(p):
             continue
         # Skip files already in Duplicates or BlackImages
-        try:
-            if p.is_relative_to(dupesDir) or p.is_relative_to(blackDir):
-                continue
-        except ValueError:
-            pass
+        if isRelativeTo(p, dupesDir) or isRelativeTo(p, blackDir):
+            continue
         images.append(p)
     total = len(images)
 

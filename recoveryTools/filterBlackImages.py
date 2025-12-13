@@ -15,6 +15,7 @@ from recoveryCommon import (
     isImage,
     printProgress,
     openStepLog,
+    isRelativeTo,
 )
 
 # Thresholds (can later move to a config module)
@@ -57,7 +58,10 @@ def main():
     )
     args = parser.parse_args()
 
-    sourceDir = Path(args.source).expanduser().resolve()
+    try:
+        sourceDir = Path(args.source).expanduser().resolve()
+    except (OSError, RuntimeError) as e:
+        raise SystemExit(f"Error resolving source directory path: {e}")
     
     if not sourceDir.is_dir():
         raise SystemExit(f"Source directory does not exist: {sourceDir}")
@@ -74,11 +78,8 @@ def main():
         if not p.is_file() or not isImage(p):
             continue
         # Skip files already in BlackImages or Duplicates
-        try:
-            if p.is_relative_to(blackDir) or p.is_relative_to(dupesDir):
-                continue
-        except ValueError:
-            pass
+        if isRelativeTo(p, blackDir) or isRelativeTo(p, dupesDir):
+            continue
         images.append(p)
     total = len(images)
 

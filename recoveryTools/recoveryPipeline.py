@@ -29,7 +29,10 @@ def main():
     )
     args = parser.parse_args()
 
-    sourceDir = Path(args.source).expanduser().resolve()
+    try:
+        sourceDir = Path(args.source).expanduser().resolve()
+    except (OSError, RuntimeError) as e:
+        raise SystemExit(f"Error resolving source directory path: {e}")
     
     if not sourceDir.is_dir():
         raise SystemExit(f"Source directory does not exist: {sourceDir}")
