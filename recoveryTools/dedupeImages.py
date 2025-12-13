@@ -3,10 +3,11 @@
 dedupeImages.py
 
 Perceptual deduplication of images using pHash.
-Keeps one copy of visually-identical images in Images/
-Moves duplicates into Duplicates/, with progress feedback and logging.
+Keeps one copy of visually-identical images in the source directory.
+Moves duplicates into Duplicates/ subfolder, preserving directory structure.
 """
 
+import argparse
 import time
 from pathlib import Path
 from PIL import Image
@@ -24,15 +25,28 @@ PHASH_THRESHOLD = 0
 
 
 def main():
-    root = Path("/mnt/games1/Recovery")
-    imagesDir = root / "Images"
-    dupesDir = root / "Duplicates"
+    parser = argparse.ArgumentParser(
+        description="Deduplicate images in place using perceptual hashing."
+    )
+    parser.add_argument(
+        "--source",
+        required=True,
+        help="Source directory to scan for images",
+    )
+    args = parser.parse_args()
+
+    sourceDir = Path(args.source).expanduser().resolve()
+    
+    if not sourceDir.is_dir():
+        raise SystemExit(f"Source directory does not exist: {sourceDir}")
+
+    dupesDir = sourceDir / "Duplicates"
     dupesDir.mkdir(exist_ok=True)
 
-    log = openStepLog(root, "dedupeImages")
+    log = openStepLog(sourceDir, "dedupeImages")
 
     # Collect image files
-    images = [p for p in imagesDir.rglob("*") if p.is_file() and isImage(p)]
+    images = [p for p in sourceDir.rglob("*") if p.is_file() and isImage(p) and not p.is_relative_to(dupesDir)]
     total = len(images)
 
     print(f"Found {total} image files to dedupe")
@@ -72,10 +86,14 @@ def main():
             seen[phash] = imgPath
             kept += 1
         else:
-            target = dupesDir / imgPath.name
+            # Preserve directory structure relative to source
+            relPath = imgPath.relative_to(sourceDir)
+            target = dupesDir / relPath
+            target.parent.mkdir(parents=True, exist_ok=True)
+            
             counter = 1
             while target.exists():
-                target = dupesDir / f"{imgPath.stem}_{counter}{imgPath.suffix}"
+                target = target.parent / f"{imgPath.stem}_{counter}{imgPath.suffix}"
                 counter += 1
 
             imgPath.rename(target)

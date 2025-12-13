@@ -2,10 +2,11 @@
 """
 filterBlackImages.py
 
-Move near-black or invalid images out of the main Images folder
-into BlackImages, with progress feedback and logging.
+Move near-black or invalid images into BlackImages subfolder,
+preserving directory structure.
 """
 
+import argparse
 import time
 from pathlib import Path
 from PIL import Image, ImageStat
@@ -46,15 +47,28 @@ def analyseImage(path: Path, blackMean: float, blackStd: float):
 
 
 def main():
-    root = Path("/mnt/games1/Recovery")
-    imagesDir = root / "Images"
-    blackDir = root / "BlackImages"
+    parser = argparse.ArgumentParser(
+        description="Filter out black or invalid images in place."
+    )
+    parser.add_argument(
+        "--source",
+        required=True,
+        help="Source directory to scan for images",
+    )
+    args = parser.parse_args()
+
+    sourceDir = Path(args.source).expanduser().resolve()
+    
+    if not sourceDir.is_dir():
+        raise SystemExit(f"Source directory does not exist: {sourceDir}")
+
+    blackDir = sourceDir / "BlackImages"
     blackDir.mkdir(exist_ok=True)
 
-    log = openStepLog(root, "filterBlackImages")
+    log = openStepLog(sourceDir, "filterBlackImages")
 
-    # Collect image files
-    images = [p for p in imagesDir.rglob("*") if p.is_file() and isImage(p)]
+    # Collect image files (excluding already moved black images)
+    images = [p for p in sourceDir.rglob("*") if p.is_file() and isImage(p) and not p.is_relative_to(blackDir)]
     total = len(images)
 
     print(f"Found {total} image files to check")
@@ -75,10 +89,14 @@ def main():
         isValid, isBlack = analyseImage(imgPath, BLACK_MEAN, BLACK_STD)
 
         if not isValid or isBlack:
-            target = blackDir / imgPath.name
+            # Preserve directory structure relative to source
+            relPath = imgPath.relative_to(sourceDir)
+            target = blackDir / relPath
+            target.parent.mkdir(parents=True, exist_ok=True)
+            
             counter = 1
             while target.exists():
-                target = blackDir / f"{imgPath.stem}_{counter}{imgPath.suffix}"
+                target = target.parent / f"{imgPath.stem}_{counter}{imgPath.suffix}"
                 counter += 1
 
             imgPath.rename(target)

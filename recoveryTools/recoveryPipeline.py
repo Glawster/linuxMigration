@@ -1,28 +1,53 @@
 #!/usr/bin/env python3
+"""
+recoveryPipeline.py
+
+Pipeline to process images in place:
+1. Filter out black/invalid images
+2. Deduplicate images using perceptual hashing
+
+Both operations preserve directory structure and create subfolders
+(BlackImages/ and Duplicates/) within the source directory.
+"""
+
+import argparse
 import subprocess
 from pathlib import Path
-
-BASE = Path("/mnt/games1/Recovery")
 
 def run(cmd):
     print(">>", " ".join(str(x) for x in cmd))
     subprocess.check_call(cmd)
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Run recovery pipeline: filter black images and deduplicate in place."
+    )
+    parser.add_argument(
+        "--source",
+        required=True,
+        help="Source directory to process",
+    )
+    args = parser.parse_args()
+
+    sourceDir = Path(args.source).expanduser().resolve()
+    
+    if not sourceDir.is_dir():
+        raise SystemExit(f"Source directory does not exist: {sourceDir}")
+
+    print(f"Processing images in: {sourceDir}")
+    print()
+
     # 1) filter black images
-#    run(["python", "filterBlackImages.py"])
+    print("Step 1: Filtering black/invalid images...")
+    run(["python3", "filterBlackImages.py", "--source", str(sourceDir)])
+    print()
 
     # 2) perceptual dedupe
-#    run(["python", "dedupeImages.py"])
+    print("Step 2: Deduplicating images...")
+    run(["python3", "dedupeImages.py", "--source", str(sourceDir)])
+    print()
 
-    # 3) sort images by resolution
-    run(["python", "sortImagesByResolution.py"])
-
-    # 4) build image timeline
-    run(["python", "buildImageTimeline.py"])
-
-    # 5) sort videos by duration
-    run(["python", "sortVideosByDuration.py"])
+    print("Pipeline complete!")
 
 if __name__ == "__main__":
     main()
