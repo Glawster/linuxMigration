@@ -260,7 +260,8 @@ def process_image(
             img = enforce_16_9(img, aspect_mode)
 
             # Gentle auto-contrast for colour/levels cleanup
-            img = ImageOps.autocontrast(img)
+            # this causes issues with some images, so disabled for now
+            #img = ImageOps.autocontrast(img)
 
             img.save(
                 out_path,

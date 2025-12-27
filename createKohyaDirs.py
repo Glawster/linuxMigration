@@ -8,7 +8,7 @@ import argparse
 # ==========================================
 
 # Root folder containing all style folders
-baseDir = r"F:\Adult\tumblrForMovie"
+baseDir = r"/mnt/myVideo/Adult/tumblrForMovie"
 
 # Kohya repeat count (e.g. 10 will create subfolders like '10_wedding')
 repeatCount = 10
@@ -41,12 +41,12 @@ def ensureKohyaFolder(styleRoot: str, styleName: str, dry_run: bool = False) -> 
 def processStyleFolder(styleRoot: str, dry_run: bool = False):
     """
     Processes one style folder such as:
-        F:\Adult\tumblrForMovie\wedding
+        /mnt/myVideo/Adult/tumblrForMovie/wedding
     """
     styleName = os.path.basename(styleRoot)
 
     # Token used inside caption, e.g. <wedding_style>
-    tokenName = f"<{styleName.replace(' ', '_')}_style>"
+    tokenName = f"{styleName.replace(' ', '_')}"
 
     kohyaSubdir = ensureKohyaFolder(styleRoot, styleName, dry_run=dry_run)
 
