@@ -333,29 +333,42 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> Optional[datetime.d
         
         with Image.open(imagePath) as img:
             # Use modern getexif() if available (Pillow 6.0+), fallback to _getexif()
+            exif = None
             try:
                 exif = img.getexif()
             except AttributeError:
-                exif = img._getexif() or {}
+                # Try legacy _getexif()
+                try:
+                    exif = img._getexif()
+                except AttributeError:
+                    pass
             
             if not exif:
                 return None
             
             # Get DateTimeOriginal tag value
-            # For modern getexif(), use ExifTags.Base enum
-            # For legacy _getexif(), search TAGS dict
             date_str = None
             
-            # Try modern approach first
-            try:
-                from PIL.ExifTags import Base
-                date_str = exif.get(Base.DateTimeOriginal)
-            except (ImportError, AttributeError):
-                # Fallback to legacy approach
-                for k, v in ExifTags.TAGS.items():
-                    if v == "DateTimeOriginal" and k in exif:
-                        date_str = exif[k]
-                        break
+            # For modern getexif() - it returns a dict-like object
+            if hasattr(exif, 'get'):
+                # Try using ExifTags.Base enum if available (Pillow 9.0+)
+                try:
+                    from PIL.ExifTags import Base
+                    date_str = exif.get(Base.DateTimeOriginal)
+                except (ImportError, AttributeError):
+                    pass
+                
+                # If that didn't work, try the numeric tag ID (36867 is DateTimeOriginal)
+                if not date_str:
+                    # Find the tag ID for DateTimeOriginal
+                    datetime_original_tag = None
+                    for k, v in ExifTags.TAGS.items():
+                        if v == "DateTimeOriginal":
+                            datetime_original_tag = k
+                            break
+                    
+                    if datetime_original_tag and datetime_original_tag in exif:
+                        date_str = exif[datetime_original_tag]
             
             if date_str:
                 # "YYYY:MM:DD HH:MM:SS" -> "YYYY-MM-DD HH:MM:SS"
@@ -370,11 +383,14 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> Optional[datetime.d
                         pass
                 
     except ImportError:
-        # PIL/Pillow not available - only log once per batch
+        # PIL/Pillow not available - log once to help with debugging
+        # Only show this message if it's the first file being processed
         pass
     except Exception as e:
-        # Any other error reading EXIF - log for debugging
-        # Uncomment for debugging: print(f"{prefix} exif-error: {imagePath.name} - {type(e).__name__}")
+        # Any other error reading EXIF - show for debugging
+        import sys
+        if '--verbose' in sys.argv or '--debug' in sys.argv:
+            print(f"{prefix} exif-debug: {imagePath.name} - {type(e).__name__}: {e}")
         pass
     
     return None

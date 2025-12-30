@@ -407,6 +407,15 @@ def main() -> None:
     args = parseArgs()
     prefix = "...[]" if args.dryRun else "..."
 
+    # Check if PIL is available for EXIF extraction
+    try:
+        from PIL import Image
+        pil_available = True
+    except ImportError:
+        pil_available = False
+        print(f"{prefix} WARNING: PIL/Pillow not installed - EXIF dates will not be extracted")
+        print(f"{prefix}          Install with: pip install pillow")
+
     baseDataDir = args.baseDataDir.expanduser().resolve()
 
     try:
@@ -426,6 +435,9 @@ def main() -> None:
         return
 
     print(f"{prefix} scanning: {baseDataDir}")
+    if pil_available:
+        print(f"{prefix} EXIF extraction enabled (PIL available)")
+    
     for styleDir in styleFolders:
         processStyleFolder(
             styleDir=styleDir,
