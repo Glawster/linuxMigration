@@ -434,19 +434,33 @@ def getImageDate(imagePath: Path) -> datetime.datetime:
         
     Returns:
         datetime object representing the image date
+        
+    Note:
+        Always returns a valid datetime. Falls back to current time if file
+        doesn't exist or all date extraction methods fail.
     """
     # Try EXIF first
-    exifDate = extractExifDate(imagePath)
-    if exifDate:
-        return exifDate
+    try:
+        exifDate = extractExifDate(imagePath)
+        if exifDate:
+            return exifDate
+    except Exception:
+        pass
     
     # Try filename parsing
-    filenameDate = parseFilenameDate(imagePath.name)
-    if filenameDate:
-        return filenameDate
+    try:
+        filenameDate = parseFilenameDate(imagePath.name)
+        if filenameDate:
+            return filenameDate
+    except Exception:
+        pass
     
     # Fall back to file modification time
-    return datetime.datetime.fromtimestamp(imagePath.stat().st_mtime)
+    try:
+        return datetime.datetime.fromtimestamp(imagePath.stat().st_mtime)
+    except (OSError, ValueError):
+        # If file doesn't exist or stat fails, use current time as last resort
+        return datetime.datetime.now()
 
 
 def sortImagesByDate(images: List[Path]) -> List[Path]:
@@ -461,7 +475,20 @@ def sortImagesByDate(images: List[Path]) -> List[Path]:
         
     Returns:
         New list of image paths sorted by date (oldest first)
+        
+    Note:
+        For better performance with large collections, this function
+        processes all images sequentially. EXIF reading is only attempted
+        once per image and results are not cached between calls.
     """
-    imageWithDates = [(img, getImageDate(img)) for img in images]
+    imageWithDates = []
+    for img in images:
+        try:
+            date = getImageDate(img)
+            imageWithDates.append((img, date))
+        except Exception:
+            # If any error occurs, use current time as fallback
+            imageWithDates.append((img, datetime.datetime.now()))
+    
     imageWithDates.sort(key=lambda x: x[1])
     return [img for img, _ in imageWithDates]
