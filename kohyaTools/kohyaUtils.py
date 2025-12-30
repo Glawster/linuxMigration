@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".cr2", ".nef"}
 
 
 @dataclass(frozen=True)

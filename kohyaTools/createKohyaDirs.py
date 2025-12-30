@@ -198,7 +198,7 @@ def nextAvailableIndex(usedIndices: Set[int], startAt: int = 1) -> int:
 
 
 def moveOrCopyFile(srcPath: Path, destPath: Path, copyMode: bool, dryRun: bool, prefix: str) -> None:
-    print(f"{prefix} {'copy' if copyMode else 'move'}: {srcPath.name} -> {destPath}")
+    print(f"{prefix}{'copy' if copyMode else 'move'}: {srcPath.name} -> {destPath}")
     if dryRun:
         return
 
@@ -238,7 +238,7 @@ def processStyleFolder(
         destImagePath = (paths.trainDir / targetStem).with_suffix(imagePath.suffix.lower())
 
         if destImagePath.exists():
-            print(f"{prefix} skip: {destImagePath.name}")
+            print(f"{prefix}skip: {destImagePath.name}")
             continue
 
         moveOrCopyFile(imagePath, destImagePath, copyMode=copyMode, dryRun=dryRun, prefix=prefix)
@@ -260,7 +260,7 @@ def processStyleFolder(
                 dryRun=dryRun,
             )
             if created:
-                print(f"{prefix} caption: {destCaptionPath.name}")
+                print(f"{prefix}caption: {destCaptionPath.name}")
 
 
 def undoStyleFolder(styleDir: Path, dryRun: bool, copyMode: bool, prefix: str) -> None:
@@ -276,7 +276,7 @@ def undoStyleFolder(styleDir: Path, dryRun: bool, copyMode: bool, prefix: str) -
 
         destPath = styleDir / entry.name
         if destPath.exists():
-            print(f"{prefix} skip: {destPath.name}")
+            print(f"{prefix}skip: {destPath.name}")
             continue
 
         moveOrCopyFile(entry, destPath, copyMode=copyMode, dryRun=dryRun, prefix=prefix)
@@ -303,15 +303,15 @@ def main() -> None:
 
     configChanged = updateConfigFromArgs(args)
     if configChanged and not args.dryRun:
-        print(f"{prefix} updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
+        print(f"{prefix}updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
 
     if args.undo:
-        print(f"{prefix} undoing train structure in: {baseDataDir}")
+        print(f"{prefix}undoing train structure in: {baseDataDir}")
         for styleDir in styleFolders:
             undoStyleFolder(styleDir=styleDir, dryRun=args.dryRun, copyMode=args.copy, prefix=prefix)
         return
 
-    print(f"{prefix} scanning: {baseDataDir}")
+    print(f"{prefix}scanning: {baseDataDir}")
     for styleDir in styleFolders:
         processStyleFolder(
             styleDir=styleDir,
