@@ -11,7 +11,7 @@ Prepare/restore Kohya training folders using the logical structure:
       originals/   (optional)
 
 Key behaviours:
-- Move/copy TOP-LEVEL images from style root into style/train
+- Move TOP-LEVEL images from style root into style/train
 - As files are moved into train, rename to: "{style} #nn.ext"
 - Captions follow the new filename: "{style} #nn.txt"
 - If no caption exists, create one using captionTemplate
@@ -52,7 +52,6 @@ def parseArgs() -> argparse.Namespace:
     defaultBaseDataDir = Path(getCfgValue(cfg, "baseDataDir", "/mnt/myVideo/Adult/tumblrForMovie"))
     defaultCaptionTemplate = getCfgValue(cfg, "captionTemplate", "{token}, photo")
     defaultCaptionExtension = getCfgValue(cfg, "captionExtension", ".txt")
-    defaultCopyMode = bool(getCfgValue(cfg, "copyMode", False))
     defaultIncludeOriginalsDir = bool(getCfgValue(cfg, "includeOriginalsDir", False))
 
     parser = argparse.ArgumentParser(description="Create or restore Kohya training folder structure (style/train).")
@@ -105,13 +104,6 @@ def parseArgs() -> argparse.Namespace:
     )
     parser.set_defaults(includeOriginalsDir=defaultIncludeOriginalsDir)
 
-    parser.add_argument(
-        "--copy",
-        action="store_true" if not defaultCopyMode else "store_false",
-        help="toggle copy instead of move (default from config)",
-    )
-    parser.set_defaults(copy=defaultCopyMode)
-
     return parser.parse_args()
 
 
@@ -123,7 +115,6 @@ def updateConfigFromArgs(args: argparse.Namespace) -> bool:
         "baseDataDir": str(args.baseDataDir),
         "captionTemplate": args.captionTemplate,
         "captionExtension": args.captionExtension,
-        "copyMode": bool(args.copy),
         "includeOriginalsDir": bool(args.includeOriginalsDir),
     }
 
@@ -197,18 +188,13 @@ def nextAvailableIndex(usedIndices: Set[int], startAt: int = 1) -> int:
     return index
 
 
-def moveOrCopyFile(srcPath: Path, destPath: Path, copyMode: bool, dryRun: bool, prefix: str) -> None:
-    print(f"{prefix} {'copy' if copyMode else 'move'}: {srcPath.name} -> {destPath}")
+def moveFile(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> None:
+    print(f"{prefix} move: {srcPath.name} -> {destPath}")
     if dryRun:
         return
 
     destPath.parent.mkdir(parents=True, exist_ok=True)
-
-    if copyMode:
-        import shutil
-        shutil.copy2(srcPath, destPath)
-    else:
-        srcPath.rename(destPath)
+    srcPath.rename(destPath)
 
 
 def processStyleFolder(
@@ -217,7 +203,6 @@ def processStyleFolder(
     captionExtension: str,
     dryRun: bool,
     includeOriginalsDir: bool,
-    copyMode: bool,
     prefix: str,
 ) -> None:
     styleName = styleDir.name
@@ -241,7 +226,7 @@ def processStyleFolder(
             print(f"{prefix} skip: {destImagePath.name}")
             continue
 
-        moveOrCopyFile(imagePath, destImagePath, copyMode=copyMode, dryRun=dryRun, prefix=prefix)
+        moveFile(imagePath, destImagePath, dryRun=dryRun, prefix=prefix)
 
         srcCaptionPath = getCaptionPath(imagePath, captionExtension=captionExtension)
         destCaptionPath = getCaptionPath(destImagePath, captionExtension=captionExtension)
@@ -250,7 +235,7 @@ def processStyleFolder(
             continue
 
         if srcCaptionPath.exists():
-            moveOrCopyFile(srcCaptionPath, destCaptionPath, copyMode=copyMode, dryRun=dryRun, prefix=prefix)
+            moveFile(srcCaptionPath, destCaptionPath, dryRun=dryRun, prefix=prefix)
         else:
             # keep this silent unless it actually creates
             created = writeCaptionIfMissing(
@@ -263,7 +248,7 @@ def processStyleFolder(
                 print(f"{prefix} caption: {destCaptionPath.name}")
 
 
-def undoStyleFolder(styleDir: Path, dryRun: bool, copyMode: bool, prefix: str) -> None:
+def undoStyleFolder(styleDir: Path, dryRun: bool, prefix: str) -> None:
     styleName = styleDir.name
     paths = resolveKohyaPaths(styleName=styleName, baseDataDir=styleDir.parent)
 
@@ -279,9 +264,9 @@ def undoStyleFolder(styleDir: Path, dryRun: bool, copyMode: bool, prefix: str) -
             print(f"{prefix} skip: {destPath.name}")
             continue
 
-        moveOrCopyFile(entry, destPath, copyMode=copyMode, dryRun=dryRun, prefix=prefix)
+        moveFile(entry, destPath, dryRun=dryRun, prefix=prefix)
 
-    if not dryRun and not copyMode:
+    if not dryRun:
         try:
             if paths.trainDir.exists() and not any(paths.trainDir.iterdir()):
                 paths.trainDir.rmdir()
@@ -308,7 +293,7 @@ def main() -> None:
     if args.undo:
         print(f"{prefix} undoing train structure in: {baseDataDir}")
         for styleDir in styleFolders:
-            undoStyleFolder(styleDir=styleDir, dryRun=args.dryRun, copyMode=args.copy, prefix=prefix)
+            undoStyleFolder(styleDir=styleDir, dryRun=args.dryRun, prefix=prefix)
         return
 
     print(f"{prefix} scanning: {baseDataDir}")
@@ -319,7 +304,6 @@ def main() -> None:
             captionExtension=args.captionExtension,
             dryRun=args.dryRun,
             includeOriginalsDir=args.includeOriginalsDir,
-            copyMode=args.copy,
             prefix=prefix,
         )
 
