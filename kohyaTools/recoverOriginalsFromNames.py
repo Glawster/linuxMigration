@@ -192,8 +192,11 @@ def copyFile(srcPath: Path, destDir: Path, dryRun: bool, prefix: str) -> None:
     if dryRun:
         return
 
-    destDir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(srcPath, destPath)
+    try:
+        destDir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(srcPath, destPath)
+    except (OSError, IOError, PermissionError) as e:
+        raise OSError(f"Failed to copy {srcPath.name}: {e}") from e
 
 
 def main() -> None:
@@ -244,10 +247,14 @@ def main() -> None:
                 continue
             if args.onAmbiguous == "pick-first":
                 print(f"{prefix} ambiguous: {wantedPath.name}")
+                # Validate source file exists before copying
+                if not matches[0].exists():
+                    print(f"ERROR: source file no longer exists: {matches[0]}")
+                    continue
                 try:
                     copyFile(matches[0], destDir, args.dryRun, prefix)
                 except (OSError, IOError) as e:
-                    print(f"ERROR: failed to copy {wantedPath.name}: {e}")
+                    print(f"ERROR: {e}")
                     continue
                 continue
 
@@ -257,10 +264,15 @@ def main() -> None:
                 print(f"  - {m}")
             sys.exit(1)
 
+        # Validate source file exists before copying
+        if not matches[0].exists():
+            print(f"ERROR: source file no longer exists: {matches[0]}")
+            continue
+        
         try:
             copyFile(matches[0], destDir, args.dryRun, prefix)
         except (OSError, IOError) as e:
-            print(f"ERROR: failed to copy {wantedPath.name}: {e}")
+            print(f"ERROR: {e}")
             continue
 
 

@@ -16,7 +16,9 @@ CamelCase naming to match your project standards.
 
 from __future__ import annotations
 
+import datetime
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
@@ -310,3 +312,145 @@ def copyFiles(
         copied += 1
 
     return copied
+
+
+def extractExifDate(imagePath: Path) -> Optional[datetime.datetime]:
+    """
+    Extract EXIF DateTimeOriginal from an image file.
+    
+    Args:
+        imagePath: Path to the image file
+        
+    Returns:
+        datetime object if EXIF date is found, None otherwise
+        
+    Note:
+        Requires PIL/Pillow. Returns None if PIL is not available.
+    """
+    try:
+        from PIL import Image, ExifTags
+        
+        # Find the DateTimeOriginal tag ID
+        TAG_DATETIME_ORIGINAL = None
+        for k, v in ExifTags.TAGS.items():
+            if v == "DateTimeOriginal":
+                TAG_DATETIME_ORIGINAL = k
+                break
+        
+        if TAG_DATETIME_ORIGINAL is None:
+            return None
+        
+        with Image.open(imagePath) as img:
+            exif = img._getexif()
+            if not exif:
+                return None
+            
+            if TAG_DATETIME_ORIGINAL in exif:
+                dtStr = exif[TAG_DATETIME_ORIGINAL]
+                # "YYYY:MM:DD HH:MM:SS" -> "YYYY-MM-DD HH:MM:SS"
+                dtStr = dtStr.replace(":", "-", 2)
+                return datetime.datetime.fromisoformat(dtStr)
+    except ImportError:
+        # PIL/Pillow not available
+        pass
+    except Exception:
+        # Any other error reading EXIF
+        pass
+    
+    return None
+
+
+def parseFilenameDate(filename: str) -> Optional[datetime.datetime]:
+    """
+    Parse date from filename using various patterns.
+    
+    Supported formats:
+    - "082-1997-07" -> 1997-07-01 (year-month format with sequence prefix)
+    - "049-1989-09-024" -> 1989-09-01 (year-month format with sequence)
+    - "134-Gloucester 030502 003" -> 2003-05-02 (yymmdd format)
+    - "something 1999-12 other" -> 1999-12-01 (year-month anywhere)
+    - "prefix 030502" -> 2003-05-02 (yymmdd anywhere)
+    - "photo_950315.jpg" -> 1995-03-15 (yymmdd with underscore)
+    
+    Args:
+        filename: Filename to parse (without path)
+        
+    Returns:
+        datetime object if date pattern is found, None otherwise
+    """
+    # Pattern 1: yyyy-mm format (e.g., "1997-07" or "082-1997-07")
+    match = re.search(r'\b(19\d{2}|20\d{2})-(\d{2})\b', filename)
+    if match:
+        year = int(match.group(1))
+        month = int(match.group(2))
+        if 1 <= month <= 12:
+            try:
+                return datetime.datetime(year, month, 1)
+            except ValueError:
+                pass
+    
+    # Pattern 2: yymmdd format (e.g., "030502" for 2003-05-02 or "950315" for 1995-03-15)
+    # Look for 6-digit sequence that could be a date
+    match = re.search(r'(?:^|[_\-\s])(\d{2})(\d{2})(\d{2})(?:[_\-\s.]|$)', filename)
+    if match:
+        yy = int(match.group(1))
+        mm = int(match.group(2))
+        dd = int(match.group(3))
+        
+        # Assume 2000s for years 00-30, 1900s for years 31-99
+        year = 2000 + yy if yy <= 30 else 1900 + yy
+        
+        if 1 <= mm <= 12 and 1 <= dd <= 31:
+            try:
+                return datetime.datetime(year, mm, dd)
+            except ValueError:
+                pass
+    
+    return None
+
+
+def getImageDate(imagePath: Path) -> datetime.datetime:
+    """
+    Get the best available date for an image file.
+    
+    Priority order:
+    1. EXIF DateTimeOriginal
+    2. Date parsed from filename
+    3. File modification time
+    
+    Args:
+        imagePath: Path to the image file
+        
+    Returns:
+        datetime object representing the image date
+    """
+    # Try EXIF first
+    exifDate = extractExifDate(imagePath)
+    if exifDate:
+        return exifDate
+    
+    # Try filename parsing
+    filenameDate = parseFilenameDate(imagePath.name)
+    if filenameDate:
+        return filenameDate
+    
+    # Fall back to file modification time
+    return datetime.datetime.fromtimestamp(imagePath.stat().st_mtime)
+
+
+def sortImagesByDate(images: List[Path]) -> List[Path]:
+    """
+    Sort images by their best available date.
+    
+    Uses getImageDate() to determine the date for each image,
+    which tries EXIF, filename parsing, then modification time.
+    
+    Args:
+        images: List of image paths to sort
+        
+    Returns:
+        New list of image paths sorted by date (oldest first)
+    """
+    imageWithDates = [(img, getImageDate(img)) for img in images]
+    imageWithDates.sort(key=lambda x: x[1])
+    return [img for img, _ in imageWithDates]

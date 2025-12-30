@@ -41,6 +41,7 @@ from kohyaUtils import (
     getCaptionPath,
     isImageFile,
     resolveKohyaPaths,
+    sortImagesByDate,
     writeCaptionIfMissing,
 )
 from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateCfgFromArgs
@@ -311,6 +312,9 @@ def processStyleFolder(
     images = listTopLevelImages(styleDir)
     if not images:
         return
+
+    # Sort images by date (EXIF, filename pattern, or modification time)
+    images = sortImagesByDate(images)
 
     defaultCaption = buildDefaultCaption(styleName=styleName, template=captionTemplate)
     usedIndices = findUsedIndices(paths.trainDir, styleName=styleName)
