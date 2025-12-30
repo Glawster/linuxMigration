@@ -150,6 +150,17 @@ def parseArgs() -> argparse.Namespace:
 
 
 def buildTrainingCommand(args: argparse.Namespace, trainDir: Path, outputDir: Path) -> List[str]:
+    """
+    Build the complete training command for kohya_ss.
+    
+    Args:
+        args: Parsed command-line arguments
+        trainDir: Training data directory
+        outputDir: Output directory for trained models
+        
+    Returns:
+        Command list suitable for subprocess.run()
+    """
     outputName = f"{args.styleName}_r{args.rank}_{args.resolution.replace(',', 'x')}"
 
     shellCommand = (
@@ -190,7 +201,15 @@ def buildTrainingCommand(args: argparse.Namespace, trainDir: Path, outputDir: Pa
 
 
 def updateConfigFromArgs(args: argparse.Namespace) -> bool:
-    """Update configuration file with command-line arguments."""
+    """
+    Update configuration file with command-line arguments.
+    
+    Args:
+        args: Parsed command-line arguments
+        
+    Returns:
+        True if configuration was changed, False otherwise
+    """
     cfg = loadConfig()
 
     updates = {
@@ -218,6 +237,12 @@ def updateConfigFromArgs(args: argparse.Namespace) -> bool:
 
 
 def runTraining() -> None:
+    """
+    Main entry point: parse arguments, validate setup, and launch training.
+    
+    Raises:
+        SystemExit: On validation failures or missing dependencies
+    """
     args = parseArgs()
     prefix = "...[]" if args.dryRun else "..."
 

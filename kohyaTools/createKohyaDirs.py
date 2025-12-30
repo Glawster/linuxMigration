@@ -108,7 +108,15 @@ def parseArgs() -> argparse.Namespace:
 
 
 def updateConfigFromArgs(args: argparse.Namespace) -> bool:
-    """Update configuration file with command-line arguments."""
+    """
+    Update configuration file with command-line arguments.
+    
+    Args:
+        args: Parsed command-line arguments
+        
+    Returns:
+        True if configuration was changed, False otherwise
+    """
     cfg = loadConfig()
 
     updates = {
@@ -126,6 +134,19 @@ def updateConfigFromArgs(args: argparse.Namespace) -> bool:
 
 
 def getStyleFolders(baseDataDir: Path, styleNameFilter: Optional[str]) -> List[Path]:
+    """
+    Get list of style folders to process.
+    
+    Args:
+        baseDataDir: Base directory containing style folders
+        styleNameFilter: Optional specific style name to process
+        
+    Returns:
+        List of style folder paths
+        
+    Raises:
+        FileNotFoundError: If baseDataDir or specific style folder doesn't exist
+    """
     if not baseDataDir.is_dir():
         raise FileNotFoundError(f"baseDataDir does not exist or is not a directory: {baseDataDir}")
 
@@ -139,6 +160,15 @@ def getStyleFolders(baseDataDir: Path, styleNameFilter: Optional[str]) -> List[P
 
 
 def listTopLevelImages(styleDir: Path) -> List[Path]:
+    """
+    List all image files at the top level of styleDir (non-recursive).
+    
+    Args:
+        styleDir: Directory to scan for images
+        
+    Returns:
+        Sorted list of image file paths
+    """
     images: List[Path] = []
     for entry in styleDir.iterdir():
         if entry.is_dir():
@@ -149,6 +179,15 @@ def listTopLevelImages(styleDir: Path) -> List[Path]:
 
 
 def formatIndex(index: int) -> str:
+    """
+    Format an index number with appropriate zero-padding.
+    
+    Args:
+        index: Index number to format
+        
+    Returns:
+        Formatted index string (2-3 digits with leading zeros)
+    """
     if index < 100:
         return f"{index:02d}"
     if index < 1000:
@@ -157,10 +196,30 @@ def formatIndex(index: int) -> str:
 
 
 def buildTargetStem(styleName: str, index: int) -> str:
+    """
+    Build a target filename stem in the format 'styleName #nn'.
+    
+    Args:
+        styleName: Style/person name
+        index: Index number
+        
+    Returns:
+        Formatted filename stem
+    """
     return f"{styleName} #{formatIndex(index)}"
 
 
 def findUsedIndices(trainDir: Path, styleName: str) -> Set[int]:
+    """
+    Find all index numbers already used in trainDir for the given style.
+    
+    Args:
+        trainDir: Training directory to scan
+        styleName: Style name to match in filenames
+        
+    Returns:
+        Set of index numbers already in use
+    """
     used: Set[int] = set()
     if not trainDir.exists():
         return used
@@ -181,6 +240,16 @@ def findUsedIndices(trainDir: Path, styleName: str) -> Set[int]:
 
 
 def nextAvailableIndex(usedIndices: Set[int], startAt: int = 1) -> int:
+    """
+    Find the next available index number not in the used set.
+    
+    Args:
+        usedIndices: Set of already-used indices (will be updated)
+        startAt: Starting index number
+        
+    Returns:
+        Next available index number
+    """
     index = startAt
     while index in usedIndices:
         index += 1
@@ -189,6 +258,15 @@ def nextAvailableIndex(usedIndices: Set[int], startAt: int = 1) -> int:
 
 
 def moveFile(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> None:
+    """
+    Move a file from source to destination.
+    
+    Args:
+        srcPath: Source file path
+        destPath: Destination file path
+        dryRun: If True, only print action without executing
+        prefix: Logging prefix string
+    """
     print(f"{prefix} move: {srcPath.name} -> {destPath}")
     if dryRun:
         return
@@ -205,6 +283,17 @@ def processStyleFolder(
     includeOriginalsDir: bool,
     prefix: str,
 ) -> None:
+    """
+    Process a style folder: move images to train dir and create captions.
+    
+    Args:
+        styleDir: Style folder to process
+        captionTemplate: Template for default captions
+        captionExtension: Caption file extension
+        dryRun: If True, only print actions without executing
+        includeOriginalsDir: Whether to create originals directory
+        prefix: Logging prefix string
+    """
     styleName = styleDir.name
     paths = resolveKohyaPaths(styleName=styleName, baseDataDir=styleDir.parent)
 
@@ -249,6 +338,14 @@ def processStyleFolder(
 
 
 def undoStyleFolder(styleDir: Path, dryRun: bool, prefix: str) -> None:
+    """
+    Undo train structure: move files from train dir back to style root.
+    
+    Args:
+        styleDir: Style folder to process
+        dryRun: If True, only print actions without executing
+        prefix: Logging prefix string
+    """
     styleName = styleDir.name
     paths = resolveKohyaPaths(styleName=styleName, baseDataDir=styleDir.parent)
 

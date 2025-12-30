@@ -77,7 +77,15 @@ def parseArgs() -> argparse.Namespace:
 
 
 def updateConfigFromArgs(args: argparse.Namespace) -> bool:
-    """Update configuration file with command-line arguments."""
+    """
+    Update configuration file with command-line arguments.
+    
+    Args:
+        args: Parsed command-line arguments
+        
+    Returns:
+        True if configuration was changed, False otherwise
+    """
     cfg = loadConfig()
 
     updates = {
@@ -98,11 +106,30 @@ def updateConfigFromArgs(args: argparse.Namespace) -> bool:
 
 
 def parseExtensions(extString: str) -> Set[str]:
+    """
+    Parse comma-separated extension string into a set.
+    
+    Args:
+        extString: Comma-separated file extensions (e.g., ".jpg,.png")
+        
+    Returns:
+        Set of lowercase extension strings
+    """
     exts = {e.strip().lower() for e in extString.split(",") if e.strip()}
     return exts
 
 
 def listWantedFiles(wantedDir: Path, extensions: Set[str]) -> List[Path]:
+    """
+    List all files in wantedDir matching the given extensions.
+    
+    Args:
+        wantedDir: Directory to scan for files
+        extensions: Set of file extensions to match
+        
+    Returns:
+        Sorted list of matching file paths
+    """
     wanted: List[Path] = []
     for p in sorted(wantedDir.iterdir()):
         if not p.is_file():
@@ -113,6 +140,16 @@ def listWantedFiles(wantedDir: Path, extensions: Set[str]) -> List[Path]:
 
 
 def buildSourceIndex(sourceRoot: Path, extensions: Set[str]) -> Dict[str, List[Path]]:
+    """
+    Build an index of all files in sourceRoot tree by filename.
+    
+    Args:
+        sourceRoot: Root directory to recursively scan
+        extensions: Set of file extensions to include
+        
+    Returns:
+        Dictionary mapping lowercase filenames to list of paths with that name
+    """
     index: Dict[str, List[Path]] = {}
 
     for p in sourceRoot.rglob("*"):
@@ -127,6 +164,18 @@ def buildSourceIndex(sourceRoot: Path, extensions: Set[str]) -> Dict[str, List[P
 
 
 def copyFile(srcPath: Path, destDir: Path, dryRun: bool, prefix: str) -> None:
+    """
+    Copy a file to the destination directory.
+    
+    Args:
+        srcPath: Source file path
+        destDir: Destination directory
+        dryRun: If True, only print action without executing
+        prefix: Logging prefix string
+        
+    Raises:
+        OSError, IOError: If copy operation fails
+    """
     destPath = destDir / srcPath.name
 
     if destPath.exists():
@@ -137,8 +186,12 @@ def copyFile(srcPath: Path, destDir: Path, dryRun: bool, prefix: str) -> None:
     if dryRun:
         return
 
-    destDir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(srcPath, destPath)
+    try:
+        destDir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(srcPath, destPath)
+    except (OSError, IOError) as e:
+        print(f"ERROR: failed to copy {srcPath.name}: {e}")
+        raise
 
 
 def main() -> None:
@@ -150,9 +203,11 @@ def main() -> None:
     destDir = args.destDir.expanduser().resolve()
 
     if not wantedDir.is_dir():
-        sys.exit(f"ERROR: wantedDir not found: {wantedDir}")
+        print(f"ERROR: wantedDir not found: {wantedDir}")
+        sys.exit(1)
     if not sourceRoot.is_dir():
-        sys.exit(f"ERROR: sourceRoot not found: {sourceRoot}")
+        print(f"ERROR: sourceRoot not found: {sourceRoot}")
+        sys.exit(1)
 
     configChanged = updateConfigFromArgs(args)
     if configChanged and not args.dryRun:
@@ -162,7 +217,8 @@ def main() -> None:
 
     wantedFiles = listWantedFiles(wantedDir, extensions)
     if not wantedFiles:
-        sys.exit("ERROR: no wanted files found (check extensions)")
+        print("ERROR: no wanted files found (check extensions)")
+        sys.exit(1)
 
     print(f"{prefix} indexing: {sourceRoot}")
     sourceIndex = buildSourceIndex(sourceRoot, extensions)
@@ -180,7 +236,11 @@ def main() -> None:
                 continue
             if args.onAmbiguous == "pick-first":
                 print(f"{prefix} ambiguous: {wantedPath.name}")
-                copyFile(matches[0], destDir, args.dryRun, prefix)
+                try:
+                    copyFile(matches[0], destDir, args.dryRun, prefix)
+                except Exception as e:
+                    print(f"ERROR: failed to copy {wantedPath.name}: {e}")
+                    continue
                 continue
 
             # error
@@ -189,7 +249,11 @@ def main() -> None:
                 print(f"  - {m}")
             sys.exit(1)
 
-        copyFile(matches[0], destDir, args.dryRun, prefix)
+        try:
+            copyFile(matches[0], destDir, args.dryRun, prefix)
+        except Exception as e:
+            print(f"ERROR: failed to copy {wantedPath.name}: {e}")
+            continue
 
 
 if __name__ == "__main__":
