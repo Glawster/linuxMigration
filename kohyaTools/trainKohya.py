@@ -21,10 +21,11 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+
 from pathlib import Path
 from typing import List
 
-from kohyaUtils import ensureDirs, resolveKohyaPaths, validateTrainingSet
+from kohyaTools.kohyaUtils import ensureDirs, resolveKohyaPaths, validateTrainingSet
 
 
 defaultBaseDataDir = Path("/mnt/myVideo/Adult/tumblrForMovie")
@@ -80,7 +81,7 @@ def parseArgs() -> argparse.Namespace:
     parser.add_argument("--textEncoderLr", type=float, default=5e-5, help="text encoder lr (default: 5e-5)")
     parser.add_argument("--unetLr", type=float, default=1e-4, help="u-net lr (default: 1e-4)")
 
-    parser.add_argument("--dryRun", action="store_true", help="print command and exit without running")
+    parser.add_argument("--dry-run", action="store_true", help="print command and exit without running")
 
     return parser.parse_args()
 
@@ -136,13 +137,14 @@ def runTraining() -> None:
     kohyaPaths = resolveKohyaPaths(styleName=args.styleName, baseDataDir=baseDataDir)
     ensureDirs(kohyaPaths)
 
-    print("...starting cpu-only lora training")
-    print(f"...style: {args.styleName}")
-    print(f"...base data dir: {baseDataDir}")
-    print(f"...train dir: {kohyaPaths.trainDir}")
-    print(f"...output dir: {kohyaPaths.outputDir}")
-    print(f"...base model: {baseModelPath}")
-    print(f"...kohya dir: {kohyaDir}")
+    prefix = "...[] " if args.dry_run else "..."
+    print(f"{prefix}starting cpu-only lora training")
+    print(f"{prefix}style: {args.styleName}")
+    print(f"{prefix}base data dir: {baseDataDir}")
+    print(f"{prefix}train dir: {kohyaPaths.trainDir}")
+    print(f"{prefix}output dir: {kohyaPaths.outputDir}")
+    print(f"{prefix}base model: {baseModelPath}")
+    print(f"{prefix}kohya dir: {kohyaDir}")
 
     if not baseModelPath.exists():
         sys.exit(f"ERROR: base model not found: {baseModelPath}")
@@ -166,15 +168,15 @@ def runTraining() -> None:
 
     command = buildTrainingCommand(args, trainDir=kohyaPaths.trainDir, outputDir=kohyaPaths.outputDir)
 
-    print("...training command:")
+    print(f"...{prefix}training command:")
     print(command[2])
-    if args.dryRun:
+    if args.dry_run:
         print("...dryRun set, exiting without running")
         return
 
-    print("...launching training")
+    print(f"...{prefix}launching training")
     subprocess.run(command, check=True)
-    print("...training complete")
+    print(f"...{prefix}training complete")
 
 
 if __name__ == "__main__":
