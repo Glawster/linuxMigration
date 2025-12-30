@@ -291,7 +291,7 @@ def undoStyleFolder(styleDir: Path, dryRun: bool, copyMode: bool, prefix: str) -
 
 def main() -> None:
     args = parseArgs()
-    prefix = "...[] " if args.dryRun else "..."
+    prefix = "...[] " if args.dryRun else "... "
 
     baseDataDir = args.baseDataDir.expanduser().resolve()
 

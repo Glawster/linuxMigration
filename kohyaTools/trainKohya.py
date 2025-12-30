@@ -219,7 +219,7 @@ def updateConfigFromArgs(args: argparse.Namespace) -> bool:
 
 def runTraining() -> None:
     args = parseArgs()
-    prefix = "...[] " if args.dryRun else "..."
+    prefix = "...[] " if args.dryRun else "... "
 
     baseDataDir = args.baseDataDir.expanduser().resolve()
     baseModelPath = args.baseModelPath.expanduser().resolve()

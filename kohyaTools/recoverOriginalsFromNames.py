@@ -30,7 +30,7 @@ from typing import Dict, List, Set
 from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateCfgFromArgs
 
 
-defaultExtensions = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
+DEFAULT_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
 
 
 def parseArgs() -> argparse.Namespace:
@@ -143,7 +143,7 @@ def copyFile(srcPath: Path, destDir: Path, dryRun: bool, prefix: str) -> None:
 
 def main() -> None:
     args = parseArgs()
-    prefix = "...[] " if args.dryRun else "..."
+    prefix = "...[] " if args.dryRun else "... "
 
     wantedDir = args.wantedDir.expanduser().resolve()
     sourceRoot = args.sourceRoot.expanduser().resolve()
