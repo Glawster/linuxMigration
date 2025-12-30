@@ -38,6 +38,12 @@ from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateCfgFromArgs
 
 
 def parseArgs() -> argparse.Namespace:
+    """
+    Parse command-line arguments with defaults loaded from config.
+    
+    Returns:
+        Parsed command-line arguments
+    """
     cfg = loadConfig()
 
     defaultBaseDataDir = Path(getCfgValue(cfg, "baseDataDir", "/mnt/myVideo/Adult/tumblrForMovie"))

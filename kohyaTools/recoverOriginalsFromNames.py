@@ -34,6 +34,12 @@ DEFAULT_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
 
 
 def parseArgs() -> argparse.Namespace:
+    """
+    Parse command-line arguments with defaults loaded from config.
+    
+    Returns:
+        Parsed command-line arguments
+    """
     cfg = loadConfig()
 
     defaultPicturesRoot = Path(getCfgValue(cfg, "picturesRoot", "/mnt/myPictures/Pictures"))
@@ -195,6 +201,12 @@ def copyFile(srcPath: Path, destDir: Path, dryRun: bool, prefix: str) -> None:
 
 
 def main() -> None:
+    """
+    Main entry point: parse arguments, build index, and copy matching files.
+    
+    Raises:
+        SystemExit: On validation failures or errors during processing
+    """
     args = parseArgs()
     prefix = "...[]" if args.dryRun else "..."
 

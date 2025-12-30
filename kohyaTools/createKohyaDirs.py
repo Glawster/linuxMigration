@@ -47,6 +47,12 @@ from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateCfgFromArgs
 
 
 def parseArgs() -> argparse.Namespace:
+    """
+    Parse command-line arguments with defaults loaded from config.
+    
+    Returns:
+        Parsed command-line arguments
+    """
     cfg = loadConfig()
 
     defaultBaseDataDir = Path(getCfgValue(cfg, "baseDataDir", "/mnt/myVideo/Adult/tumblrForMovie"))
@@ -388,6 +394,12 @@ def undoStyleFolder(styleDir: Path, dryRun: bool, prefix: str) -> None:
 
 
 def main() -> None:
+    """
+    Main entry point: parse arguments, validate setup, and process style folders.
+    
+    Raises:
+        SystemExit: On validation failures or errors during processing
+    """
     args = parseArgs()
     prefix = "...[]" if args.dryRun else "..."
 
