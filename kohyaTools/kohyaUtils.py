@@ -359,7 +359,14 @@ def extractExifDate(imagePath: Path) -> Optional[datetime.datetime]:
             if date_str:
                 # "YYYY:MM:DD HH:MM:SS" -> "YYYY-MM-DD HH:MM:SS"
                 date_str = str(date_str).replace(":", "-", 2)
-                return datetime.datetime.fromisoformat(date_str)
+                try:
+                    return datetime.datetime.fromisoformat(date_str)
+                except ValueError:
+                    # Fallback to strptime if fromisoformat fails
+                    try:
+                        return datetime.datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        pass
                 
     except ImportError:
         # PIL/Pillow not available
@@ -414,10 +421,9 @@ def updateExifDate(imagePath: Path, date: datetime.datetime) -> bool:
         # Convert dict to bytes
         exif_bytes = piexif.dump(exif_dict)
         
-        # Save image with updated EXIF
-        img = Image.open(imagePath)
-        img.save(imagePath, exif=exif_bytes, quality=95)
-        img.close()
+        # Save image with updated EXIF using context manager
+        with Image.open(imagePath) as img:
+            img.save(imagePath, exif=exif_bytes, quality=95)
         
         return True
         
@@ -466,8 +472,9 @@ def parseFilenameDate(filename: str) -> Optional[datetime.datetime]:
         mm = int(match.group(2))
         dd = int(match.group(3))
         
-        # Assume 2000s for years 00-30, 1900s for years 31-99
-        year = 2000 + yy if yy <= 30 else 1900 + yy
+        # Assume 2000s for years 00-50, 1900s for years 51-99
+        # This will work correctly until 2051
+        year = 2000 + yy if yy <= 50 else 1900 + yy
         
         if 1 <= mm <= 12 and 1 <= dd <= 31:
             try:

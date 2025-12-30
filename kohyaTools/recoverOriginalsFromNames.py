@@ -199,6 +199,26 @@ def copyFile(srcPath: Path, destDir: Path, dryRun: bool, prefix: str) -> None:
         raise OSError(f"Failed to copy {srcPath.name}: {e}") from e
 
 
+def validateAndCopyFile(srcPath: Path, destDir: Path, dryRun: bool, prefix: str) -> None:
+    """
+    Validate source file exists and copy it to destination.
+    
+    Args:
+        srcPath: Source file path
+        destDir: Destination directory
+        dryRun: If True, only print action without executing
+        prefix: Logging prefix string
+        
+    Raises:
+        FileNotFoundError: If source file doesn't exist
+        OSError, IOError: If copy operation fails
+    """
+    if not srcPath.exists():
+        raise FileNotFoundError(f"Source file no longer exists: {srcPath}")
+    
+    copyFile(srcPath, destDir, dryRun, prefix)
+
+
 def main() -> None:
     """
     Main entry point: parse arguments, build index, and copy matching files.
@@ -247,13 +267,9 @@ def main() -> None:
                 continue
             if args.onAmbiguous == "pick-first":
                 print(f"{prefix} ambiguous: {wantedPath.name}")
-                # Validate source file exists before copying
-                if not matches[0].exists():
-                    print(f"ERROR: source file no longer exists: {matches[0]}")
-                    continue
                 try:
-                    copyFile(matches[0], destDir, args.dryRun, prefix)
-                except (OSError, IOError) as e:
+                    validateAndCopyFile(matches[0], destDir, args.dryRun, prefix)
+                except (OSError, IOError, FileNotFoundError) as e:
                     print(f"ERROR: {e}")
                     continue
                 continue
@@ -264,14 +280,9 @@ def main() -> None:
                 print(f"  - {m}")
             sys.exit(1)
 
-        # Validate source file exists before copying
-        if not matches[0].exists():
-            print(f"ERROR: source file no longer exists: {matches[0]}")
-            continue
-        
         try:
-            copyFile(matches[0], destDir, args.dryRun, prefix)
-        except (OSError, IOError) as e:
+            validateAndCopyFile(matches[0], destDir, args.dryRun, prefix)
+        except (OSError, IOError, FileNotFoundError) as e:
             print(f"ERROR: {e}")
             continue
 
