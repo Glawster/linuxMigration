@@ -2,7 +2,7 @@
 """
 kohyaConfig.py
 
-Shared config loader/saver for kohya routines.
+Shared configuration loader/saver for kohya routines.
 Default config path: ~/.config/kohya/kohyaConfig.json
 """
 
@@ -12,35 +12,37 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-defaultConfigPath = Path.home() / ".config" / "kohya" / "kohyaConfig.json"
+DEFAULT_CONFIG_PATH = Path.home() / ".config" / "kohya" / "kohyaConfig.json"
 
 
 def loadConfig() -> Dict[str, Any]:
-    defaultConfigPath.parent.mkdir(parents=True, exist_ok=True)
+    """Load configuration from the default config file, creating it if needed."""
+    DEFAULT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    if not defaultConfigPath.exists():
+    if not DEFAULT_CONFIG_PATH.exists():
         data: Dict[str, Any] = {}
-        defaultConfigPath.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        DEFAULT_CONFIG_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         return data
 
-    text = defaultConfigPath.read_text(encoding="utf-8").strip()
+    text = DEFAULT_CONFIG_PATH.read_text(encoding="utf-8").strip()
     if not text:
         return {}
 
     data = json.loads(text)
     if not isinstance(data, dict):
-        raise ValueError(f"config file is not a json object: {defaultConfigPath}")
+        raise ValueError(f"config file is not a json object: {DEFAULT_CONFIG_PATH}")
     return data
 
 
 def saveConfig(data: Dict[str, Any]) -> None:
-    defaultConfigPath.parent.mkdir(parents=True, exist_ok=True)
-    defaultConfigPath.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    """Save configuration to the default config file."""
+    DEFAULT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    DEFAULT_CONFIG_PATH.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def getCfgValue(cfg: Dict[str, Any], key: str, defaultValue: Any) -> Any:
-    value = cfg.get(key, defaultValue)
-    return value
+    """Get a config value with a default fallback."""
+    return cfg.get(key, defaultValue)
 
 
 def updateCfgFromArgs(cfg: Dict[str, Any], updates: Dict[str, Any]) -> bool:

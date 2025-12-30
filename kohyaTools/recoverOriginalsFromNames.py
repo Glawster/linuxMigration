@@ -30,7 +30,7 @@ from typing import Dict, List, Set
 from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateCfgFromArgs
 
 
-defaultExtensions = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
+DEFAULT_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
 
 
 def parseArgs() -> argparse.Namespace:
@@ -42,7 +42,7 @@ def parseArgs() -> argparse.Namespace:
     defaultDestDir = Path(getCfgValue(cfg, "originalsDestDir", str(defaultBackupRoot / "kathy" / "originals")))
     defaultSourceRoot = Path(getCfgValue(cfg, "sourceRoot", str(defaultPicturesRoot)))
 
-    defaultExts = getCfgValue(cfg, "extensions", ",".join(sorted(defaultExtensions)))
+    defaultExts = getCfgValue(cfg, "extensions", ",".join(sorted(DEFAULT_EXTENSIONS)))
     defaultOnAmbiguous = getCfgValue(cfg, "onAmbiguous", "error")
 
     parser = argparse.ArgumentParser(description="Copy originals from a source tree by matching filenames.")
@@ -77,6 +77,7 @@ def parseArgs() -> argparse.Namespace:
 
 
 def updateConfigFromArgs(args: argparse.Namespace) -> bool:
+    """Update configuration file with command-line arguments."""
     cfg = loadConfig()
 
     updates = {
@@ -129,10 +130,10 @@ def copyFile(srcPath: Path, destDir: Path, dryRun: bool, prefix: str) -> None:
     destPath = destDir / srcPath.name
 
     if destPath.exists():
-        print(f"{prefix}skip: {destPath.name}")
+        print(f"{prefix} skip: {destPath.name}")
         return
 
-    print(f"{prefix}copy: {srcPath.name} -> {destPath}")
+    print(f"{prefix} copy: {srcPath.name} -> {destPath}")
     if dryRun:
         return
 
@@ -142,7 +143,7 @@ def copyFile(srcPath: Path, destDir: Path, dryRun: bool, prefix: str) -> None:
 
 def main() -> None:
     args = parseArgs()
-    prefix = "...[] " if args.dryRun else "..."
+    prefix = "...[]" if args.dryRun else "..."
 
     wantedDir = args.wantedDir.expanduser().resolve()
     sourceRoot = args.sourceRoot.expanduser().resolve()
@@ -155,7 +156,7 @@ def main() -> None:
 
     configChanged = updateConfigFromArgs(args)
     if configChanged and not args.dryRun:
-        print(f"{prefix}updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
+        print(f"{prefix} updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
 
     extensions = parseExtensions(args.extensions)
 
@@ -163,22 +164,22 @@ def main() -> None:
     if not wantedFiles:
         sys.exit("ERROR: no wanted files found (check extensions)")
 
-    print(f"{prefix}indexing: {sourceRoot}")
+    print(f"{prefix} indexing: {sourceRoot}")
     sourceIndex = buildSourceIndex(sourceRoot, extensions)
 
     for wantedPath in wantedFiles:
         matches = sourceIndex.get(wantedPath.name.lower(), [])
 
         if not matches:
-            print(f"{prefix}missing: {wantedPath.name}")
+            print(f"{prefix} missing: {wantedPath.name}")
             continue
 
         if len(matches) > 1:
             if args.onAmbiguous == "skip":
-                print(f"{prefix}ambiguous: {wantedPath.name}")
+                print(f"{prefix} ambiguous: {wantedPath.name}")
                 continue
             if args.onAmbiguous == "pick-first":
-                print(f"{prefix}ambiguous: {wantedPath.name}")
+                print(f"{prefix} ambiguous: {wantedPath.name}")
                 copyFile(matches[0], destDir, args.dryRun, prefix)
                 continue
 
