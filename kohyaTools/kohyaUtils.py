@@ -330,26 +330,37 @@ def extractExifDate(imagePath: Path) -> Optional[datetime.datetime]:
     try:
         from PIL import Image, ExifTags
         
-        # Find the DateTimeOriginal tag ID
-        TAG_DATETIME_ORIGINAL = None
-        for k, v in ExifTags.TAGS.items():
-            if v == "DateTimeOriginal":
-                TAG_DATETIME_ORIGINAL = k
-                break
-        
-        if TAG_DATETIME_ORIGINAL is None:
-            return None
-        
         with Image.open(imagePath) as img:
-            exif = img._getexif()
+            # Use modern getexif() if available (Pillow 6.0+), fallback to _getexif()
+            try:
+                exif = img.getexif()
+            except AttributeError:
+                exif = img._getexif() or {}
+            
             if not exif:
                 return None
             
-            if TAG_DATETIME_ORIGINAL in exif:
-                dtStr = exif[TAG_DATETIME_ORIGINAL]
+            # Get DateTimeOriginal tag value
+            # For modern getexif(), use ExifTags.Base enum
+            # For legacy _getexif(), search TAGS dict
+            date_str = None
+            
+            # Try modern approach first
+            try:
+                from PIL.ExifTags import Base
+                date_str = exif.get(Base.DateTimeOriginal)
+            except (ImportError, AttributeError):
+                # Fallback to legacy approach
+                for k, v in ExifTags.TAGS.items():
+                    if v == "DateTimeOriginal" and k in exif:
+                        date_str = exif[k]
+                        break
+            
+            if date_str:
                 # "YYYY:MM:DD HH:MM:SS" -> "YYYY-MM-DD HH:MM:SS"
-                dtStr = dtStr.replace(":", "-", 2)
-                return datetime.datetime.fromisoformat(dtStr)
+                date_str = str(date_str).replace(":", "-", 2)
+                return datetime.datetime.fromisoformat(date_str)
+                
     except ImportError:
         # PIL/Pillow not available
         pass
