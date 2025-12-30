@@ -371,6 +371,64 @@ def extractExifDate(imagePath: Path) -> Optional[datetime.datetime]:
     return None
 
 
+def updateExifDate(imagePath: Path, date: datetime.datetime) -> bool:
+    """
+    Update the EXIF DateTimeOriginal field in an image file.
+    
+    Args:
+        imagePath: Path to the image file to update
+        date: datetime to write to EXIF
+        
+    Returns:
+        True if EXIF was successfully updated, False otherwise
+        
+    Note:
+        Requires PIL/Pillow and piexif library. Only works with JPEG files.
+        Returns False if dependencies are not available or file format is unsupported.
+    """
+    try:
+        import piexif
+        from PIL import Image
+        
+        # Only support JPEG files for EXIF writing
+        if imagePath.suffix.lower() not in {'.jpg', '.jpeg'}:
+            return False
+        
+        # Format date as EXIF expects: "YYYY:MM:DD HH:MM:SS"
+        exif_date_str = date.strftime("%Y:%m:%d %H:%M:%S")
+        
+        try:
+            # Try to load existing EXIF data
+            exif_dict = piexif.load(str(imagePath))
+        except Exception:
+            # If no EXIF or corrupted, create new EXIF dict
+            exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
+        
+        # Update DateTimeOriginal in EXIF IFD
+        exif_dict["Exif"][piexif.ExifIFD.DateTimeOriginal] = exif_date_str
+        exif_dict["Exif"][piexif.ExifIFD.DateTimeDigitized] = exif_date_str
+        
+        # Also update DateTime in main IFD
+        exif_dict["0th"][piexif.ImageIFD.DateTime] = exif_date_str
+        
+        # Convert dict to bytes
+        exif_bytes = piexif.dump(exif_dict)
+        
+        # Save image with updated EXIF
+        img = Image.open(imagePath)
+        img.save(imagePath, exif=exif_bytes, quality=95)
+        img.close()
+        
+        return True
+        
+    except ImportError:
+        # piexif or PIL not available
+        return False
+    except Exception:
+        # Any other error writing EXIF
+        return False
+
+
 def parseFilenameDate(filename: str) -> Optional[datetime.datetime]:
     """
     Parse date from filename using various patterns.
@@ -420,7 +478,7 @@ def parseFilenameDate(filename: str) -> Optional[datetime.datetime]:
     return None
 
 
-def getImageDate(imagePath: Path) -> datetime.datetime:
+def getImageDate(imagePath: Path, updateExif: bool = False) -> datetime.datetime:
     """
     Get the best available date for an image file.
     
@@ -431,6 +489,7 @@ def getImageDate(imagePath: Path) -> datetime.datetime:
     
     Args:
         imagePath: Path to the image file
+        updateExif: If True, write filename date to EXIF when no EXIF date exists
         
     Returns:
         datetime object representing the image date
@@ -438,6 +497,10 @@ def getImageDate(imagePath: Path) -> datetime.datetime:
     Note:
         Always returns a valid datetime. Falls back to current time if file
         doesn't exist or all date extraction methods fail.
+        
+        When updateExif=True and a date is found in the filename but not in EXIF,
+        the function will attempt to write that date to the image's EXIF data.
+        This requires the piexif library and only works with JPEG files.
     """
     # Try EXIF first
     try:
@@ -451,6 +514,13 @@ def getImageDate(imagePath: Path) -> datetime.datetime:
     try:
         filenameDate = parseFilenameDate(imagePath.name)
         if filenameDate:
+            # If requested, try to update EXIF with filename date
+            if updateExif:
+                try:
+                    if updateExifDate(imagePath, filenameDate):
+                        pass  # EXIF updated successfully (silent)
+                except Exception:
+                    pass  # Continue even if EXIF update fails
             return filenameDate
     except Exception:
         pass
@@ -463,7 +533,7 @@ def getImageDate(imagePath: Path) -> datetime.datetime:
         return datetime.datetime.now()
 
 
-def sortImagesByDate(images: List[Path]) -> List[Path]:
+def sortImagesByDate(images: List[Path], updateExif: bool = False) -> List[Path]:
     """
     Sort images by their best available date.
     
@@ -472,6 +542,7 @@ def sortImagesByDate(images: List[Path]) -> List[Path]:
     
     Args:
         images: List of image paths to sort
+        updateExif: If True, write filename dates to EXIF when no EXIF date exists
         
     Returns:
         New list of image paths sorted by date (oldest first)
@@ -480,11 +551,15 @@ def sortImagesByDate(images: List[Path]) -> List[Path]:
         For better performance with large collections, this function
         processes all images sequentially. EXIF reading is only attempted
         once per image and results are not cached between calls.
+        
+        When updateExif=True, EXIF data will be updated for images that have
+        dates in their filenames but no EXIF DateTimeOriginal field. This
+        requires the piexif library and only works with JPEG files.
     """
     imageWithDates = []
     for img in images:
         try:
-            date = getImageDate(img)
+            date = getImageDate(img, updateExif=updateExif)
             imageWithDates.append((img, date))
         except Exception:
             # If any error occurs, use current time as fallback

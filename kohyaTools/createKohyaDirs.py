@@ -42,6 +42,7 @@ from kohyaUtils import (
     isImageFile,
     resolveKohyaPaths,
     sortImagesByDate,
+    updateExifDate,
     writeCaptionIfMissing,
 )
 from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateCfgFromArgs
@@ -110,6 +111,13 @@ def parseArgs() -> argparse.Namespace:
         help="toggle creation of style/originals directory (default from config)",
     )
     parser.set_defaults(includeOriginalsDir=defaultIncludeOriginalsDir)
+
+    parser.add_argument(
+        "--update-exif",
+        dest="updateExif",
+        action="store_true",
+        help="update EXIF DateTimeOriginal from filename when missing (requires piexif, JPEG only)",
+    )
 
     return parser.parse_args()
 
@@ -291,6 +299,7 @@ def processStyleFolder(
     captionExtension: str,
     dryRun: bool,
     includeOriginalsDir: bool,
+    updateExif: bool,
     prefix: str,
 ) -> None:
     """
@@ -302,6 +311,7 @@ def processStyleFolder(
         captionExtension: Caption file extension
         dryRun: If True, only print actions without executing
         includeOriginalsDir: Whether to create originals directory
+        updateExif: If True, update EXIF dates from filenames when missing
         prefix: Logging prefix string
     """
     styleName = styleDir.name
@@ -314,7 +324,10 @@ def processStyleFolder(
         return
 
     # Sort images by date (EXIF, filename pattern, or modification time)
-    images = sortImagesByDate(images)
+    # Optionally update EXIF data from filename dates
+    if not dryRun and updateExif:
+        print(f"{prefix} updating EXIF dates from filenames (JPEG only)")
+    images = sortImagesByDate(images, updateExif=(updateExif and not dryRun))
 
     defaultCaption = buildDefaultCaption(styleName=styleName, template=captionTemplate)
     usedIndices = findUsedIndices(paths.trainDir, styleName=styleName)
@@ -431,6 +444,7 @@ def main() -> None:
             captionExtension=args.captionExtension,
             dryRun=args.dryRun,
             includeOriginalsDir=args.includeOriginalsDir,
+            updateExif=args.updateExif,
             prefix=prefix,
         )
 
