@@ -347,19 +347,19 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> Optional[datetime.d
                 return None
             
             # Get DateTimeOriginal tag value
-            date_str = None
+            dateStr = None
             
             # For modern getexif() - it returns a dict-like object
             if hasattr(exif, 'get'):
                 # Try using ExifTags.Base enum if available (Pillow 9.0+)
                 try:
                     from PIL.ExifTags import Base
-                    date_str = exif.get(Base.DateTimeOriginal)
+                    dateStr = exif.get(Base.DateTimeOriginal)
                 except (ImportError, AttributeError):
                     pass
                 
                 # If that didn't work, try the numeric tag ID (36867 is DateTimeOriginal)
-                if not date_str:
+                if not dateStr:
                     # Find the tag ID for DateTimeOriginal
                     datetime_original_tag = None
                     for k, v in ExifTags.TAGS.items():
@@ -368,17 +368,17 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> Optional[datetime.d
                             break
                     
                     if datetime_original_tag and datetime_original_tag in exif:
-                        date_str = exif[datetime_original_tag]
+                        dateStr = exif[datetime_original_tag]
             
-            if date_str:
+            if dateStr:
                 # "YYYY:MM:DD HH:MM:SS" -> "YYYY-MM-DD HH:MM:SS"
-                date_str = str(date_str).replace(":", "-", 2)
+                dateStr = str(dateStr).replace(":", "-", 2)
                 try:
-                    return datetime.datetime.fromisoformat(date_str)
+                    return datetime.datetime.fromisoformat(dateStr)
                 except ValueError:
                     # Fallback to strptime if fromisoformat fails
                     try:
-                        return datetime.datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                        return datetime.datetime.strptime(dateStr, "%Y-%m-%d %H:%M:%S")
                     except ValueError:
                         pass
                 
