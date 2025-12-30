@@ -485,7 +485,7 @@ def parseFilenameDate(filename: str) -> Optional[datetime.datetime]:
     return None
 
 
-def getImageDate(imagePath: Path, updateExif: bool = False) -> datetime.datetime:
+def getImageDate(imagePath: Path, updateExif: bool = False, prefix: str = "...") -> datetime.datetime:
     """
     Get the best available date for an image file.
     
@@ -497,6 +497,7 @@ def getImageDate(imagePath: Path, updateExif: bool = False) -> datetime.datetime
     Args:
         imagePath: Path to the image file
         updateExif: If True, write filename date to EXIF when no EXIF date exists
+        prefix: Logging prefix for debug messages
         
     Returns:
         datetime object representing the image date
@@ -513,6 +514,7 @@ def getImageDate(imagePath: Path, updateExif: bool = False) -> datetime.datetime
     try:
         exifDate = extractExifDate(imagePath)
         if exifDate:
+            print(f"{prefix} date: {imagePath.name} -> {exifDate.strftime('%Y-%m-%d')} [EXIF DateTimeOriginal]")
             return exifDate
     except (OSError, ValueError, ImportError):
         pass
@@ -521,11 +523,12 @@ def getImageDate(imagePath: Path, updateExif: bool = False) -> datetime.datetime
     try:
         filenameDate = parseFilenameDate(imagePath.name)
         if filenameDate:
+            print(f"{prefix} date: {imagePath.name} -> {filenameDate.strftime('%Y-%m-%d')} [filename pattern]")
             # If requested, try to update EXIF with filename date
             if updateExif:
                 try:
                     if updateExifDate(imagePath, filenameDate):
-                        pass  # EXIF updated successfully (silent)
+                        print(f"{prefix} exif: {imagePath.name} <- {filenameDate.strftime('%Y-%m-%d')} [JPEG EXIF updated]")
                 except (OSError, ValueError, ImportError):
                     pass  # Continue even if EXIF update fails
             return filenameDate
@@ -534,13 +537,17 @@ def getImageDate(imagePath: Path, updateExif: bool = False) -> datetime.datetime
     
     # Fall back to file modification time
     try:
-        return datetime.datetime.fromtimestamp(imagePath.stat().st_mtime)
+        mtime = datetime.datetime.fromtimestamp(imagePath.stat().st_mtime)
+        print(f"{prefix} date: {imagePath.name} -> {mtime.strftime('%Y-%m-%d')} [file modification time]")
+        return mtime
     except (OSError, ValueError):
         # If file doesn't exist or stat fails, use current time as last resort
-        return datetime.datetime.now()
+        now = datetime.datetime.now()
+        print(f"{prefix} date: {imagePath.name} -> {now.strftime('%Y-%m-%d')} [current time - fallback]")
+        return now
 
 
-def sortImagesByDate(images: List[Path], updateExif: bool = False) -> List[Path]:
+def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str = "...") -> List[Path]:
     """
     Sort images by their best available date.
     
@@ -550,6 +557,7 @@ def sortImagesByDate(images: List[Path], updateExif: bool = False) -> List[Path]
     Args:
         images: List of image paths to sort
         updateExif: If True, write filename dates to EXIF when no EXIF date exists
+        prefix: Logging prefix for debug messages
         
     Returns:
         New list of image paths sorted by date (oldest first)
@@ -566,11 +574,13 @@ def sortImagesByDate(images: List[Path], updateExif: bool = False) -> List[Path]
     imageWithDates = []
     for img in images:
         try:
-            date = getImageDate(img, updateExif=updateExif)
+            date = getImageDate(img, updateExif=updateExif, prefix=prefix)
             imageWithDates.append((img, date))
         except (OSError, ValueError, ImportError):
             # If any error occurs, use current time as fallback
-            imageWithDates.append((img, datetime.datetime.now()))
+            now = datetime.datetime.now()
+            print(f"{prefix} date: {img.name} -> {now.strftime('%Y-%m-%d')} [error fallback]")
+            imageWithDates.append((img, now))
     
     imageWithDates.sort(key=lambda x: x[1])
     return [img for img, _ in imageWithDates]
