@@ -45,7 +45,13 @@ def resolveKohyaPaths(styleName: str, baseDataDir: Path) -> KohyaPaths:
         
     Returns:
         KohyaPaths object with all resolved paths
+        
+    Raises:
+        ValueError: If styleName is empty or contains invalid characters
     """
+    if not styleName or not styleName.strip():
+        raise ValueError("styleName cannot be empty")
+    
     styleDir = baseDataDir / styleName
     trainDir = styleDir / "train"
     outputDir = styleDir / "output"
@@ -132,7 +138,16 @@ def writeCaptionIfMissing(
     dryRun: bool = False,
 ) -> bool:
     """
-    Returns True if a caption was created, False if it already existed.
+    Write caption file if it doesn't exist.
+    
+    Args:
+        imagePath: Path to the image file
+        captionText: Caption text to write
+        captionExtension: Caption file extension
+        dryRun: If True, simulate action without writing
+        
+    Returns:
+        True if a caption was created, False if it already existed
     """
     captionPath = getCaptionPath(imagePath, captionExtension)
 
@@ -155,8 +170,18 @@ def ensureCaptionsForFolder(
     dryRun: bool = False,
 ) -> Tuple[int, int]:
     """
-    Ensures captions exist for images in trainDir.
-    Returns (imageCount, captionsCreatedCount).
+    Ensure captions exist for all images in trainDir.
+    
+    Args:
+        trainDir: Directory containing training images
+        styleName: Name of the style/person
+        captionExtension: Caption file extension
+        captionTemplate: Template for default captions
+        recursive: Whether to search recursively
+        dryRun: If True, simulate actions without writing
+        
+    Returns:
+        Tuple of (total_images, captions_created)
     """
     images = listImageFiles(trainDir, recursive=recursive)
     captionText = buildDefaultCaption(styleName, template=captionTemplate)
@@ -182,8 +207,20 @@ def validateTrainingSet(
     recursive: bool = False,
 ) -> List[str]:
     """
-    Returns a list of human-readable problems. Empty list means OK.
-    Does not perform face detection; just checks structure.
+    Validate a training dataset directory.
+    
+    Args:
+        trainDir: Directory containing training data
+        minImages: Minimum required number of images
+        captionExtension: Caption file extension
+        requireCaptions: Whether captions are required for all images
+        recursive: Whether to search recursively
+        
+    Returns:
+        List of human-readable problem descriptions (empty if valid)
+        
+    Note:
+        Does not perform face detection; only checks structure and file counts
     """
     problems: List[str] = []
 
@@ -208,7 +245,15 @@ def moveFiles(
     dryRun: bool = False,
 ) -> int:
     """
-    Moves files into destDir. Returns number moved.
+    Move multiple files into a destination directory.
+    
+    Args:
+        sourceFiles: Sequence of source file paths
+        destDir: Destination directory
+        dryRun: If True, simulate actions without moving
+        
+    Returns:
+        Number of files moved (or would be moved in dry run)
     """
     destDir.mkdir(parents=True, exist_ok=True)
     moved = 0
@@ -234,8 +279,18 @@ def copyFiles(
     dryRun: bool = False,
 ) -> int:
     """
-    Copies files into destDir. Returns number copied.
-    Uses shutil.copy2 to preserve timestamps.
+    Copy multiple files into a destination directory.
+    
+    Args:
+        sourceFiles: Sequence of source file paths
+        destDir: Destination directory
+        dryRun: If True, simulate actions without copying
+        
+    Returns:
+        Number of files copied (or would be copied in dry run)
+        
+    Note:
+        Uses shutil.copy2 to preserve timestamps
     """
     import shutil
 

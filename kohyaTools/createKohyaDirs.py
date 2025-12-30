@@ -266,13 +266,20 @@ def moveFile(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> None:
         destPath: Destination file path
         dryRun: If True, only print action without executing
         prefix: Logging prefix string
+        
+    Raises:
+        OSError: If move operation fails
     """
     print(f"{prefix} move: {srcPath.name} -> {destPath}")
     if dryRun:
         return
 
-    destPath.parent.mkdir(parents=True, exist_ok=True)
-    srcPath.rename(destPath)
+    try:
+        destPath.parent.mkdir(parents=True, exist_ok=True)
+        srcPath.rename(destPath)
+    except OSError as e:
+        print(f"ERROR: failed to move {srcPath.name}: {e}")
+        raise
 
 
 def processStyleFolder(
@@ -315,7 +322,10 @@ def processStyleFolder(
             print(f"{prefix} skip: {destImagePath.name}")
             continue
 
-        moveFile(imagePath, destImagePath, dryRun=dryRun, prefix=prefix)
+        try:
+            moveFile(imagePath, destImagePath, dryRun=dryRun, prefix=prefix)
+        except OSError:
+            continue
 
         srcCaptionPath = getCaptionPath(imagePath, captionExtension=captionExtension)
         destCaptionPath = getCaptionPath(destImagePath, captionExtension=captionExtension)
@@ -324,7 +334,10 @@ def processStyleFolder(
             continue
 
         if srcCaptionPath.exists():
-            moveFile(srcCaptionPath, destCaptionPath, dryRun=dryRun, prefix=prefix)
+            try:
+                moveFile(srcCaptionPath, destCaptionPath, dryRun=dryRun, prefix=prefix)
+            except OSError:
+                pass
         else:
             # keep this silent unless it actually creates
             created = writeCaptionIfMissing(
@@ -361,7 +374,10 @@ def undoStyleFolder(styleDir: Path, dryRun: bool, prefix: str) -> None:
             print(f"{prefix} skip: {destPath.name}")
             continue
 
-        moveFile(entry, destPath, dryRun=dryRun, prefix=prefix)
+        try:
+            moveFile(entry, destPath, dryRun=dryRun, prefix=prefix)
+        except OSError:
+            continue
 
     if not dryRun:
         try:
