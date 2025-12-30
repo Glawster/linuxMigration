@@ -330,36 +330,52 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> Optional[datetime.d
     """
     try:
         from PIL import Image, ExifTags
+        print(f"{prefix} exif-debug: PIL imported successfully")
         
         with Image.open(imagePath) as img:
+            print(f"{prefix} exif-debug: Image opened: {imagePath.name}")
+            
             # Use modern getexif() if available (Pillow 6.0+), fallback to _getexif()
             exif = None
             try:
                 exif = img.getexif()
-            except AttributeError:
+                print(f"{prefix} exif-debug: getexif() succeeded, exif data: {bool(exif)}")
+            except AttributeError as e:
+                print(f"{prefix} exif-debug: getexif() not available: {e}")
                 # Try legacy _getexif()
                 try:
                     exif = img._getexif()
-                except AttributeError:
+                    print(f"{prefix} exif-debug: _getexif() succeeded, exif data: {bool(exif)}")
+                except AttributeError as e2:
+                    print(f"{prefix} exif-debug: _getexif() failed: {e2}")
                     pass
             
             if not exif:
+                print(f"{prefix} exif-debug: No EXIF data found in image")
                 return None
+            
+            print(f"{prefix} exif-debug: EXIF data type: {type(exif)}")
+            print(f"{prefix} exif-debug: EXIF keys count: {len(exif) if hasattr(exif, '__len__') else 'N/A'}")
             
             # Get DateTimeOriginal tag value
             dateStr = None
             
             # For modern getexif() - it returns a dict-like object
             if hasattr(exif, 'get'):
+                print(f"{prefix} exif-debug: EXIF has 'get' method")
+                
                 # Try using ExifTags.Base enum if available (Pillow 9.0+)
                 try:
                     from PIL.ExifTags import Base
                     dateStr = exif.get(Base.DateTimeOriginal)
-                except (ImportError, AttributeError):
+                    print(f"{prefix} exif-debug: Base.DateTimeOriginal lookup: {dateStr}")
+                except (ImportError, AttributeError) as e:
+                    print(f"{prefix} exif-debug: Base enum not available: {e}")
                     pass
                 
                 # If that didn't work, try the numeric tag ID (36867 is DateTimeOriginal)
                 if not dateStr:
+                    print(f"{prefix} exif-debug: Trying numeric tag ID lookup...")
                     # Find the tag ID for DateTimeOriginal
                     datetime_original_tag = None
                     for k, v in ExifTags.TAGS.items():
@@ -367,32 +383,52 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> Optional[datetime.d
                             datetime_original_tag = k
                             break
                     
-                    if datetime_original_tag and datetime_original_tag in exif:
-                        dateStr = exif[datetime_original_tag]
+                    print(f"{prefix} exif-debug: DateTimeOriginal tag ID: {datetime_original_tag}")
+                    
+                    if datetime_original_tag:
+                        if datetime_original_tag in exif:
+                            dateStr = exif[datetime_original_tag]
+                            print(f"{prefix} exif-debug: Found DateTimeOriginal via tag ID: {dateStr}")
+                        else:
+                            print(f"{prefix} exif-debug: Tag {datetime_original_tag} not in EXIF data")
+                            print(f"{prefix} exif-debug: Available EXIF tags: {list(exif.keys())[:10]}...")
+            else:
+                print(f"{prefix} exif-debug: EXIF doesn't have 'get' method")
             
             if dateStr:
+                print(f"{prefix} exif-debug: Raw date string: {dateStr}")
                 # "YYYY:MM:DD HH:MM:SS" -> "YYYY-MM-DD HH:MM:SS"
                 dateStr = str(dateStr).replace(":", "-", 2)
+                print(f"{prefix} exif-debug: Converted date string: {dateStr}")
                 try:
-                    return datetime.datetime.fromisoformat(dateStr)
-                except ValueError:
+                    result = datetime.datetime.fromisoformat(dateStr)
+                    print(f"{prefix} exif-debug: Parsed with fromisoformat: {result}")
+                    return result
+                except ValueError as e:
+                    print(f"{prefix} exif-debug: fromisoformat failed: {e}")
                     # Fallback to strptime if fromisoformat fails
                     try:
-                        return datetime.datetime.strptime(dateStr, "%Y-%m-%d %H:%M:%S")
-                    except ValueError:
+                        result = datetime.datetime.strptime(dateStr, "%Y-%m-%d %H:%M:%S")
+                        print(f"{prefix} exif-debug: Parsed with strptime: {result}")
+                        return result
+                    except ValueError as e2:
+                        print(f"{prefix} exif-debug: strptime also failed: {e2}")
                         pass
+            else:
+                print(f"{prefix} exif-debug: No DateTimeOriginal found in EXIF")
                 
-    except ImportError:
-        # PIL/Pillow not available - log once to help with debugging
-        # Only show this message if it's the first file being processed
+    except ImportError as e:
+        # PIL/Pillow not available
+        print(f"{prefix} exif-debug: PIL import failed: {e}")
         pass
     except Exception as e:
-        # Any other error reading EXIF - show for debugging
-        import sys
-        if '--verbose' in sys.argv or '--debug' in sys.argv:
-            print(f"{prefix} exif-debug: {imagePath.name} - {type(e).__name__}: {e}")
+        # Any other error reading EXIF
+        print(f"{prefix} exif-debug: Unexpected exception: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
         pass
     
+    print(f"{prefix} exif-debug: Returning None")
     return None
 
 
