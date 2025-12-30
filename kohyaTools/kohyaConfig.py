@@ -16,7 +16,16 @@ DEFAULT_CONFIG_PATH = Path.home() / ".config" / "kohya" / "kohyaConfig.json"
 
 
 def loadConfig() -> Dict[str, Any]:
-    """Load configuration from the default config file, creating it if needed."""
+    """
+    Load configuration from the default config file, creating it if needed.
+    
+    Returns:
+        Dictionary containing configuration data
+        
+    Raises:
+        ValueError: If config file exists but is not valid JSON or not a dict
+        IOError: If config file cannot be read or written
+    """
     DEFAULT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     if not DEFAULT_CONFIG_PATH.exists():
@@ -35,20 +44,47 @@ def loadConfig() -> Dict[str, Any]:
 
 
 def saveConfig(data: Dict[str, Any]) -> None:
-    """Save configuration to the default config file."""
+    """
+    Save configuration to the default config file.
+    
+    Args:
+        data: Configuration dictionary to save
+        
+    Raises:
+        TypeError: If data is not a dictionary
+        IOError: If config file cannot be written
+    """
+    if not isinstance(data, dict):
+        raise TypeError(f"config data must be a dict, got {type(data).__name__}")
     DEFAULT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     DEFAULT_CONFIG_PATH.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def getCfgValue(cfg: Dict[str, Any], key: str, defaultValue: Any) -> Any:
-    """Get a config value with a default fallback."""
+    """
+    Get a config value with a default fallback.
+    
+    Args:
+        cfg: Configuration dictionary
+        key: Configuration key to retrieve
+        defaultValue: Default value if key is not found
+        
+    Returns:
+        Configuration value or default
+    """
     return cfg.get(key, defaultValue)
 
 
 def updateCfgFromArgs(cfg: Dict[str, Any], updates: Dict[str, Any]) -> bool:
     """
-    Updates cfg in-place for keys in updates where value is not None and differs.
-    Returns True if cfg changed.
+    Update cfg in-place for keys in updates where value is not None and differs.
+    
+    Args:
+        cfg: Configuration dictionary to update (modified in-place)
+        updates: Dictionary of updates to apply
+        
+    Returns:
+        True if cfg was changed, False otherwise
     """
     changed = False
     for key, value in updates.items():

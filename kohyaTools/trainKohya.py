@@ -38,6 +38,12 @@ from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateCfgFromArgs
 
 
 def parseArgs() -> argparse.Namespace:
+    """
+    Parse command-line arguments with defaults loaded from config.
+    
+    Returns:
+        Parsed command-line arguments
+    """
     cfg = loadConfig()
 
     defaultBaseDataDir = Path(getCfgValue(cfg, "baseDataDir", "/mnt/myVideo/Adult/tumblrForMovie"))
@@ -150,6 +156,17 @@ def parseArgs() -> argparse.Namespace:
 
 
 def buildTrainingCommand(args: argparse.Namespace, trainDir: Path, outputDir: Path) -> List[str]:
+    """
+    Build the complete training command for kohya_ss.
+    
+    Args:
+        args: Parsed command-line arguments
+        trainDir: Training data directory
+        outputDir: Output directory for trained models
+        
+    Returns:
+        Command list suitable for subprocess.run()
+    """
     outputName = f"{args.styleName}_r{args.rank}_{args.resolution.replace(',', 'x')}"
 
     shellCommand = (
@@ -190,7 +207,15 @@ def buildTrainingCommand(args: argparse.Namespace, trainDir: Path, outputDir: Pa
 
 
 def updateConfigFromArgs(args: argparse.Namespace) -> bool:
-    """Update configuration file with command-line arguments."""
+    """
+    Update configuration file with command-line arguments.
+    
+    Args:
+        args: Parsed command-line arguments
+        
+    Returns:
+        True if configuration was changed, False otherwise
+    """
     cfg = loadConfig()
 
     updates = {
@@ -218,6 +243,12 @@ def updateConfigFromArgs(args: argparse.Namespace) -> bool:
 
 
 def runTraining() -> None:
+    """
+    Main entry point: parse arguments, validate setup, and launch training.
+    
+    Raises:
+        SystemExit: On validation failures or missing dependencies
+    """
     args = parseArgs()
     prefix = "...[]" if args.dryRun else "..."
 
@@ -235,10 +266,12 @@ def runTraining() -> None:
     print(f"{prefix} output dir: {kohyaPaths.outputDir}")
 
     if not baseModelPath.exists():
-        sys.exit(f"ERROR: base model not found: {baseModelPath}")
+        print(f"ERROR: base model not found: {baseModelPath}")
+        sys.exit(1)
 
     if not kohyaDir.exists():
-        sys.exit(f"ERROR: kohya repo dir not found: {kohyaDir}")
+        print(f"ERROR: kohya repo dir not found: {kohyaDir}")
+        sys.exit(1)
 
     problems = validateTrainingSet(
         trainDir=kohyaPaths.trainDir,
