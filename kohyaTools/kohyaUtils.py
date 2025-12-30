@@ -514,7 +514,7 @@ def getImageDate(imagePath: Path, updateExif: bool = False) -> datetime.datetime
         exifDate = extractExifDate(imagePath)
         if exifDate:
             return exifDate
-    except Exception:
+    except (OSError, ValueError, ImportError):
         pass
     
     # Try filename parsing
@@ -526,10 +526,10 @@ def getImageDate(imagePath: Path, updateExif: bool = False) -> datetime.datetime
                 try:
                     if updateExifDate(imagePath, filenameDate):
                         pass  # EXIF updated successfully (silent)
-                except Exception:
+                except (OSError, ValueError, ImportError):
                     pass  # Continue even if EXIF update fails
             return filenameDate
-    except Exception:
+    except (ValueError, OSError):
         pass
     
     # Fall back to file modification time
@@ -568,7 +568,7 @@ def sortImagesByDate(images: List[Path], updateExif: bool = False) -> List[Path]
         try:
             date = getImageDate(img, updateExif=updateExif)
             imageWithDates.append((img, date))
-        except Exception:
+        except (OSError, ValueError, ImportError):
             # If any error occurs, use current time as fallback
             imageWithDates.append((img, datetime.datetime.now()))
     
