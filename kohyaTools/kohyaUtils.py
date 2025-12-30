@@ -314,12 +314,13 @@ def copyFiles(
     return copied
 
 
-def extractExifDate(imagePath: Path) -> Optional[datetime.datetime]:
+def extractExifDate(imagePath: Path, prefix: str = "...") -> Optional[datetime.datetime]:
     """
     Extract EXIF DateTimeOriginal from an image file.
     
     Args:
         imagePath: Path to the image file
+        prefix: Logging prefix for debug messages
         
     Returns:
         datetime object if EXIF date is found, None otherwise
@@ -369,10 +370,11 @@ def extractExifDate(imagePath: Path) -> Optional[datetime.datetime]:
                         pass
                 
     except ImportError:
-        # PIL/Pillow not available
+        # PIL/Pillow not available - only log once per batch
         pass
-    except Exception:
-        # Any other error reading EXIF
+    except Exception as e:
+        # Any other error reading EXIF - log for debugging
+        # Uncomment for debugging: print(f"{prefix} exif-error: {imagePath.name} - {type(e).__name__}")
         pass
     
     return None
@@ -446,6 +448,10 @@ def parseFilenameDate(filename: str) -> Optional[datetime.datetime]:
     - "something 1999-12 other" -> 1999-12-01 (year-month anywhere)
     - "prefix 030502" -> 2003-05-02 (yymmdd anywhere)
     - "photo_950315.jpg" -> 1995-03-15 (yymmdd with underscore)
+    - "1989_07_06 22_33_24.jpg" -> 1989-07-06 (yyyy_mm_dd format)
+    - "1987_02.1.png" -> 1987-02-01 (yyyy_mm format)
+    - "Christmas 2007" -> 2007-01-01 (year alone)
+    - "20191020" -> 2019-10-20 (yyyymmdd format)
     
     Args:
         filename: Filename to parse (without path)
@@ -453,8 +459,32 @@ def parseFilenameDate(filename: str) -> Optional[datetime.datetime]:
     Returns:
         datetime object if date pattern is found, None otherwise
     """
-    # Pattern 1: yyyy-mm format (e.g., "1997-07" or "082-1997-07")
-    match = re.search(r'\b(19\d{2}|20\d{2})-(\d{2})\b', filename)
+    # Pattern 1: yyyymmdd format (8 digits) - e.g., "20191020" for 2019-10-20
+    match = re.search(r'\b(19\d{2}|20\d{2})(\d{2})(\d{2})\b', filename)
+    if match:
+        year = int(match.group(1))
+        month = int(match.group(2))
+        day = int(match.group(3))
+        if 1 <= month <= 12 and 1 <= day <= 31:
+            try:
+                return datetime.datetime(year, month, day)
+            except ValueError:
+                pass
+    
+    # Pattern 2: yyyy_mm_dd or yyyy-mm-dd format (with time optional)
+    match = re.search(r'\b(19\d{2}|20\d{2})[_\-](\d{2})[_\-](\d{2})\b', filename)
+    if match:
+        year = int(match.group(1))
+        month = int(match.group(2))
+        day = int(match.group(3))
+        if 1 <= month <= 12 and 1 <= day <= 31:
+            try:
+                return datetime.datetime(year, month, day)
+            except ValueError:
+                pass
+    
+    # Pattern 3: yyyy-mm or yyyy_mm format (e.g., "1997-07" or "1987_02")
+    match = re.search(r'\b(19\d{2}|20\d{2})[_\-](\d{1,2})(?:\b|\.)', filename)
     if match:
         year = int(match.group(1))
         month = int(match.group(2))
@@ -464,7 +494,44 @@ def parseFilenameDate(filename: str) -> Optional[datetime.datetime]:
             except ValueError:
                 pass
     
-    # Pattern 2: yymmdd format (e.g., "030502" for 2003-05-02 or "950315" for 1995-03-15)
+    # Pattern 4: Month name followed by 2-digit year (e.g., "july 09" -> 2009-07)
+    month_names = {
+        'jan': 1, 'january': 1,
+        'feb': 2, 'february': 2,
+        'mar': 3, 'march': 3,
+        'apr': 4, 'april': 4,
+        'may': 5,
+        'jun': 6, 'june': 6,
+        'jul': 7, 'july': 7,
+        'aug': 8, 'august': 8,
+        'sep': 9, 'september': 9, 'sept': 9,
+        'oct': 10, 'october': 10,
+        'nov': 11, 'november': 11,
+        'dec': 12, 'december': 12
+    }
+    
+    for month_name, month_num in month_names.items():
+        # Match "july 09" or "july09"
+        pattern = rf'\b{month_name}\s*(\d{{2}})\b'
+        match = re.search(pattern, filename, re.IGNORECASE)
+        if match:
+            yy = int(match.group(1))
+            year = 2000 + yy if yy <= 50 else 1900 + yy
+            try:
+                return datetime.datetime(year, month_num, 1)
+            except ValueError:
+                pass
+    
+    # Pattern 5: Just a 4-digit year (e.g., "Christmas 2007" -> 2007-01-01)
+    match = re.search(r'\b(19\d{2}|20\d{2})\b', filename)
+    if match:
+        year = int(match.group(1))
+        try:
+            return datetime.datetime(year, 1, 1)
+        except ValueError:
+            pass
+    
+    # Pattern 6: yymmdd format (e.g., "030502" for 2003-05-02 or "950315" for 1995-03-15)
     # Look for 6-digit sequence that could be a date
     match = re.search(r'(?:^|[_\-\s])(\d{2})(\d{2})(\d{2})(?:[_\-\s.]|$)', filename)
     if match:
@@ -512,7 +579,7 @@ def getImageDate(imagePath: Path, updateExif: bool = False, prefix: str = "...")
     """
     # Try EXIF first
     try:
-        exifDate = extractExifDate(imagePath)
+        exifDate = extractExifDate(imagePath, prefix=prefix)
         if exifDate:
             print(f"{prefix} date: {imagePath.name} -> {exifDate.strftime('%Y-%m-%d')} [EXIF DateTimeOriginal]")
             return exifDate
