@@ -10,10 +10,19 @@ CPU-only LoRA training launcher for kohya_ss using the standard layout:
       output/
       originals/ (optional)
 
+Config:
+- automatically reads/writes ~/.config/kohya/kohyaConfig.json
+- CLI overrides config for this run
+- if CLI changes values, config is updated (unless --dry-run)
+
+Logging:
+- prefix is "..." normally
+- prefix is "...[] " when --dry-run is set
+
 Usage:
   python trainKohya.py kathy
-  python trainKohya.py kathy --baseDataDir /mnt/otherDisk/datasets
   python trainKohya.py kathy --epochs 8
+  python trainKohya.py kathy --dry-run
 """
 
 from __future__ import annotations
@@ -21,20 +30,34 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
-
 from pathlib import Path
 from typing import List
 
-from kohyaTools.kohyaUtils import ensureDirs, resolveKohyaPaths, validateTrainingSet
-
-
-defaultBaseDataDir = Path("/mnt/myVideo/Adult/tumblrForMovie")
-defaultBaseModelPath = Path("/mnt/models/v1-5-pruned-emaonly.safetensors")
-defaultKohyaDir = Path.home() / "Source/kohya_ss"
-defaultCondaEnvName = "kohya"
+from kohyaUtils import ensureDirs, resolveKohyaPaths, validateTrainingSet
+from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateCfgFromArgs
 
 
 def parseArgs() -> argparse.Namespace:
+    cfg = loadConfig()
+
+    defaultBaseDataDir = Path(getCfgValue(cfg, "baseDataDir", "/mnt/myVideo/Adult/tumblrForMovie"))
+    defaultBaseModelPath = Path(getCfgValue(cfg, "baseModelPath", "/mnt/models/v1-5-pruned-emaonly.safetensors"))
+    defaultKohyaDir = Path(getCfgValue(cfg, "kohyaDir", str(Path.home() / "Source/kohya_ss")))
+    defaultCondaEnvName = getCfgValue(cfg, "condaEnvName", "kohya")
+
+    defaultEpochs = int(getCfgValue(cfg, "epochs", 10))
+    defaultCpuThreads = int(getCfgValue(cfg, "cpuThreads", 8))
+    defaultMinImages = int(getCfgValue(cfg, "minImages", 12))
+
+    defaultCaptionExtension = getCfgValue(cfg, "captionExtension", ".txt")
+
+    defaultResolution = getCfgValue(cfg, "resolution", "512,512")
+    defaultRank = int(getCfgValue(cfg, "rank", 8))
+    defaultAlpha = int(getCfgValue(cfg, "alpha", 8))
+    defaultLearningRate = float(getCfgValue(cfg, "learningRate", 1e-4))
+    defaultTextEncoderLr = float(getCfgValue(cfg, "textEncoderLr", 5e-5))
+    defaultUnetLr = float(getCfgValue(cfg, "unetLr", 1e-4))
+
     parser = argparse.ArgumentParser(description="CPU-only LoRA training launcher (kohya_ss, SD1.5).")
 
     parser.add_argument("styleName", help="style / person name (e.g. kathy)")
@@ -67,21 +90,61 @@ def parseArgs() -> argparse.Namespace:
         help=f"conda env name (default: {defaultCondaEnvName})",
     )
 
-    parser.add_argument("--epochs", type=int, default=10, help="max train epochs (default: 10)")
-    parser.add_argument("--cpuThreads", type=int, default=8, help="accelerate cpu threads (default: 8)")
-    parser.add_argument("--minImages", type=int, default=12, help="minimum required images (default: 12)")
+    parser.add_argument("--epochs", type=int, default=defaultEpochs, help=f"max train epochs (default: {defaultEpochs})")
+    parser.add_argument(
+        "--cpuThreads",
+        type=int,
+        default=defaultCpuThreads,
+        help=f"accelerate cpu threads (default: {defaultCpuThreads})",
+    )
+    parser.add_argument(
+        "--minImages",
+        type=int,
+        default=defaultMinImages,
+        help=f"minimum required images (default: {defaultMinImages})",
+    )
 
-    parser.add_argument("--captionExtension", type=str, default=".txt", help="caption extension (default: .txt)")
+    parser.add_argument(
+        "--captionExtension",
+        type=str,
+        default=defaultCaptionExtension,
+        help=f"caption extension (default: {defaultCaptionExtension})",
+    )
 
-    # Training parameters you may want to tweak later
-    parser.add_argument("--resolution", type=str, default="512,512", help="training resolution (default: 512,512)")
-    parser.add_argument("--rank", type=int, default=8, help="LoRA rank/network dim (default: 8)")
-    parser.add_argument("--alpha", type=int, default=8, help="LoRA alpha (default: 8)")
-    parser.add_argument("--learningRate", type=float, default=1e-4, help="learning rate (default: 1e-4)")
-    parser.add_argument("--textEncoderLr", type=float, default=5e-5, help="text encoder lr (default: 5e-5)")
-    parser.add_argument("--unetLr", type=float, default=1e-4, help="u-net lr (default: 1e-4)")
+    parser.add_argument(
+        "--resolution",
+        type=str,
+        default=defaultResolution,
+        help=f"training resolution (default: {defaultResolution})",
+    )
+    parser.add_argument("--rank", type=int, default=defaultRank, help=f"LoRA rank/network dim (default: {defaultRank})")
+    parser.add_argument("--alpha", type=int, default=defaultAlpha, help=f"LoRA alpha (default: {defaultAlpha})")
 
-    parser.add_argument("--dry-run", action="store_true", help="print command and exit without running")
+    parser.add_argument(
+        "--learningRate",
+        type=float,
+        default=defaultLearningRate,
+        help=f"learning rate (default: {defaultLearningRate})",
+    )
+    parser.add_argument(
+        "--textEncoderLr",
+        type=float,
+        default=defaultTextEncoderLr,
+        help=f"text encoder lr (default: {defaultTextEncoderLr})",
+    )
+    parser.add_argument(
+        "--unetLr",
+        type=float,
+        default=defaultUnetLr,
+        help=f"u-net lr (default: {defaultUnetLr})",
+    )
+
+    parser.add_argument(
+        "--dry-run",
+        dest="dryRun",
+        action="store_true",
+        help="show actions without executing",
+    )
 
     return parser.parse_args()
 
@@ -89,7 +152,6 @@ def parseArgs() -> argparse.Namespace:
 def buildTrainingCommand(args: argparse.Namespace, trainDir: Path, outputDir: Path) -> List[str]:
     outputName = f"{args.styleName}_r{args.rank}_{args.resolution.replace(',', 'x')}"
 
-    # Single bash -lc command so conda activation works consistently
     shellCommand = (
         f"cd {args.kohyaDir} && "
         f"source ~/miniconda3/etc/profile.d/conda.sh && "
@@ -127,8 +189,36 @@ def buildTrainingCommand(args: argparse.Namespace, trainDir: Path, outputDir: Pa
     return ["bash", "-lc", shellCommand]
 
 
+def updateConfigFromArgs(args: argparse.Namespace) -> bool:
+    cfg = loadConfig()
+
+    updates = {
+        "baseDataDir": str(args.baseDataDir),
+        "baseModelPath": str(args.baseModelPath),
+        "kohyaDir": str(args.kohyaDir),
+        "condaEnvName": args.condaEnvName,
+        "epochs": args.epochs,
+        "cpuThreads": args.cpuThreads,
+        "minImages": args.minImages,
+        "captionExtension": args.captionExtension,
+        "resolution": args.resolution,
+        "rank": args.rank,
+        "alpha": args.alpha,
+        "learningRate": args.learningRate,
+        "textEncoderLr": args.textEncoderLr,
+        "unetLr": args.unetLr,
+    }
+
+    changed = updateCfgFromArgs(cfg, updates)
+    if changed and not args.dryRun:
+        saveConfig(cfg)
+
+    return changed
+
+
 def runTraining() -> None:
     args = parseArgs()
+    prefix = "...[] " if args.dryRun else "..."
 
     baseDataDir = args.baseDataDir.expanduser().resolve()
     baseModelPath = args.baseModelPath.expanduser().resolve()
@@ -137,14 +227,11 @@ def runTraining() -> None:
     kohyaPaths = resolveKohyaPaths(styleName=args.styleName, baseDataDir=baseDataDir)
     ensureDirs(kohyaPaths)
 
-    prefix = "...[] " if args.dry_run else "..."
     print(f"{prefix}starting cpu-only lora training")
     print(f"{prefix}style: {args.styleName}")
     print(f"{prefix}base data dir: {baseDataDir}")
     print(f"{prefix}train dir: {kohyaPaths.trainDir}")
     print(f"{prefix}output dir: {kohyaPaths.outputDir}")
-    print(f"{prefix}base model: {baseModelPath}")
-    print(f"{prefix}kohya dir: {kohyaDir}")
 
     if not baseModelPath.exists():
         sys.exit(f"ERROR: base model not found: {baseModelPath}")
@@ -166,17 +253,21 @@ def runTraining() -> None:
             print(f"  - {problem}")
         sys.exit(1)
 
+    configChanged = updateConfigFromArgs(args)
+    if configChanged and not args.dryRun:
+        print(f"{prefix}updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
+
     command = buildTrainingCommand(args, trainDir=kohyaPaths.trainDir, outputDir=kohyaPaths.outputDir)
 
-    print(f"...{prefix}training command:")
-    print(command[2])
-    if args.dry_run:
-        print("...dryRun set, exiting without running")
+    print(f"{prefix}training command: {command[2]}")
+
+    if args.dryRun:
+        print(f"{prefix}training skipped (--dry-run)")
         return
 
-    print(f"...{prefix}launching training")
+    print(f"{prefix}launching training")
     subprocess.run(command, check=True)
-    print(f"...{prefix}training complete")
+    print(f"{prefix}training complete")
 
 
 if __name__ == "__main__":
