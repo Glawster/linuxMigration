@@ -2,7 +2,7 @@
 """
 kohyaConfig.py
 
-Shared config loader/saver for kohya routines.
+Shared configuration loader/saver for kohya routines.
 Default config path: ~/.config/kohya/kohyaConfig.json
 """
 
@@ -16,6 +16,7 @@ defaultConfigPath = Path.home() / ".config" / "kohya" / "kohyaConfig.json"
 
 
 def loadConfig() -> Dict[str, Any]:
+    """Load configuration from the default config file, creating it if needed."""
     defaultConfigPath.parent.mkdir(parents=True, exist_ok=True)
 
     if not defaultConfigPath.exists():
@@ -34,13 +35,14 @@ def loadConfig() -> Dict[str, Any]:
 
 
 def saveConfig(data: Dict[str, Any]) -> None:
+    """Save configuration to the default config file."""
     defaultConfigPath.parent.mkdir(parents=True, exist_ok=True)
     defaultConfigPath.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def getCfgValue(cfg: Dict[str, Any], key: str, defaultValue: Any) -> Any:
-    value = cfg.get(key, defaultValue)
-    return value
+    """Get a config value with a default fallback."""
+    return cfg.get(key, defaultValue)
 
 
 def updateCfgFromArgs(cfg: Dict[str, Any], updates: Dict[str, Any]) -> bool:

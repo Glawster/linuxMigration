@@ -77,6 +77,7 @@ def parseArgs() -> argparse.Namespace:
 
 
 def updateConfigFromArgs(args: argparse.Namespace) -> bool:
+    """Update configuration file with command-line arguments."""
     cfg = loadConfig()
 
     updates = {

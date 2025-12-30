@@ -36,6 +36,16 @@ class KohyaPaths:
 
 
 def resolveKohyaPaths(styleName: str, baseDataDir: Path) -> KohyaPaths:
+    """
+    Resolve all standard kohya paths for a given style.
+    
+    Args:
+        styleName: Name of the style/person
+        baseDataDir: Base directory containing style folders
+        
+    Returns:
+        KohyaPaths object with all resolved paths
+    """
     styleDir = baseDataDir / styleName
     trainDir = styleDir / "train"
     outputDir = styleDir / "output"
@@ -51,6 +61,13 @@ def resolveKohyaPaths(styleName: str, baseDataDir: Path) -> KohyaPaths:
 
 
 def ensureDirs(paths: KohyaPaths, includeOriginals: bool = False) -> None:
+    """
+    Create all required directories for a kohya training setup.
+    
+    Args:
+        paths: KohyaPaths object with directory paths
+        includeOriginals: Whether to also create the originals directory
+    """
     paths.styleDir.mkdir(parents=True, exist_ok=True)
     paths.trainDir.mkdir(parents=True, exist_ok=True)
     paths.outputDir.mkdir(parents=True, exist_ok=True)
@@ -59,10 +76,21 @@ def ensureDirs(paths: KohyaPaths, includeOriginals: bool = False) -> None:
 
 
 def isImageFile(filePath: Path) -> bool:
+    """Check if a file is a supported image type."""
     return filePath.is_file() and filePath.suffix.lower() in imageExtensions
 
 
 def listImageFiles(folderPath: Path, recursive: bool = False) -> List[Path]:
+    """
+    List all image files in a folder.
+    
+    Args:
+        folderPath: Directory to search
+        recursive: Whether to search subdirectories
+        
+    Returns:
+        Sorted list of image file paths
+    """
     if not folderPath.exists():
         return []
 
@@ -75,16 +103,25 @@ def listImageFiles(folderPath: Path, recursive: bool = False) -> List[Path]:
 
 
 def getCaptionPath(imagePath: Path, captionExtension: str = ".txt") -> Path:
-    # For "photo.jpg" -> "photo.txt"
+    """
+    Get the caption file path for an image.
+    
+    For "photo.jpg" returns "photo.txt".
+    """
     return imagePath.with_suffix(captionExtension)
 
 
 def captionExists(imagePath: Path, captionExtension: str = ".txt") -> bool:
+    """Check if a caption file exists for the given image."""
     return getCaptionPath(imagePath, captionExtension).exists()
 
 
 def buildDefaultCaption(styleName: str, template: str = "{token}, photo") -> str:
-    # Identity-friendly default caption
+    """
+    Build a default caption from a template.
+    
+    Identity-friendly default caption template supports {token} placeholder.
+    """
     return template.format(token=styleName).strip()
 
 
