@@ -192,12 +192,8 @@ def copyFile(srcPath: Path, destDir: Path, dryRun: bool, prefix: str) -> None:
     if dryRun:
         return
 
-    try:
-        destDir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(srcPath, destPath)
-    except (OSError, IOError) as e:
-        print(f"ERROR: failed to copy {srcPath.name}: {e}")
-        raise
+    destDir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(srcPath, destPath)
 
 
 def main() -> None:
@@ -250,7 +246,7 @@ def main() -> None:
                 print(f"{prefix} ambiguous: {wantedPath.name}")
                 try:
                     copyFile(matches[0], destDir, args.dryRun, prefix)
-                except Exception as e:
+                except (OSError, IOError) as e:
                     print(f"ERROR: failed to copy {wantedPath.name}: {e}")
                     continue
                 continue
@@ -263,7 +259,7 @@ def main() -> None:
 
         try:
             copyFile(matches[0], destDir, args.dryRun, prefix)
-        except Exception as e:
+        except (OSError, IOError) as e:
             print(f"ERROR: failed to copy {wantedPath.name}: {e}")
             continue
 

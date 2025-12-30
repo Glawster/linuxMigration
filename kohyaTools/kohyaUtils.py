@@ -49,7 +49,7 @@ def resolveKohyaPaths(styleName: str, baseDataDir: Path) -> KohyaPaths:
     Raises:
         ValueError: If styleName is empty or contains invalid characters
     """
-    if not styleName or not styleName.strip():
+    if not styleName or not str(styleName).strip():
         raise ValueError("styleName cannot be empty")
     
     styleDir = baseDataDir / styleName

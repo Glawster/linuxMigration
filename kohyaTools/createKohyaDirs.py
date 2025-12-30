@@ -280,12 +280,8 @@ def moveFile(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> None:
     if dryRun:
         return
 
-    try:
-        destPath.parent.mkdir(parents=True, exist_ok=True)
-        srcPath.rename(destPath)
-    except OSError as e:
-        print(f"ERROR: failed to move {srcPath.name}: {e}")
-        raise
+    destPath.parent.mkdir(parents=True, exist_ok=True)
+    srcPath.rename(destPath)
 
 
 def processStyleFolder(
@@ -330,7 +326,8 @@ def processStyleFolder(
 
         try:
             moveFile(imagePath, destImagePath, dryRun=dryRun, prefix=prefix)
-        except OSError:
+        except OSError as e:
+            print(f"ERROR: failed to move {imagePath.name}: {e}")
             continue
 
         srcCaptionPath = getCaptionPath(imagePath, captionExtension=captionExtension)
@@ -342,8 +339,8 @@ def processStyleFolder(
         if srcCaptionPath.exists():
             try:
                 moveFile(srcCaptionPath, destCaptionPath, dryRun=dryRun, prefix=prefix)
-            except OSError:
-                pass
+            except OSError as e:
+                print(f"ERROR: failed to move caption {srcCaptionPath.name}: {e}")
         else:
             # keep this silent unless it actually creates
             created = writeCaptionIfMissing(
@@ -382,7 +379,8 @@ def undoStyleFolder(styleDir: Path, dryRun: bool, prefix: str) -> None:
 
         try:
             moveFile(entry, destPath, dryRun=dryRun, prefix=prefix)
-        except OSError:
+        except OSError as e:
+            print(f"ERROR: failed to move {entry.name}: {e}")
             continue
 
     if not dryRun:

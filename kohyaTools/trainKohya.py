@@ -266,10 +266,12 @@ def runTraining() -> None:
     print(f"{prefix} output dir: {kohyaPaths.outputDir}")
 
     if not baseModelPath.exists():
-        sys.exit(f"ERROR: base model not found: {baseModelPath}")
+        print(f"ERROR: base model not found: {baseModelPath}")
+        sys.exit(1)
 
     if not kohyaDir.exists():
-        sys.exit(f"ERROR: kohya repo dir not found: {kohyaDir}")
+        print(f"ERROR: kohya repo dir not found: {kohyaDir}")
+        sys.exit(1)
 
     problems = validateTrainingSet(
         trainDir=kohyaPaths.trainDir,
