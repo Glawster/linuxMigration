@@ -227,11 +227,11 @@ def runTraining() -> None:
     kohyaPaths = resolveKohyaPaths(styleName=args.styleName, baseDataDir=baseDataDir)
     ensureDirs(kohyaPaths)
 
-    print(f"{prefix}starting cpu-only lora training")
-    print(f"{prefix}style: {args.styleName}")
-    print(f"{prefix}base data dir: {baseDataDir}")
-    print(f"{prefix}train dir: {kohyaPaths.trainDir}")
-    print(f"{prefix}output dir: {kohyaPaths.outputDir}")
+    print(f"{prefix} starting cpu-only lora training")
+    print(f"{prefix} style: {args.styleName}")
+    print(f"{prefix} base data dir: {baseDataDir}")
+    print(f"{prefix} train dir: {kohyaPaths.trainDir}")
+    print(f"{prefix} output dir: {kohyaPaths.outputDir}")
 
     if not baseModelPath.exists():
         sys.exit(f"ERROR: base model not found: {baseModelPath}")
@@ -255,19 +255,19 @@ def runTraining() -> None:
 
     configChanged = updateConfigFromArgs(args)
     if configChanged and not args.dryRun:
-        print(f"{prefix}updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
+        print(f"{prefix} updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
 
     command = buildTrainingCommand(args, trainDir=kohyaPaths.trainDir, outputDir=kohyaPaths.outputDir)
 
-    print(f"{prefix}training command: {command[2]}")
+    print(f"{prefix} training command: {command[2]}")
 
     if args.dryRun:
-        print(f"{prefix}training skipped (--dry-run)")
+        print(f"{prefix} training skipped (--dry-run)")
         return
 
-    print(f"{prefix}launching training")
+    print(f"{prefix} launching training")
     subprocess.run(command, check=True)
-    print(f"{prefix}training complete")
+    print(f"{prefix} training complete")
 
 
 if __name__ == "__main__":
