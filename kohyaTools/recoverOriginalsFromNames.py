@@ -42,7 +42,7 @@ def parseArgs() -> argparse.Namespace:
     defaultDestDir = Path(getCfgValue(cfg, "originalsDestDir", str(defaultBackupRoot / "kathy" / "originals")))
     defaultSourceRoot = Path(getCfgValue(cfg, "sourceRoot", str(defaultPicturesRoot)))
 
-    defaultExts = getCfgValue(cfg, "extensions", ",".join(sorted(defaultExtensions)))
+    defaultExts = getCfgValue(cfg, "extensions", ",".join(sorted(DEFAULT_EXTENSIONS)))
     defaultOnAmbiguous = getCfgValue(cfg, "onAmbiguous", "error")
 
     parser = argparse.ArgumentParser(description="Copy originals from a source tree by matching filenames.")

@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 
-imageExtensions = {".jpg", ".jpeg", ".png", ".webp"}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 @dataclass(frozen=True)
@@ -77,7 +77,7 @@ def ensureDirs(paths: KohyaPaths, includeOriginals: bool = False) -> None:
 
 def isImageFile(filePath: Path) -> bool:
     """Check if a file is a supported image type."""
-    return filePath.is_file() and filePath.suffix.lower() in imageExtensions
+    return filePath.is_file() and filePath.suffix.lower() in IMAGE_EXTENSIONS
 
 
 def listImageFiles(folderPath: Path, recursive: bool = False) -> List[Path]:
