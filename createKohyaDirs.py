@@ -1,243 +1,311 @@
-import os
-import shutil
-import sys
+#!/usr/bin/env python3
+"""
+createKohyaDirs.py
+
+Prepare Kohya training folders using the logical structure:
+
+  baseDataDir/
+    styleName/
+      train/
+      output/
+      originals/   (optional)
+
+Actions:
+- Move top-level image files from style folder into style/train
+- Move matching .txt captions if they exist
+- If caption missing, create a default caption
+
+Undo:
+- Move files back from style/train into style root (flat)
+
+Examples:
+  python createKohyaDirs.py
+  python createKohyaDirs.py --style kathy
+  python createKohyaDirs.py --dryRun
+  python createKohyaDirs.py --undo --style kathy
+  python createKohyaDirs.py --baseDataDir /mnt/otherDisk/datasets
+"""
+
+from __future__ import annotations
+
 import argparse
+import sys
+from pathlib import Path
+from typing import List, Optional, Tuple
 
-# ==========================================
-# CONFIG (camelCase)
-# ==========================================
-
-# Root folder containing all style folders
-baseDir = r"/mnt/myVideo/Adult/tumblrForMovie"
-
-# Kohya repeat count (e.g. 10 will create subfolders like '10_wedding')
-repeatCount = 10
-
-# Image extensions to process
-imageExts = {".jpg", ".jpeg", ".png", ".webp"}
-
-# Caption template
-captionTemplate = "a photograph in {token} style"
-# ==========================================
+from kohyaUtils import (
+    KohyaPaths,
+    buildDefaultCaption,
+    ensureDirs,
+    getCaptionPath,
+    isImageFile,
+    resolveKohyaPaths,
+    writeCaptionIfMissing,
+)
 
 
-def isImageFile(filename: str) -> bool:
-    """Return True if file is an image based on extension."""
-    return os.path.splitext(filename)[1].lower() in imageExts
+defaultBaseDataDir = Path("/mnt/myVideo/Adult/tumblrForMovie")
 
 
-def ensureKohyaFolder(styleRoot: str, styleName: str, dry_run: bool = False) -> str:
-    """
-    Create and return the path to the Kohya training folder like:
-        '10_styleName'
-    """
-    kohyaFolderName = f"{repeatCount}_{styleName}"
-    kohyaFolderPath = os.path.join(styleRoot, kohyaFolderName)
-    if not dry_run:
-        os.makedirs(kohyaFolderPath, exist_ok=True)
-    return kohyaFolderPath
+def parseArgs() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Create or restore Kohya training folder structure (style/train).")
 
-
-def processStyleFolder(styleRoot: str, dry_run: bool = False):
-    """
-    Processes one style folder such as:
-        /mnt/myVideo/Adult/tumblrForMovie/wedding
-    """
-    styleName = os.path.basename(styleRoot)
-
-    # Token used inside caption, e.g. <wedding_style>
-    tokenName = f"{styleName.replace(' ', '_')}"
-
-    kohyaSubdir = ensureKohyaFolder(styleRoot, styleName, dry_run=dry_run)
-
-    print(f"\nProcessing: {styleRoot}")
-    print(f"  Kohya folder: {kohyaSubdir}")
-    print(f"  Token used: {tokenName}")
-
-    # Process all files in the style root directory
-    for entry in list(os.scandir(styleRoot)):
-        if entry.is_dir():
-            # Skip the Kohya folder itself and any other unrelated folders
-            if entry.path == kohyaSubdir:
-                continue
-            print(f"  Skipping subfolder: {entry.name}")
-            continue
-
-        filename = entry.name
-        filePath = entry.path
-
-        if not isImageFile(filename):
-            continue
-
-        destImagePath = os.path.join(kohyaSubdir, filename)
-
-        # Move image file
-        if os.path.abspath(filePath) != os.path.abspath(destImagePath):
-            print(f"  Moving image: {filename}")
-            if not dry_run:
-                shutil.move(filePath, destImagePath)
-        else:
-            print(f"  Image already in correct location: {filename}")
-
-        # Caption handling
-        baseName, _ = os.path.splitext(filename)
-        srcCaptionPath = os.path.join(styleRoot, baseName + ".txt")
-        destCaptionPath = os.path.join(kohyaSubdir, baseName + ".txt")
-
-        # Caption already exists → skip
-        if os.path.exists(destCaptionPath):
-            print(f"    Caption already exists: {destCaptionPath}")
-            continue
-
-        # If caption exists in the top-level folder → move it
-        if os.path.exists(srcCaptionPath):
-            print(f"    Moving caption: {baseName}.txt")
-            if not dry_run:
-                shutil.move(srcCaptionPath, destCaptionPath)
-            continue
-
-        # Otherwise create a new caption
-        print(f"    Creating caption: {baseName}.txt")
-        if not dry_run:
-            captionText = captionTemplate.format(token=tokenName)
-            with open(destCaptionPath, "w", encoding="utf-8") as f:
-                f.write(captionText)
-
-
-def undoKohyaFolders(styleNameFilter=None, dry_run: bool = False):
-    """
-    Restore the directory structure back to a flat structure by moving all files
-    from Kohya subfolders (e.g., '10_styleName') back to the parent style folder.
-    
-    Args:
-        styleNameFilter: Optional style name to process only that specific style folder.
-                        If None, processes all style folders under baseDir.
-        dry_run: If True, show what would be done without actually doing it.
-    """
-    print(f"Undoing Kohya structure in: {baseDir}")
-
-    if not os.path.isdir(baseDir):
-        print("ERROR: baseDir does not exist or is not a directory.")
-        return
-
-    if styleNameFilter:
-        # Process only the specified style folder
-        styleRoot = os.path.join(baseDir, styleNameFilter)
-        if not os.path.isdir(styleRoot):
-            print(f"ERROR: Style folder '{styleNameFilter}' not found at {styleRoot}")
-            return
-        styleFolders = [styleRoot]
-    else:
-        # Process all style folders under baseDir
-        styleFolders = [entry.path for entry in os.scandir(baseDir) if entry.is_dir()]
-
-    for styleRoot in styleFolders:
-        styleName = os.path.basename(styleRoot)
-
-        # Look for Kohya folder like '10_styleName'
-        kohyaFolderName = f"{repeatCount}_{styleName}"
-        kohyaFolderPath = os.path.join(styleRoot, kohyaFolderName)
-
-        if not os.path.exists(kohyaFolderPath):
-            print(f"\nNo Kohya folder found for '{styleName}', skipping.")
-            continue
-
-        print(f"\nRestoring: {styleRoot}")
-        print(f"  Moving files from: {kohyaFolderPath}")
-
-        # Move all files from Kohya subfolder back to parent
-        for fileEntry in list(os.scandir(kohyaFolderPath)):
-            if fileEntry.is_file():
-                srcPath = fileEntry.path
-                destPath = os.path.join(styleRoot, fileEntry.name)
-
-                # If file already exists in parent, skip
-                if os.path.exists(destPath):
-                    print(f"  File already exists in parent folder: {fileEntry.name}, skipping.")
-                    continue
-
-                print(f"  Moving: {fileEntry.name}")
-                if not dry_run:
-                    shutil.move(srcPath, destPath)
-
-        # Remove the now-empty Kohya folder
-        if not dry_run:
-            try:
-                os.rmdir(kohyaFolderPath)
-                print(f"  Removed empty folder: {kohyaFolderName}")
-            except OSError as e:
-                print(f"  WARNING: Could not remove folder {kohyaFolderName}: {e}")
-        else:
-            print(f"  Would remove empty folder: {kohyaFolderName}")
-
-    print("\nFinished! Your folders have been restored to flat structure.")
-
-
-def processStyleFolders(styleNameFilter=None, dry_run: bool = False):
-    """
-    Process style folders to create Kohya structure.
-    
-    Args:
-        styleNameFilter: Optional style name to process only that specific style folder.
-                        If None, processes all style folders under baseDir.
-        dry_run: If True, show what would be done without actually doing it.
-    """
-    print(f"Scanning: {baseDir}")
-
-    if not os.path.isdir(baseDir):
-        print("ERROR: baseDir does not exist or is not a directory.")
-        return
-
-    if styleNameFilter:
-        # Process only the specified style folder
-        styleRoot = os.path.join(baseDir, styleNameFilter)
-        if not os.path.isdir(styleRoot):
-            print(f"ERROR: Style folder '{styleNameFilter}' not found at {styleRoot}")
-            return
-        styleFolders = [styleRoot]
-    else:
-        # Process all style folders under baseDir
-        styleFolders = [entry.path for entry in os.scandir(baseDir) if entry.is_dir()]
-
-    for styleRoot in styleFolders:
-        processStyleFolder(styleRoot, dry_run=dry_run)
-
-    print("\nFinished! Your folders are now Kohya-ready.")
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Create or restore Kohya training folder structure"
-    )
     parser.add_argument(
-        "--undo",
-        action="store_true",
-        help="Restore folders from Kohya structure back to flat structure"
+        "--baseDataDir",
+        type=Path,
+        default=defaultBaseDataDir,
+        help=f"root folder containing style folders (default: {defaultBaseDataDir})",
     )
+
     parser.add_argument(
         "--style",
         type=str,
         default=None,
-        help="Process only a specific style folder (e.g., 'wedding'). If not provided, processes all style folders under baseDir."
+        help="process only a specific style folder (e.g., 'kathy'). If omitted, processes all style folders.",
     )
+
     parser.add_argument(
-        "--dry-run",
+        "--undo",
         action="store_true",
-        help="Show what would be done without actually performing any operations"
+        help="restore from style/train back to a flat style folder structure",
     )
 
-    args = parser.parse_args()
+    parser.add_argument(
+        "--dryRun",
+        action="store_true",
+        help="show what would be done without changing anything",
+    )
 
-    if args.dry_run:
-        print("[DRY RUN MODE] - No files will be modified")
-    
-    if args.style:
-        print(f"Processing style: {args.style}")
+    parser.add_argument(
+        "--captionTemplate",
+        type=str,
+        default="{token}, photo",
+        help="caption template used when creating missing captions (default: '{token}, photo')",
+    )
+
+    parser.add_argument(
+        "--captionExtension",
+        type=str,
+        default=".txt",
+        help="caption extension (default: .txt)",
+    )
+
+    parser.add_argument(
+        "--includeOriginalsDir",
+        action="store_true",
+        help="also create style/originals directory (optional)",
+    )
+
+    parser.add_argument(
+        "--copy",
+        action="store_true",
+        help="copy files instead of moving them (default is move)",
+    )
+
+    return parser.parse_args()
+
+
+def getStyleFolders(baseDataDir: Path, styleNameFilter: Optional[str]) -> List[Path]:
+    if not baseDataDir.is_dir():
+        raise FileNotFoundError(f"baseDataDir does not exist or is not a directory: {baseDataDir}")
+
+    if styleNameFilter:
+        styleDir = baseDataDir / styleNameFilter
+        if not styleDir.is_dir():
+            raise FileNotFoundError(f"style folder not found: {styleDir}")
+        return [styleDir]
+
+    # All first-level directories under baseDataDir are treated as style folders
+    return sorted([p for p in baseDataDir.iterdir() if p.is_dir()])
+
+
+def listTopLevelImages(styleDir: Path) -> List[Path]:
+    """
+    Only images in the style root, not recursive.
+    Skips known subfolders and any other directories.
+    """
+    skipDirs = {"train", "output", "originals"}
+    images: List[Path] = []
+
+    for entry in styleDir.iterdir():
+        if entry.is_dir():
+            # Skip known subfolders (and any other dirs)
+            continue
+
+        if isImageFile(entry):
+            images.append(entry)
+
+    return sorted(images)
+
+
+def moveOrCopyFile(srcPath: Path, destPath: Path, copyMode: bool, dryRun: bool) -> None:
+    if dryRun:
+        action = "copy" if copyMode else "move"
+        print(f"  [] would {action}: {srcPath.name} -> {destPath}")
+        return
+
+    destPath.parent.mkdir(parents=True, exist_ok=True)
+
+    if copyMode:
+        import shutil
+        shutil.copy2(srcPath, destPath)
+    else:
+        srcPath.rename(destPath)
+
+
+def processStyleFolder(
+    styleDir: Path,
+    captionTemplate: str,
+    captionExtension: str,
+    dryRun: bool,
+    includeOriginalsDir: bool,
+    copyMode: bool,
+) -> None:
+    styleName = styleDir.name
+    paths = resolveKohyaPaths(styleName=styleName, baseDataDir=styleDir.parent)
+
+    print(f"\nProcessing: {styleDir}")
+    print(f"  train folder: {paths.trainDir}")
+    print(f"  output folder: {paths.outputDir}")
+    print(f"  caption template: {captionTemplate}")
+    if dryRun:
+        print("  [DRY RUN MODE] - no files will be modified")
+
+    ensureDirs(paths, includeOriginals=includeOriginalsDir)
+
+    images = listTopLevelImages(styleDir)
+    if not images:
+        print("  ...no top-level images found, nothing to do.")
+        return
+
+    defaultCaption = buildDefaultCaption(styleName=styleName, template=captionTemplate)
+
+    movedImages = 0
+    movedCaptions = 0
+    createdCaptions = 0
+
+    for imagePath in images:
+        destImagePath = paths.trainDir / imagePath.name
+
+        if destImagePath.exists():
+            print(f"  ...image already in train: {imagePath.name}")
+        else:
+            print(f"  ...{('copying' if copyMode else 'moving')} image: {imagePath.name}")
+            moveOrCopyFile(imagePath, destImagePath, copyMode=copyMode, dryRun=dryRun)
+            movedImages += 1
+
+        # caption handling
+        srcCaptionPath = getCaptionPath(imagePath, captionExtension=captionExtension)
+        destCaptionPath = getCaptionPath(destImagePath, captionExtension=captionExtension)
+
+        if destCaptionPath.exists():
+            # already good
+            continue
+
+        if srcCaptionPath.exists():
+            print(f"    ...{('copying' if copyMode else 'moving')} caption: {srcCaptionPath.name}")
+            moveOrCopyFile(srcCaptionPath, destCaptionPath, copyMode=copyMode, dryRun=dryRun)
+            movedCaptions += 1
+        else:
+            print(f"    ...creating caption: {destCaptionPath.name}")
+            if writeCaptionIfMissing(
+                imagePath=destImagePath,
+                captionText=defaultCaption,
+                captionExtension=captionExtension,
+                dryRun=dryRun,
+            ):
+                createdCaptions += 1
+
+    print()
+    print(f"  done. images handled: {len(images)}")
+    print(f"  images {('copied' if copyMode else 'moved')}: {movedImages}")
+    print(f"  captions {('copied' if copyMode else 'moved')}: {movedCaptions}")
+    print(f"  captions created: {createdCaptions}")
+
+
+def undoStyleFolder(
+    styleDir: Path,
+    captionExtension: str,
+    dryRun: bool,
+    copyMode: bool,
+) -> None:
+    styleName = styleDir.name
+    paths = resolveKohyaPaths(styleName=styleName, baseDataDir=styleDir.parent)
+
+    print(f"\nRestoring (undo): {styleDir}")
+    print(f"  moving files from: {paths.trainDir}")
+    if dryRun:
+        print("  [DRY RUN MODE] - no files will be modified")
+
+    if not paths.trainDir.exists():
+        print("  ...no train folder found, skipping.")
+        return
+
+    moved = 0
+    skipped = 0
+
+    for entry in sorted(paths.trainDir.iterdir()):
+        if not entry.is_file():
+            continue
+
+        destPath = styleDir / entry.name
+        if destPath.exists():
+            print(f"  ...file already exists in style root, skipping: {entry.name}")
+            skipped += 1
+            continue
+
+        print(f"  ...{('copying' if copyMode else 'moving')} back: {entry.name}")
+        moveOrCopyFile(entry, destPath, copyMode=copyMode, dryRun=dryRun)
+        moved += 1
+
+    # attempt to remove empty train folder (only if move mode and not dryRun)
+    if not dryRun and not copyMode:
+        try:
+            if paths.trainDir.exists() and not any(paths.trainDir.iterdir()):
+                paths.trainDir.rmdir()
+                print("  ...removed empty train folder")
+        except Exception as e:
+            print(f"  WARNING: could not remove train folder: {e}")
+
+    print()
+    print(f"  done. files moved back: {moved}, skipped: {skipped}")
+
+
+def main() -> None:
+    args = parseArgs()
+
+    baseDataDir = args.baseDataDir.expanduser().resolve()
+
+    try:
+        styleFolders = getStyleFolders(baseDataDir, args.style)
+    except Exception as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
 
     if args.undo:
-        undoKohyaFolders(styleNameFilter=args.style, dry_run=args.dry_run)
-    else:
-        processStyleFolders(styleNameFilter=args.style, dry_run=args.dry_run)
+        print(f"Undoing train structure in: {baseDataDir}")
+        for styleDir in styleFolders:
+            undoStyleFolder(
+                styleDir=styleDir,
+                captionExtension=args.captionExtension,
+                dryRun=args.dryRun,
+                copyMode=args.copy,
+            )
+        print("\nFinished! Your folders have been restored to flat structure (style root).")
+        return
+
+    print(f"Scanning: {baseDataDir}")
+    for styleDir in styleFolders:
+        processStyleFolder(
+            styleDir=styleDir,
+            captionTemplate=args.captionTemplate,
+            captionExtension=args.captionExtension,
+            dryRun=args.dryRun,
+            includeOriginalsDir=args.includeOriginalsDir,
+            copyMode=args.copy,
+        )
+
+    print("\nFinished! Your folders are now Kohya-ready (style/train).")
 
 
 if __name__ == "__main__":
