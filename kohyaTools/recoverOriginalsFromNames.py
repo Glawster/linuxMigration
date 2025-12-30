@@ -172,7 +172,8 @@ def main() -> None:
 
         if not matches:
             print(f"{prefix} missing: {wantedPath.name}")
-            continue
+            # copy from wantedDir to destDir 
+            copyFile(wantedPath, destDir, args.dryRun, prefix)
 
         if len(matches) > 1:
             if args.onAmbiguous == "skip":
