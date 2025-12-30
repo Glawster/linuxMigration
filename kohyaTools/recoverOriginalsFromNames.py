@@ -130,10 +130,10 @@ def copyFile(srcPath: Path, destDir: Path, dryRun: bool, prefix: str) -> None:
     destPath = destDir / srcPath.name
 
     if destPath.exists():
-        print(f"{prefix}skip: {destPath.name}")
+        print(f"{prefix} skip: {destPath.name}")
         return
 
-    print(f"{prefix}copy: {srcPath.name} -> {destPath}")
+    print(f"{prefix} copy: {srcPath.name} -> {destPath}")
     if dryRun:
         return
 
@@ -143,7 +143,7 @@ def copyFile(srcPath: Path, destDir: Path, dryRun: bool, prefix: str) -> None:
 
 def main() -> None:
     args = parseArgs()
-    prefix = "...[] " if args.dryRun else "... "
+    prefix = "...[]" if args.dryRun else "..."
 
     wantedDir = args.wantedDir.expanduser().resolve()
     sourceRoot = args.sourceRoot.expanduser().resolve()
@@ -156,7 +156,7 @@ def main() -> None:
 
     configChanged = updateConfigFromArgs(args)
     if configChanged and not args.dryRun:
-        print(f"{prefix}updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
+        print(f"{prefix} updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
 
     extensions = parseExtensions(args.extensions)
 
@@ -164,22 +164,22 @@ def main() -> None:
     if not wantedFiles:
         sys.exit("ERROR: no wanted files found (check extensions)")
 
-    print(f"{prefix}indexing: {sourceRoot}")
+    print(f"{prefix} indexing: {sourceRoot}")
     sourceIndex = buildSourceIndex(sourceRoot, extensions)
 
     for wantedPath in wantedFiles:
         matches = sourceIndex.get(wantedPath.name.lower(), [])
 
         if not matches:
-            print(f"{prefix}missing: {wantedPath.name}")
+            print(f"{prefix} missing: {wantedPath.name}")
             continue
 
         if len(matches) > 1:
             if args.onAmbiguous == "skip":
-                print(f"{prefix}ambiguous: {wantedPath.name}")
+                print(f"{prefix} ambiguous: {wantedPath.name}")
                 continue
             if args.onAmbiguous == "pick-first":
-                print(f"{prefix}ambiguous: {wantedPath.name}")
+                print(f"{prefix} ambiguous: {wantedPath.name}")
                 copyFile(matches[0], destDir, args.dryRun, prefix)
                 continue
 
