@@ -357,6 +357,17 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> Optional[datetime.d
             print(f"{prefix} exif-debug: EXIF data type: {type(exif)}")
             print(f"{prefix} exif-debug: EXIF keys count: {len(exif) if hasattr(exif, '__len__') else 'N/A'}")
             
+            # Show all EXIF tags for debugging
+            if hasattr(exif, 'keys'):
+                all_tags = list(exif.keys())
+                print(f"{prefix} exif-debug: All EXIF tag IDs: {all_tags}")
+                # Also show the tag names if we can look them up
+                tag_names = []
+                for tag_id in all_tags[:20]:  # Limit to first 20 for readability
+                    tag_name = ExifTags.TAGS.get(tag_id, f"Unknown-{tag_id}")
+                    tag_names.append(f"{tag_id}={tag_name}")
+                print(f"{prefix} exif-debug: EXIF tag names: {tag_names}")
+            
             # Get DateTimeOriginal tag value
             dateStr = None
             
