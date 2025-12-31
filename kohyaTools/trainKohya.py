@@ -2,13 +2,18 @@
 """
 trainKohya.py
 
-CPU-only LoRA training launcher for kohya_ss using the standard layout:
+CPU-only LoRA training launcher for kohya_ss using DreamBooth-style folders.
+
+Final layout:
 
   trainingRoot/
     styleName/
-      train/
+      10_styleName/      <-- trainDir (instance images)
       output/
-      originals/ (optional)
+
+Notes:
+- trainDir is ALWAYS styleDir / f"10_{styleName}"
+- kohya expects --train_data_dir to be the PARENT (styleDir)
 
 Config:
 - automatically reads/writes ~/.config/kohya/kohyaConfig.json
@@ -17,12 +22,7 @@ Config:
 
 Logging:
 - prefix is "..." normally
-- prefix is "...[]" when --dry-run is set
-
-Usage:
-  python trainKohya.py kathy
-  python trainKohya.py kathy --epochs 8
-  python trainKohya.py kathy --dry-run
+- prefix is "...[] " when --dry-run is set
 """
 
 from __future__ import annotations
@@ -33,20 +33,34 @@ import sys
 from pathlib import Path
 from typing import List
 
-from kohyaUtils import ensureDirs, resolveKohyaPaths, validateTrainingSet
 from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateCfgFromArgs
 
 
+def resolveTrainScriptPath(kohyaDir: Path) -> Path:
+    candidates = [
+        kohyaDir / "train_network.py",
+        kohyaDir / "sd-scripts" / "train_network.py",
+        kohyaDir / "scripts" / "train_network.py",
+    ]
+
+    for path in candidates:
+        if path.exists():
+            return path
+
+    raise FileNotFoundError(f"train_network.py not found under: {kohyaDir}")
+
+
 def parseArgs() -> argparse.Namespace:
-    """
-    Parse command-line arguments with defaults loaded from config.
-    
-    Returns:
-        Parsed command-line arguments
-    """
     cfg = loadConfig()
 
-    defaultTrainingRoot = Path(getCfgValue(cfg, "trainingRoot", "/mnt/myVideo/Adult/tumblrForMovie"))
+    defaultTrainingRoot = Path(
+        getCfgValue(
+            cfg,
+            "trainingRoot",
+            getCfgValue(cfg, "baseDataDir", "/mnt/myVideo/Adult/tumblrForMovie"),
+        )
+    )
+
     defaultBaseModelPath = Path(getCfgValue(cfg, "baseModelPath", "/mnt/models/v1-5-pruned-emaonly.safetensors"))
     defaultKohyaDir = Path(getCfgValue(cfg, "kohyaDir", str(Path.home() / "Source/kohya_ss")))
     defaultCondaEnvName = getCfgValue(cfg, "condaEnvName", "kohya")
@@ -56,7 +70,6 @@ def parseArgs() -> argparse.Namespace:
     defaultMinImages = int(getCfgValue(cfg, "minImages", 12))
 
     defaultCaptionExtension = getCfgValue(cfg, "captionExtension", ".txt")
-
     defaultResolution = getCfgValue(cfg, "resolution", "512,512")
     defaultRank = int(getCfgValue(cfg, "rank", 8))
     defaultAlpha = int(getCfgValue(cfg, "alpha", 8))
@@ -72,7 +85,7 @@ def parseArgs() -> argparse.Namespace:
         "--trainingRoot",
         type=Path,
         default=defaultTrainingRoot,
-        help=f"base dataset directory (default: {defaultTrainingRoot})",
+        help=f"root folder containing style training folders (default: {defaultTrainingRoot})",
     )
 
     parser.add_argument(
@@ -103,11 +116,12 @@ def parseArgs() -> argparse.Namespace:
         default=defaultCpuThreads,
         help=f"accelerate cpu threads (default: {defaultCpuThreads})",
     )
+
     parser.add_argument(
         "--minImages",
         type=int,
         default=defaultMinImages,
-        help=f"minimum required images (default: {defaultMinImages})",
+        help=f"minimum required images in trainDir (default: {defaultMinImages})",
     )
 
     parser.add_argument(
@@ -123,6 +137,7 @@ def parseArgs() -> argparse.Namespace:
         default=defaultResolution,
         help=f"training resolution (default: {defaultResolution})",
     )
+
     parser.add_argument("--rank", type=int, default=defaultRank, help=f"LoRA rank/network dim (default: {defaultRank})")
     parser.add_argument("--alpha", type=int, default=defaultAlpha, help=f"LoRA alpha (default: {defaultAlpha})")
 
@@ -132,12 +147,14 @@ def parseArgs() -> argparse.Namespace:
         default=defaultLearningRate,
         help=f"learning rate (default: {defaultLearningRate})",
     )
+
     parser.add_argument(
         "--textEncoderLr",
         type=float,
         default=defaultTextEncoderLr,
         help=f"text encoder lr (default: {defaultTextEncoderLr})",
     )
+
     parser.add_argument(
         "--unetLr",
         type=float,
@@ -147,7 +164,7 @@ def parseArgs() -> argparse.Namespace:
 
     parser.add_argument(
         "--dry-run",
-        dest="dryRun",
+        dest="dry_run",
         action="store_true",
         help="show actions without executing",
     )
@@ -155,28 +172,23 @@ def parseArgs() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def buildTrainingCommand(args: argparse.Namespace, trainDir: Path, outputDir: Path) -> List[str]:
-    """
-    Build the complete training command for kohya_ss.
-    
-    Args:
-        args: Parsed command-line arguments
-        trainDir: Training data directory
-        outputDir: Output directory for trained models
-        
-    Returns:
-        Command list suitable for subprocess.run()
-    """
+def buildTrainingCommand(
+    args: argparse.Namespace,
+    styleDir: Path,
+    trainScriptPath: Path,
+) -> List[str]:
+    outputDir = styleDir / "output"
     outputName = f"{args.styleName}_r{args.rank}_{args.resolution.replace(',', 'x')}"
 
     shellCommand = (
+        f"export CUDA_VISIBLE_DEVICES='' && "
         f"cd {args.kohyaDir} && "
         f"source ~/miniconda3/etc/profile.d/conda.sh && "
         f"conda activate {args.condaEnvName} && "
         f"accelerate launch --num_cpu_threads_per_process={args.cpuThreads} "
-        f"train_network.py "
+        f"'{trainScriptPath}' "
         f"--pretrained_model_name_or_path='{args.baseModelPath}' "
-        f"--train_data_dir='{trainDir}' "
+        f"--train_data_dir='{styleDir}' "
         f"--output_dir='{outputDir}' "
         f"--output_name='{outputName}' "
         f"--caption_extension='{args.captionExtension}' "
@@ -207,15 +219,6 @@ def buildTrainingCommand(args: argparse.Namespace, trainDir: Path, outputDir: Pa
 
 
 def updateConfigFromArgs(args: argparse.Namespace) -> bool:
-    """
-    Update configuration file with command-line arguments.
-    
-    Args:
-        args: Parsed command-line arguments
-        
-    Returns:
-        True if configuration was changed, False otherwise
-    """
     cfg = loadConfig()
 
     updates = {
@@ -236,72 +239,67 @@ def updateConfigFromArgs(args: argparse.Namespace) -> bool:
     }
 
     changed = updateCfgFromArgs(cfg, updates)
-    if changed and not args.dryRun:
+    if changed and not args.dry_run:
         saveConfig(cfg)
 
     return changed
 
 
 def runTraining() -> None:
-    """
-    Main entry point: parse arguments, validate setup, and launch training.
-    
-    Raises:
-        SystemExit: On validation failures or missing dependencies
-    """
     args = parseArgs()
-    prefix = "...[]" if args.dryRun else "..."
+    prefix = "...[] " if args.dry_run else "..."
 
     trainingRoot = args.trainingRoot.expanduser().resolve()
+    styleDir = trainingRoot / args.styleName
+    trainDir = styleDir / f"10_{args.styleName}"
+
     baseModelPath = args.baseModelPath.expanduser().resolve()
     kohyaDir = args.kohyaDir.expanduser().resolve()
 
-    kohyaPaths = resolveKohyaPaths(styleName=args.styleName, trainingRoot=trainingRoot)
-    ensureDirs(kohyaPaths)
+    print(f"{prefix}starting cpu-only lora training")
+    print(f"{prefix}style: {args.styleName}")
+    print(f"{prefix}training root: {trainingRoot}")
+    print(f"{prefix}train dir: {trainDir}")
+    print(f"{prefix}output dir: {styleDir / 'output'}")
 
-    print(f"{prefix} starting cpu-only lora training")
-    print(f"{prefix} style: {args.styleName}")
-    print(f"{prefix} training root: {trainingRoot}")
-    print(f"{prefix} train dir: {kohyaPaths.trainDir}")
-    print(f"{prefix} output dir: {kohyaPaths.outputDir}")
+    if not trainDir.exists():
+        sys.exit(f"ERROR: train dir not found: {trainDir}")
+
+    imageFiles = list(trainDir.glob("*.jpg")) + list(trainDir.glob("*.png"))
+    if len(imageFiles) < args.minImages:
+        sys.exit(f"ERROR: insufficient training images in {trainDir} ({len(imageFiles)} found)")
 
     if not baseModelPath.exists():
-        print(f"ERROR: base model not found: {baseModelPath}")
-        sys.exit(1)
+        sys.exit(f"ERROR: base model not found: {baseModelPath}")
 
     if not kohyaDir.exists():
-        print(f"ERROR: kohya repo dir not found: {kohyaDir}")
-        sys.exit(1)
+        sys.exit(f"ERROR: kohya repo dir not found: {kohyaDir}")
 
-    problems = validateTrainingSet(
-        trainDir=kohyaPaths.trainDir,
-        minImages=args.minImages,
-        captionExtension=args.captionExtension,
-        requireCaptions=True,
-        recursive=False,
-    )
-
-    if problems:
-        print("ERROR: training set validation failed:")
-        for problem in problems:
-            print(f"  - {problem}")
-        sys.exit(1)
+    trainScriptPath = resolveTrainScriptPath(kohyaDir)
+    print(f"{prefix}train script: {trainScriptPath}")
 
     configChanged = updateConfigFromArgs(args)
-    if configChanged and not args.dryRun:
-        print(f"{prefix} updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
+    if configChanged and not args.dry_run:
+        print(f"{prefix}updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
 
-    command = buildTrainingCommand(args, trainDir=kohyaPaths.trainDir, outputDir=kohyaPaths.outputDir)
+    command = buildTrainingCommand(
+        args=args,
+        styleDir=styleDir,
+        trainScriptPath=trainScriptPath,
+    )
 
-    print(f"{prefix} training command: {command[2]}")
+    print(f"{prefix}training command: {command[2]}")
 
-    if args.dryRun:
-        print(f"{prefix} training skipped (--dry-run)")
+    if args.dry_run:
+        print(f"{prefix}training skipped (--dry-run)")
         return
 
-    print(f"{prefix} launching training")
-    subprocess.run(command, check=True)
-    print(f"{prefix} training complete")
+    print(f"{prefix}launching training")
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError:
+        sys.exit("ERROR: training failed (see output above)")
+    print(f"{prefix}training complete")
 
 
 if __name__ == "__main__":
