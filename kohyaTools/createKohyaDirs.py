@@ -344,12 +344,17 @@ def processStyleFolder(
 
     defaultCaption = buildDefaultCaption(styleName=styleName, template=captionTemplate)
 
+    # Cache used indices per date to avoid redundant filesystem scans
+    usedIndicesCache = {}
+
     for imagePath, imageDate in imagesWithDates:
         # Format date as YYYYMMDD for filename
         dateStr = imageDate.strftime("%Y%m%d")
         
-        # Find used indices for this specific date
-        usedIndices = findUsedIndices(paths.trainDir, styleName=styleName, dateStr=dateStr)
+        # Get or compute used indices for this date
+        if dateStr not in usedIndicesCache:
+            usedIndicesCache[dateStr] = findUsedIndices(paths.trainDir, styleName=styleName, dateStr=dateStr)
+        usedIndices = usedIndicesCache[dateStr]
         
         index = nextAvailableIndex(usedIndices)
         targetStem = buildTargetStem(styleName, index, dateStr)

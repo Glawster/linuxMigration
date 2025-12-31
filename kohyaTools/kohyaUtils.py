@@ -721,7 +721,7 @@ def getImageDate(imagePath: Path, updateExif: bool = False, prefix: str = "...")
         return now
 
 
-def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str = "...") -> List[tuple[Path, datetime.datetime]]:
+def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str = "...") -> List[Tuple[Path, datetime.datetime]]:
     """
     Sort images by their best available date.
     
