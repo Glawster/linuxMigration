@@ -12,8 +12,10 @@ Prepare/restore Kohya training folders using the logical structure:
 
 Key behaviours:
 - Move TOP-LEVEL images from style root into style/train
-- As files are moved into train, rename to: "{style} #nn.ext"
-- Captions follow the new filename: "{style} #nn.txt"
+- As files are moved into train, rename to: "yyyymmdd-style-nn.ext"
+  where yyyymmdd is the image date, nn is a sequence number
+- Multiple files for the same date are handled with incrementing sequence numbers
+- Captions follow the new filename: "yyyymmdd-style-nn.txt"
 - If no caption exists, create one using captionTemplate
 - Undo moves files from style/train back to style root but keeps renamed names
 
@@ -203,27 +205,33 @@ def formatIndex(index: int) -> str:
     return str(index)
 
 
-def buildTargetStem(styleName: str, index: int) -> str:
+def buildTargetStem(styleName: str, index: int, dateStr: str = "") -> str:
     """
-    Build a target filename stem in the format 'styleName #nn'.
+    Build a target filename stem in the format 'yyyymmdd-styleName-nn'.
     
     Args:
         styleName: Style/person name
         index: Index number
+        dateStr: Date string in YYYYMMDD format (e.g., "20040117")
         
     Returns:
         Formatted filename stem
     """
-    return f"{styleName} #{formatIndex(index)}"
+    if dateStr:
+        return f"{dateStr}-{styleName}-{formatIndex(index)}"
+    else:
+        # Fallback if no date available
+        return f"00000000-{styleName}-{formatIndex(index)}"
 
 
-def findUsedIndices(trainDir: Path, styleName: str) -> Set[int]:
+def findUsedIndices(trainDir: Path, styleName: str, dateStr: str = "") -> Set[int]:
     """
-    Find all index numbers already used in trainDir for the given style.
+    Find all index numbers already used in trainDir for the given style and date.
     
     Args:
         trainDir: Training directory to scan
         styleName: Style name to match in filenames
+        dateStr: Date string in YYYYMMDD format (optional)
         
     Returns:
         Set of index numbers already in use
@@ -232,12 +240,26 @@ def findUsedIndices(trainDir: Path, styleName: str) -> Set[int]:
     if not trainDir.exists():
         return used
 
-    pattern = re.compile(rf"^{re.escape(styleName)}\s+#(\d+)$", re.IGNORECASE)
+    # New format: yyyymmdd-styleName-nn
+    # Also support old format for backward compatibility: styleName #nn
+    if dateStr:
+        pattern = re.compile(rf"^{re.escape(dateStr)}-{re.escape(styleName)}-(\d+)$", re.IGNORECASE)
+    else:
+        # Match any date with this style name
+        pattern = re.compile(rf"^\d{{8}}-{re.escape(styleName)}-(\d+)$", re.IGNORECASE)
+    
+    # Also check old format for backward compatibility
+    old_pattern = re.compile(rf"^{re.escape(styleName)}\s+#(\d+)$", re.IGNORECASE)
 
     for entry in trainDir.iterdir():
         if not entry.is_file():
             continue
+        # Try new format first
         match = pattern.match(entry.stem)
+        if not match:
+            # Try old format
+            match = old_pattern.match(entry.stem)
+        
         if match:
             try:
                 used.add(int(match.group(1)))
@@ -305,6 +327,8 @@ def processStyleFolder(
         includeOriginalsDir: Whether to create originals directory
         prefix: Logging prefix string
     """
+    from kohyaUtils import getImageDate
+    
     styleName = styleDir.name
     paths = resolveKohyaPaths(styleName=styleName, baseDataDir=styleDir.parent)
 
@@ -319,11 +343,17 @@ def processStyleFolder(
     images = sortImagesByDate(images, updateExif=(not dryRun), prefix=prefix)
 
     defaultCaption = buildDefaultCaption(styleName=styleName, template=captionTemplate)
-    usedIndices = findUsedIndices(paths.trainDir, styleName=styleName)
 
     for imagePath in images:
+        # Get the date for this image to use in filename
+        imageDate = getImageDate(imagePath, updateExif=(not dryRun), prefix=prefix)
+        dateStr = imageDate.strftime("%Y%m%d")  # Format as YYYYMMDD
+        
+        # Find used indices for this specific date
+        usedIndices = findUsedIndices(paths.trainDir, styleName=styleName, dateStr=dateStr)
+        
         index = nextAvailableIndex(usedIndices)
-        targetStem = buildTargetStem(styleName, index)
+        targetStem = buildTargetStem(styleName, index, dateStr)
         destImagePath = (paths.trainDir / targetStem).with_suffix(imagePath.suffix.lower())
 
         if destImagePath.exists():
