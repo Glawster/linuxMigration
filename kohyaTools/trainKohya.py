@@ -4,7 +4,7 @@ trainKohya.py
 
 CPU-only LoRA training launcher for kohya_ss using the standard layout:
 
-  baseDataDir/
+  trainingRoot/
     styleName/
       train/
       output/
@@ -17,7 +17,7 @@ Config:
 
 Logging:
 - prefix is "..." normally
-- prefix is "...[] " when --dry-run is set
+- prefix is "...[]" when --dry-run is set
 
 Usage:
   python trainKohya.py kathy
@@ -46,7 +46,7 @@ def parseArgs() -> argparse.Namespace:
     """
     cfg = loadConfig()
 
-    defaultBaseDataDir = Path(getCfgValue(cfg, "baseDataDir", "/mnt/myVideo/Adult/tumblrForMovie"))
+    defaultTrainingRoot = Path(getCfgValue(cfg, "trainingRoot", "/mnt/myVideo/Adult/tumblrForMovie"))
     defaultBaseModelPath = Path(getCfgValue(cfg, "baseModelPath", "/mnt/models/v1-5-pruned-emaonly.safetensors"))
     defaultKohyaDir = Path(getCfgValue(cfg, "kohyaDir", str(Path.home() / "Source/kohya_ss")))
     defaultCondaEnvName = getCfgValue(cfg, "condaEnvName", "kohya")
@@ -69,10 +69,10 @@ def parseArgs() -> argparse.Namespace:
     parser.add_argument("styleName", help="style / person name (e.g. kathy)")
 
     parser.add_argument(
-        "--baseDataDir",
+        "--trainingRoot",
         type=Path,
-        default=defaultBaseDataDir,
-        help=f"base dataset directory (default: {defaultBaseDataDir})",
+        default=defaultTrainingRoot,
+        help=f"base dataset directory (default: {defaultTrainingRoot})",
     )
 
     parser.add_argument(
@@ -219,7 +219,7 @@ def updateConfigFromArgs(args: argparse.Namespace) -> bool:
     cfg = loadConfig()
 
     updates = {
-        "baseDataDir": str(args.baseDataDir),
+        "trainingRoot": str(args.trainingRoot),
         "baseModelPath": str(args.baseModelPath),
         "kohyaDir": str(args.kohyaDir),
         "condaEnvName": args.condaEnvName,
@@ -252,16 +252,16 @@ def runTraining() -> None:
     args = parseArgs()
     prefix = "...[]" if args.dryRun else "..."
 
-    baseDataDir = args.baseDataDir.expanduser().resolve()
+    trainingRoot = args.trainingRoot.expanduser().resolve()
     baseModelPath = args.baseModelPath.expanduser().resolve()
     kohyaDir = args.kohyaDir.expanduser().resolve()
 
-    kohyaPaths = resolveKohyaPaths(styleName=args.styleName, baseDataDir=baseDataDir)
+    kohyaPaths = resolveKohyaPaths(styleName=args.styleName, trainingRoot=trainingRoot)
     ensureDirs(kohyaPaths)
 
     print(f"{prefix} starting cpu-only lora training")
     print(f"{prefix} style: {args.styleName}")
-    print(f"{prefix} base data dir: {baseDataDir}")
+    print(f"{prefix} training root: {trainingRoot}")
     print(f"{prefix} train dir: {kohyaPaths.trainDir}")
     print(f"{prefix} output dir: {kohyaPaths.outputDir}")
 
