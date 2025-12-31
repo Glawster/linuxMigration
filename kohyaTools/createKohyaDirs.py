@@ -52,6 +52,11 @@ from kohyaUtils import (
 from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateCfgFromArgs
 
 
+# Constants for date formatting
+FALLBACK_DATE_STRING = "00000000"  # Used when no date is available
+DATE_FORMAT_LENGTH = 8  # YYYYMMDD format
+
+
 def parseArgs() -> argparse.Namespace:
     """
     Parse command-line arguments with defaults loaded from config.
@@ -223,7 +228,7 @@ def buildTargetStem(styleName: str, index: int, dateStr: str = "") -> str:
         return f"{dateStr}-{styleName}-{formatIndex(index)}"
     else:
         # Fallback if no date available
-        return f"00000000-{styleName}-{formatIndex(index)}"
+        return f"{FALLBACK_DATE_STRING}-{styleName}-{formatIndex(index)}"
 
 
 def findUsedIndices(trainDir: Path, styleName: str, dateStr: str = "") -> Set[int]:
@@ -248,7 +253,7 @@ def findUsedIndices(trainDir: Path, styleName: str, dateStr: str = "") -> Set[in
         pattern = re.compile(rf"^{re.escape(dateStr)}-{re.escape(styleName)}-(\d+)$", re.IGNORECASE)
     else:
         # Match any date with this style name
-        pattern = re.compile(rf"^\d{{8}}-{re.escape(styleName)}-(\d+)$", re.IGNORECASE)
+        pattern = re.compile(rf"^\d{{{DATE_FORMAT_LENGTH}}}-{re.escape(styleName)}-(\d+)$", re.IGNORECASE)
     
     # Also check old format for backward compatibility
     old_pattern = re.compile(rf"^{re.escape(styleName)}\s+#(\d+)$", re.IGNORECASE)
