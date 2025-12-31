@@ -32,10 +32,11 @@ Logging:
 from __future__ import annotations
 
 import argparse
+import datetime
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Tuple
 
 from kohyaUtils import (
     buildDefaultCaption,
