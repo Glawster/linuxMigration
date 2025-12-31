@@ -721,7 +721,7 @@ def getImageDate(imagePath: Path, updateExif: bool = False, prefix: str = "...")
         return now
 
 
-def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str = "...") -> List[Path]:
+def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str = "...") -> List[tuple[Path, datetime.datetime]]:
     """
     Sort images by their best available date.
     
@@ -734,7 +734,7 @@ def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str =
         prefix: Logging prefix for debug messages
         
     Returns:
-        New list of image paths sorted by date (oldest first)
+        New list of tuples (image_path, date) sorted by date (oldest first)
         
     Note:
         For better performance with large collections, this function
@@ -757,4 +757,4 @@ def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str =
             imageWithDates.append((img, now))
     
     imageWithDates.sort(key=lambda x: x[1])
-    return [img for img, _ in imageWithDates]
+    return imageWithDates

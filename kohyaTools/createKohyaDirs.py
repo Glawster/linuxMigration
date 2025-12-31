@@ -41,6 +41,7 @@ from kohyaUtils import (
     buildDefaultCaption,
     ensureDirs,
     getCaptionPath,
+    getImageDate,
     isImageFile,
     resolveKohyaPaths,
     sortImagesByDate,
@@ -327,8 +328,6 @@ def processStyleFolder(
         includeOriginalsDir: Whether to create originals directory
         prefix: Logging prefix string
     """
-    from kohyaUtils import getImageDate
-    
     styleName = styleDir.name
     paths = resolveKohyaPaths(styleName=styleName, baseDataDir=styleDir.parent)
 
@@ -340,14 +339,14 @@ def processStyleFolder(
 
     # Sort images by date (EXIF, filename pattern, or modification time)
     # Always update EXIF data from filename dates when possible
-    images = sortImagesByDate(images, updateExif=(not dryRun), prefix=prefix)
+    # Returns list of (imagePath, date) tuples sorted by date
+    imagesWithDates = sortImagesByDate(images, updateExif=(not dryRun), prefix=prefix)
 
     defaultCaption = buildDefaultCaption(styleName=styleName, template=captionTemplate)
 
-    for imagePath in images:
-        # Get the date for this image to use in filename
-        imageDate = getImageDate(imagePath, updateExif=(not dryRun), prefix=prefix)
-        dateStr = imageDate.strftime("%Y%m%d")  # Format as YYYYMMDD
+    for imagePath, imageDate in imagesWithDates:
+        # Format date as YYYYMMDD for filename
+        dateStr = imageDate.strftime("%Y%m%d")
         
         # Find used indices for this specific date
         usedIndices = findUsedIndices(paths.trainDir, styleName=styleName, dateStr=dateStr)
