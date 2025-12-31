@@ -26,18 +26,32 @@ def loadConfig() -> Dict[str, Any]:
         ValueError: If config file exists but is not valid JSON or not a dict
         IOError: If config file cannot be read or written
     """
-    DEFAULT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        DEFAULT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    except (OSError, PermissionError) as e:
+        raise IOError(f"Cannot create config directory: {e}") from e
 
     if not DEFAULT_CONFIG_PATH.exists():
         data: Dict[str, Any] = {}
-        DEFAULT_CONFIG_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        try:
+            DEFAULT_CONFIG_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        except (OSError, PermissionError) as e:
+            raise IOError(f"Cannot write config file: {e}") from e
         return data
 
-    text = DEFAULT_CONFIG_PATH.read_text(encoding="utf-8").strip()
+    try:
+        text = DEFAULT_CONFIG_PATH.read_text(encoding="utf-8").strip()
+    except (OSError, PermissionError) as e:
+        raise IOError(f"Cannot read config file: {e}") from e
+    
     if not text:
         return {}
 
-    data = json.loads(text)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON in config file: {e}") from e
+    
     if not isinstance(data, dict):
         raise ValueError(f"config file is not a json object: {DEFAULT_CONFIG_PATH}")
     return data
@@ -56,8 +70,12 @@ def saveConfig(data: Dict[str, Any]) -> None:
     """
     if not isinstance(data, dict):
         raise TypeError(f"config data must be a dict, got {type(data).__name__}")
-    DEFAULT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    DEFAULT_CONFIG_PATH.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    
+    try:
+        DEFAULT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        DEFAULT_CONFIG_PATH.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    except (OSError, PermissionError) as e:
+        raise IOError(f"Cannot write config file: {e}") from e
 
 
 def getCfgValue(cfg: Dict[str, Any], key: str, defaultValue: Any) -> Any:

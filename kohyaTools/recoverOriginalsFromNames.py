@@ -192,8 +192,31 @@ def copyFile(srcPath: Path, destDir: Path, dryRun: bool, prefix: str) -> None:
     if dryRun:
         return
 
-    destDir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(srcPath, destPath)
+    try:
+        destDir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(srcPath, destPath)
+    except (OSError, IOError, PermissionError) as e:
+        raise OSError(f"Failed to copy {srcPath.name}: {e}") from e
+
+
+def validateAndCopyFile(srcPath: Path, destDir: Path, dryRun: bool, prefix: str) -> None:
+    """
+    Validate source file exists and copy it to destination.
+    
+    Args:
+        srcPath: Source file path
+        destDir: Destination directory
+        dryRun: If True, only print action without executing
+        prefix: Logging prefix string
+        
+    Raises:
+        FileNotFoundError: If source file doesn't exist
+        OSError, IOError: If copy operation fails
+    """
+    if not srcPath.exists():
+        raise FileNotFoundError(f"Source file no longer exists: {srcPath}")
+    
+    copyFile(srcPath, destDir, dryRun, prefix)
 
 
 def main() -> None:
@@ -246,9 +269,9 @@ def main() -> None:
             if args.onAmbiguous == "pick-first":
                 print(f"{prefix} ambiguous: {wantedPath.name}")
                 try:
-                    copyFile(matches[0], destDir, args.dryRun, prefix)
-                except (OSError, IOError) as e:
-                    print(f"ERROR: failed to copy {wantedPath.name}: {e}")
+                    validateAndCopyFile(matches[0], destDir, args.dryRun, prefix)
+                except (OSError, IOError, FileNotFoundError) as e:
+                    print(f"ERROR: {e}")
                     continue
                 continue
 
@@ -259,9 +282,9 @@ def main() -> None:
             sys.exit(1)
 
         try:
-            copyFile(matches[0], destDir, args.dryRun, prefix)
-        except (OSError, IOError) as e:
-            print(f"ERROR: failed to copy {wantedPath.name}: {e}")
+            validateAndCopyFile(matches[0], destDir, args.dryRun, prefix)
+        except (OSError, IOError, FileNotFoundError) as e:
+            print(f"ERROR: {e}")
             continue
 
 

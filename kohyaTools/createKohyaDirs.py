@@ -12,8 +12,10 @@ Prepare/restore Kohya training folders using the logical structure:
 
 Key behaviours:
 - Move TOP-LEVEL images from style root into style/train
-- As files are moved into train, rename to: "{style} #nn.ext"
-- Captions follow the new filename: "{style} #nn.txt"
+- As files are moved into train, rename to: "yyyymmdd-style-nn.ext"
+  where yyyymmdd is the image date, nn is a sequence number
+- Multiple files for the same date are handled with incrementing sequence numbers
+- Captions follow the new filename: "yyyymmdd-style-nn.txt"
 - If no caption exists, create one using captionTemplate
 - Undo moves files from style/train back to style root but keeps renamed names
 
@@ -30,20 +32,29 @@ Logging:
 from __future__ import annotations
 
 import argparse
+import datetime
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Tuple
 
 from kohyaUtils import (
     buildDefaultCaption,
     ensureDirs,
     getCaptionPath,
+    getImageDate,
     isImageFile,
     resolveKohyaPaths,
+    sortImagesByDate,
+    updateExifDate,
     writeCaptionIfMissing,
 )
 from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateCfgFromArgs
+
+
+# Constants for date formatting
+FALLBACK_DATE_STRING = "00000000"  # Used when no date is available
+DATE_FORMAT_LENGTH = 8  # YYYYMMDD format
 
 
 def parseArgs() -> argparse.Namespace:
@@ -201,27 +212,33 @@ def formatIndex(index: int) -> str:
     return str(index)
 
 
-def buildTargetStem(styleName: str, index: int) -> str:
+def buildTargetStem(styleName: str, index: int, dateStr: str = "") -> str:
     """
-    Build a target filename stem in the format 'styleName #nn'.
+    Build a target filename stem in the format 'yyyymmdd-styleName-nn'.
     
     Args:
         styleName: Style/person name
         index: Index number
+        dateStr: Date string in YYYYMMDD format (e.g., "20040117")
         
     Returns:
         Formatted filename stem
     """
-    return f"{styleName} #{formatIndex(index)}"
+    if dateStr:
+        return f"{dateStr}-{styleName}-{formatIndex(index)}"
+    else:
+        # Fallback if no date available
+        return f"{FALLBACK_DATE_STRING}-{styleName}-{formatIndex(index)}"
 
 
-def findUsedIndices(trainDir: Path, styleName: str) -> Set[int]:
+def findUsedIndices(trainDir: Path, styleName: str, dateStr: str = "") -> Set[int]:
     """
-    Find all index numbers already used in trainDir for the given style.
+    Find all index numbers already used in trainDir for the given style and date.
     
     Args:
         trainDir: Training directory to scan
         styleName: Style name to match in filenames
+        dateStr: Date string in YYYYMMDD format (optional)
         
     Returns:
         Set of index numbers already in use
@@ -230,12 +247,26 @@ def findUsedIndices(trainDir: Path, styleName: str) -> Set[int]:
     if not trainDir.exists():
         return used
 
-    pattern = re.compile(rf"^{re.escape(styleName)}\s+#(\d+)$", re.IGNORECASE)
+    # New format: yyyymmdd-styleName-nn
+    # Also support old format for backward compatibility: styleName #nn
+    if dateStr:
+        pattern = re.compile(rf"^{re.escape(dateStr)}-{re.escape(styleName)}-(\d+)$", re.IGNORECASE)
+    else:
+        # Match any date with this style name
+        pattern = re.compile(rf"^\d{{{DATE_FORMAT_LENGTH}}}-{re.escape(styleName)}-(\d+)$", re.IGNORECASE)
+    
+    # Also check old format for backward compatibility
+    old_pattern = re.compile(rf"^{re.escape(styleName)}\s+#(\d+)$", re.IGNORECASE)
 
     for entry in trainDir.iterdir():
         if not entry.is_file():
             continue
+        # Try new format first
         match = pattern.match(entry.stem)
+        if not match:
+            # Try old format
+            match = old_pattern.match(entry.stem)
+        
         if match:
             try:
                 used.add(int(match.group(1)))
@@ -312,12 +343,27 @@ def processStyleFolder(
     if not images:
         return
 
-    defaultCaption = buildDefaultCaption(styleName=styleName, template=captionTemplate)
-    usedIndices = findUsedIndices(paths.trainDir, styleName=styleName)
+    # Sort images by date (EXIF, filename pattern, or modification time)
+    # Always update EXIF data from filename dates when possible
+    # Returns list of (imagePath, date) tuples sorted by date
+    imagesWithDates = sortImagesByDate(images, updateExif=(not dryRun), prefix=prefix)
 
-    for imagePath in images:
+    defaultCaption = buildDefaultCaption(styleName=styleName, template=captionTemplate)
+
+    # Cache used indices per date to avoid redundant filesystem scans
+    usedIndicesCache = {}
+
+    for imagePath, imageDate in imagesWithDates:
+        # Format date as YYYYMMDD for filename
+        dateStr = imageDate.strftime("%Y%m%d")
+        
+        # Get or compute used indices for this date
+        if dateStr not in usedIndicesCache:
+            usedIndicesCache[dateStr] = findUsedIndices(paths.trainDir, styleName=styleName, dateStr=dateStr)
+        usedIndices = usedIndicesCache[dateStr]
+        
         index = nextAvailableIndex(usedIndices)
-        targetStem = buildTargetStem(styleName, index)
+        targetStem = buildTargetStem(styleName, index, dateStr)
         destImagePath = (paths.trainDir / targetStem).with_suffix(imagePath.suffix.lower())
 
         if destImagePath.exists():
@@ -401,6 +447,15 @@ def main() -> None:
     args = parseArgs()
     prefix = "...[]" if args.dryRun else "..."
 
+    # Check if PIL is available for EXIF extraction
+    try:
+        from PIL import Image
+        pil_available = True
+    except ImportError:
+        pil_available = False
+        print(f"{prefix} WARNING: PIL/Pillow not installed - EXIF dates will not be extracted")
+        print(f"{prefix}          Install with: pip install pillow")
+
     baseDataDir = args.baseDataDir.expanduser().resolve()
 
     try:
@@ -420,6 +475,9 @@ def main() -> None:
         return
 
     print(f"{prefix} scanning: {baseDataDir}")
+    if pil_available:
+        print(f"{prefix} EXIF extraction enabled (PIL available)")
+    
     for styleDir in styleFolders:
         processStyleFolder(
             styleDir=styleDir,
