@@ -365,13 +365,32 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> tuple[Optional[date
             # Show all EXIF tags for debugging
             if hasattr(exif, 'keys'):
                 all_tags = list(exif.keys())
-                print(f"{prefix} exif-debug: All EXIF tag IDs: {all_tags}")
+                print(f"{prefix} exif-debug: All EXIF tag IDs in main IFD: {all_tags}")
                 # Also show the tag names if we can look them up
                 tag_names = []
                 for tag_id in all_tags[:20]:  # Limit to first 20 for readability
                     tag_name = ExifTags.TAGS.get(tag_id, f"Unknown-{tag_id}")
                     tag_names.append(f"{tag_id}={tag_name}")
-                print(f"{prefix} exif-debug: EXIF tag names: {tag_names}")
+                print(f"{prefix} exif-debug: EXIF tag names in main IFD: {tag_names}")
+            
+            # Try to get the Exif IFD sub-directory which contains DateTimeOriginal
+            # This is where the issue likely is - DateTimeOriginal is in the Exif IFD, not the main IFD
+            exif_ifd = None
+            try:
+                if hasattr(exif, 'get_ifd'):
+                    from PIL.ExifTags import IFD
+                    exif_ifd = exif.get_ifd(IFD.Exif)
+                    if exif_ifd:
+                        print(f"{prefix} exif-debug: Exif IFD found with {len(exif_ifd)} tags")
+                        exif_ifd_tags = list(exif_ifd.keys())
+                        print(f"{prefix} exif-debug: Exif IFD tag IDs: {exif_ifd_tags}")
+                        exif_ifd_names = []
+                        for tag_id in exif_ifd_tags[:20]:
+                            tag_name = ExifTags.TAGS.get(tag_id, f"Unknown-{tag_id}")
+                            exif_ifd_names.append(f"{tag_id}={tag_name}")
+                        print(f"{prefix} exif-debug: Exif IFD tag names: {exif_ifd_names}")
+            except Exception as e:
+                print(f"{prefix} exif-debug: Could not access Exif IFD: {e}")
             
             # Try multiple date/time tags in order of preference
             # Most relevant first: DateTimeOriginal, DateTimeDigitized, DateTime
@@ -395,6 +414,16 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> tuple[Optional[date
                     
                     print(f"{prefix} exif-debug: Trying {tag_name} (tag {tag_id}): {tag_desc}")
                     
+                    # First, try the Exif IFD if we have it (this is where DateTimeOriginal usually lives)
+                    if exif_ifd and tag_id in [36867, 36868]:  # These tags are in Exif IFD
+                        if tag_id in exif_ifd:
+                            dateStr = exif_ifd[tag_id]
+                            tagUsed = tag_name
+                            print(f"{prefix} exif-debug: Found via Exif IFD tag ID {tag_id} ({tag_name}): {dateStr}")
+                            continue
+                        else:
+                            print(f"{prefix} exif-debug: Tag {tag_id} ({tag_name}) not in Exif IFD")
+                    
                     # Try using ExifTags.Base enum if available (Pillow 9.0+)
                     try:
                         from PIL.ExifTags import Base
@@ -408,14 +437,14 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> tuple[Optional[date
                         print(f"{prefix} exif-debug: Base enum not available: {e}")
                         pass
                     
-                    # If that didn't work, try the numeric tag ID directly
+                    # If that didn't work, try the numeric tag ID directly in main exif
                     if not dateStr:
                         if tag_id in exif:
                             dateStr = exif[tag_id]
                             tagUsed = tag_name
-                            print(f"{prefix} exif-debug: Found via tag ID {tag_id} ({tag_name}): {dateStr}")
+                            print(f"{prefix} exif-debug: Found via main IFD tag ID {tag_id} ({tag_name}): {dateStr}")
                         else:
-                            print(f"{prefix} exif-debug: Tag {tag_id} ({tag_name}) not in EXIF data")
+                            print(f"{prefix} exif-debug: Tag {tag_id} ({tag_name}) not in main IFD")
             else:
                 print(f"{prefix} exif-debug: EXIF doesn't have 'get' method")
             
