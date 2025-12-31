@@ -4,7 +4,7 @@ createKohyaDirs.py
 
 Prepare/restore Kohya training folders using the logical structure:
 
-  baseDataDir/
+  trainingRoot/
     styleName/
       train/
       output/
@@ -66,7 +66,7 @@ def parseArgs() -> argparse.Namespace:
     """
     cfg = loadConfig()
 
-    defaultBaseDataDir = Path(getCfgValue(cfg, "baseDataDir", "/mnt/myVideo/Adult/tumblrForMovie"))
+    defaultTrainingRoot = Path(getCfgValue(cfg, "trainingRoot", "/mnt/myVideo/Adult/tumblrForMovie"))
     defaultCaptionTemplate = getCfgValue(cfg, "captionTemplate", "{token}, photo")
     defaultCaptionExtension = getCfgValue(cfg, "captionExtension", ".txt")
     defaultIncludeOriginalsDir = bool(getCfgValue(cfg, "includeOriginalsDir", False))
@@ -74,10 +74,10 @@ def parseArgs() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create or restore Kohya training folder structure (style/train).")
 
     parser.add_argument(
-        "--baseDataDir",
+        "--trainingRoot",
         type=Path,
-        default=defaultBaseDataDir,
-        help=f"root folder containing style folders (default: {defaultBaseDataDir})",
+        default=defaultTrainingRoot,
+        help=f"root folder containing style folders (default: {defaultTrainingRoot})",
     )
 
     parser.add_argument(
@@ -137,7 +137,7 @@ def updateConfigFromArgs(args: argparse.Namespace) -> bool:
     cfg = loadConfig()
 
     updates = {
-        "baseDataDir": str(args.baseDataDir),
+        "trainingRoot": str(args.trainingRoot),
         "captionTemplate": args.captionTemplate,
         "captionExtension": args.captionExtension,
         "includeOriginalsDir": bool(args.includeOriginalsDir),
@@ -150,30 +150,30 @@ def updateConfigFromArgs(args: argparse.Namespace) -> bool:
     return changed
 
 
-def getStyleFolders(baseDataDir: Path, styleNameFilter: Optional[str]) -> List[Path]:
+def getStyleFolders(trainingRoot: Path, styleNameFilter: Optional[str]) -> List[Path]:
     """
     Get list of style folders to process.
     
     Args:
-        baseDataDir: Base directory containing style folders
+        trainingRoot: Base directory containing style folders
         styleNameFilter: Optional specific style name to process
         
     Returns:
         List of style folder paths
         
     Raises:
-        FileNotFoundError: If baseDataDir or specific style folder doesn't exist
+        FileNotFoundError: If trainingRoot or specific style folder doesn't exist
     """
-    if not baseDataDir.is_dir():
-        raise FileNotFoundError(f"baseDataDir does not exist or is not a directory: {baseDataDir}")
+    if not trainingRoot.is_dir():
+        raise FileNotFoundError(f"trainingRoot does not exist or is not a directory: {trainingRoot}")
 
     if styleNameFilter:
-        styleDir = baseDataDir / styleNameFilter
+        styleDir = trainingRoot / styleNameFilter
         if not styleDir.is_dir():
             raise FileNotFoundError(f"style folder not found: {styleDir}")
         return [styleDir]
 
-    return sorted([p for p in baseDataDir.iterdir() if p.is_dir()])
+    return sorted([p for p in trainingRoot.iterdir() if p.is_dir()])
 
 
 def listTopLevelImages(styleDir: Path) -> List[Path]:
@@ -335,7 +335,7 @@ def processStyleFolder(
         prefix: Logging prefix string
     """
     styleName = styleDir.name
-    paths = resolveKohyaPaths(styleName=styleName, baseDataDir=styleDir.parent)
+    paths = resolveKohyaPaths(styleName=styleName, trainingRoot=styleDir.parent)
 
     ensureDirs(paths, includeOriginals=includeOriginalsDir)
 
@@ -409,7 +409,7 @@ def undoStyleFolder(styleDir: Path, dryRun: bool, prefix: str) -> None:
         prefix: Logging prefix string
     """
     styleName = styleDir.name
-    paths = resolveKohyaPaths(styleName=styleName, baseDataDir=styleDir.parent)
+    paths = resolveKohyaPaths(styleName=styleName, trainingRoot=styleDir.parent)
 
     if not paths.trainDir.exists():
         return
@@ -456,10 +456,10 @@ def main() -> None:
         print(f"{prefix} WARNING: PIL/Pillow not installed - EXIF dates will not be extracted")
         print(f"{prefix}          Install with: pip install pillow")
 
-    baseDataDir = args.baseDataDir.expanduser().resolve()
+    trainingRoot = args.trainingRoot.expanduser().resolve()
 
     try:
-        styleFolders = getStyleFolders(baseDataDir, args.style)
+        styleFolders = getStyleFolders(trainingRoot, args.style)
     except Exception as e:
         print(f"ERROR: {e}")
         sys.exit(1)
@@ -469,12 +469,12 @@ def main() -> None:
         print(f"{prefix} updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
 
     if args.undo:
-        print(f"{prefix} undoing train structure in: {baseDataDir}")
+        print(f"{prefix} undoing train structure in: {trainingRoot}")
         for styleDir in styleFolders:
             undoStyleFolder(styleDir=styleDir, dryRun=args.dryRun, prefix=prefix)
         return
 
-    print(f"{prefix} scanning: {baseDataDir}")
+    print(f"{prefix} scanning: {trainingRoot}")
     if pil_available:
         print(f"{prefix} EXIF extraction enabled (PIL available)")
     

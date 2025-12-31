@@ -5,7 +5,7 @@ kohyaUtils.py
 Shared helpers for kohya dataset preparation + training.
 
 Folder layout standard:
-  baseDataDir/
+  trainingRoot/
     styleName/
       train/
       output/
@@ -30,20 +30,20 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".cr2", ".nef"}
 @dataclass(frozen=True)
 class KohyaPaths:
     styleName: str
-    baseDataDir: Path
+    trainingRoot: Path
     styleDir: Path
     trainDir: Path
     outputDir: Path
     originalsDir: Path
 
 
-def resolveKohyaPaths(styleName: str, baseDataDir: Path) -> KohyaPaths:
+def resolveKohyaPaths(styleName: str, trainingRoot: Path) -> KohyaPaths:
     """
     Resolve all standard kohya paths for a given style.
     
     Args:
         styleName: Name of the style/person
-        baseDataDir: Base directory containing style folders
+        trainingRoot: Base directory containing style folders
         
     Returns:
         KohyaPaths object with all resolved paths
@@ -54,13 +54,13 @@ def resolveKohyaPaths(styleName: str, baseDataDir: Path) -> KohyaPaths:
     if not styleName or not str(styleName).strip():
         raise ValueError("styleName cannot be empty")
     
-    styleDir = baseDataDir / styleName
+    styleDir = trainingRoot / styleName
     trainDir = styleDir / "train"
     outputDir = styleDir / "output"
     originalsDir = styleDir / "originals"
     return KohyaPaths(
         styleName=styleName,
-        baseDataDir=baseDataDir,
+        trainingRoot=trainingRoot,
         styleDir=styleDir,
         trainDir=trainDir,
         outputDir=outputDir,
