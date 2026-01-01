@@ -22,7 +22,7 @@ Config:
 
 Logging:
 - prefix is "..." normally
-- prefix is "...[] " when --dry-run is set
+- prefix is "...[]" when --dry-run is set
 """
 
 from __future__ import annotations
@@ -247,7 +247,7 @@ def updateConfigFromArgs(args: argparse.Namespace) -> bool:
 
 def runTraining() -> None:
     args = parseArgs()
-    prefix = "...[] " if args.dry_run else "..."
+    prefix = "...[]" if args.dry_run else "..."
 
     trainingRoot = args.trainingRoot.expanduser().resolve()
     styleDir = trainingRoot / args.styleName
@@ -256,12 +256,11 @@ def runTraining() -> None:
     baseModelPath = args.baseModelPath.expanduser().resolve()
     kohyaDir = args.kohyaDir.expanduser().resolve()
 
-    print(f"{prefix}starting cpu-only lora training")
-    print(f"{prefix}style: {args.styleName}")
-    print(f"{prefix}training root: {trainingRoot}")
-    print(f"{prefix}train dir: {trainDir}")
-    print(f"{prefix}output dir: {styleDir / 'output'}")
-
+    print(f"{prefix} starting cpu-only lora training")
+    print(f"{prefix} style: {args.styleName}")
+    print(f"{prefix} training root: {trainingRoot}")
+    print(f"{prefix} train dir: {trainDir}")
+    print(f"{prefix} output dir: {styleDir / 'output'}")
     if not trainDir.exists():
         sys.exit(f"ERROR: train dir not found: {trainDir}")
 
@@ -276,11 +275,11 @@ def runTraining() -> None:
         sys.exit(f"ERROR: kohya repo dir not found: {kohyaDir}")
 
     trainScriptPath = resolveTrainScriptPath(kohyaDir)
-    print(f"{prefix}train script: {trainScriptPath}")
+    print(f"{prefix} train script: {trainScriptPath}")
 
     configChanged = updateConfigFromArgs(args)
     if configChanged and not args.dry_run:
-        print(f"{prefix}updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
+        print(f"{prefix} updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
 
     command = buildTrainingCommand(
         args=args,
@@ -288,18 +287,18 @@ def runTraining() -> None:
         trainScriptPath=trainScriptPath,
     )
 
-    print(f"{prefix}training command: {command[2]}")
+    print(f"{prefix} training command: {command[2]}")
 
     if args.dry_run:
-        print(f"{prefix}training skipped (--dry-run)")
+        print(f"{prefix} training skipped (--dry-run)")
         return
 
-    print(f"{prefix}launching training")
+    print(f"{prefix} launching training")
     try:
         subprocess.run(command, check=True)
     except subprocess.CalledProcessError:
         sys.exit("ERROR: training failed (see output above)")
-    print(f"{prefix}training complete")
+    print(f"{prefix} training complete")
 
 
 if __name__ == "__main__":
