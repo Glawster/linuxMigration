@@ -124,7 +124,7 @@ def captionExists(imagePath: Path, captionExtension: str = ".txt") -> bool:
     return getCaptionPath(imagePath, captionExtension).exists()
 
 
-def buildDefaultCaption(styleName: str, template: str = "{token}, photo") -> str:
+def buildDefaultCaption(styleName: str, template: str = "{token}, portrait, headshot, close-up, looking at camera") -> str:
     """
     Build a default caption from a template.
     
@@ -615,6 +615,176 @@ def parseFilenameDate(filename: str) -> Optional[datetime.datetime]:
     return None
 
 
+
+# --- EXIF subdir helpers ----------------------------------------------------
+
+def parseExifDateString(dateStr: str) -> Optional[datetime.datetime]:
+    """Parse common EXIF-ish datetime strings into a datetime.
+
+    Supported examples:
+      - 2003:05:02 13:44:55
+      - 2003-05-02 13:44:55
+      - 2003-05-02T13:44:55
+      - 2003:05:02
+      - 2003-05-02
+    """
+    s = str(dateStr).strip()
+    if not s:
+        return None
+
+    if re.match(r"^\d{4}:\d{2}:\d{2} \d{2}:\d{2}:\d{2}$", s):
+        try:
+            return datetime.datetime.strptime(s, "%Y:%m:%d %H:%M:%S")
+        except ValueError:
+            return None
+
+    if re.match(r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$", s):
+        try:
+            return datetime.datetime.strptime(s.replace("T", " "), "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
+
+    if re.match(r"^\d{4}[:\-]\d{2}[:\-]\d{2}$", s):
+        try:
+            return datetime.datetime.strptime(s.replace(":", "-"), "%Y-%m-%d")
+        except ValueError:
+            return None
+
+    return None
+
+
+def extractDateFromSidecarText(text: str) -> Optional[datetime.datetime]:
+    """Best-effort parse of date fields from exiftool/json/xmp text."""
+    if not text:
+        return None
+
+    keyPatterns = [
+        "DateTimeOriginal",
+        "SubSecDateTimeOriginal",
+        "CreateDate",
+        "MediaCreateDate",
+        "TrackCreateDate",
+        "ModifyDate",
+        "FileModifyDate",
+        "DateCreated",
+        "CreationDate",
+    ]
+
+    for key in keyPatterns:
+        # JSON-ish: "DateTimeOriginal": "2003:05:02 13:44:55"
+        m = re.search(rf"{key}\s*\"?\s*[:=]\s*\"([^\"]+)\"", text, re.IGNORECASE)
+        if m:
+            dt = parseExifDateString(m.group(1))
+            if dt:
+                return dt
+
+        # exiftool text-ish: Date/Time Original : 2003:05:02 13:44:55
+        m = re.search(rf"{key}[^\r\n]*?[:=]\s*([^\r\n]+)", text, re.IGNORECASE)
+        if m:
+            candidate = m.group(1).strip()
+            # strip timezone suffixes like +01:00 / -0500
+            candidate = re.sub(r"\s*[+-]\d{2}:?\d{2}$", "", candidate).strip()
+            dt = parseExifDateString(candidate)
+            if dt:
+                return dt
+
+    # Fallback: any EXIF-like datetime string anywhere
+    m = re.search(r"(\d{4}:\d{2}:\d{2} \d{2}:\d{2}:\d{2})", text)
+    if m:
+        dt = parseExifDateString(m.group(1))
+        if dt:
+            return dt
+
+    m = re.search(r"(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})", text)
+    if m:
+        dt = parseExifDateString(m.group(1))
+        if dt:
+            return dt
+
+    return None
+
+
+def iterExifRoots(imagePath: Path) -> List[Path]:
+    """Return plausible 'exif subdir' roots to search for sidecar metadata."""
+    roots: List[Path] = []
+    candidates = ["exif", "Exif", "EXIF", "metadata", "Metadata", ".exif", "_exif"]
+
+    for base in (imagePath.parent, imagePath.parent.parent):
+        if not base:
+            continue
+        for name in candidates:
+            p = base / name
+            if p.is_dir():
+                roots.append(p)
+
+    # de-dup preserving order
+    seen = set()
+    unique: List[Path] = []
+    for r in roots:
+        try:
+            key = str(r.resolve())
+        except Exception:
+            key = str(r)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(r)
+    return unique
+
+
+def extractExifDateFromSubdirs(imagePath: Path, prefix: str = "...") -> Optional[datetime.datetime]:
+    """Look in exif/metadata subdirectories for sidecar metadata matching this image."""
+    roots = iterExifRoots(imagePath)
+    if not roots:
+        return None
+
+    sidecarExts = {".json", ".txt", ".xmp", ".xml", ".yaml", ".yml"}
+
+    directNames = []
+    for ext in sidecarExts:
+        directNames.append(f"{imagePath.name}{ext}")
+        directNames.append(f"{imagePath.stem}{ext}")
+
+    for root in roots:
+        # exact matches
+        for name in directNames:
+            p = root / name
+            if not p.is_file():
+                continue
+            try:
+                dt = extractDateFromSidecarText(p.read_text(encoding="utf-8", errors="ignore"))
+                if dt:
+                    print(f"{prefix} date: {imagePath.name} -> {dt.strftime('%Y-%m-%d')} [exif subdir: {p.relative_to(root)}]")
+                    return dt
+            except Exception:
+                continue
+
+        stemLower = imagePath.stem.lower()
+        fullLower = imagePath.name.lower()
+
+        try:
+            for p in root.rglob("*"):
+                if not p.is_file():
+                    continue
+                if p.suffix.lower() not in sidecarExts:
+                    continue
+                nameLower = p.name.lower()
+                if stemLower not in nameLower and fullLower not in nameLower:
+                    continue
+                try:
+                    dt = extractDateFromSidecarText(p.read_text(encoding="utf-8", errors="ignore"))
+                    if dt:
+                        print(f"{prefix} date: {imagePath.name} -> {dt.strftime('%Y-%m-%d')} [exif subdir: {p.relative_to(root)}]")
+                        return dt
+                except Exception:
+                    continue
+        except Exception:
+            continue
+
+    return None
+
+
+
 def getImageDate(imagePath: Path, updateExif: bool = False, prefix: str = "...") -> datetime.datetime:
     """
     Get the best available date for an image file.
@@ -649,6 +819,15 @@ def getImageDate(imagePath: Path, updateExif: bool = False, prefix: str = "...")
     except (OSError, ValueError, ImportError):
         pass
     
+
+    # Try EXIF sidecars in exif/metadata subdirectories (recover original dates)
+    try:
+        sidecarDate = extractExifDateFromSubdirs(imagePath, prefix=prefix)
+        if sidecarDate:
+            return sidecarDate
+    except Exception:
+        pass
+
     # Try filename parsing
     try:
         filenameDate = parseFilenameDate(imagePath.name)
@@ -677,40 +856,33 @@ def getImageDate(imagePath: Path, updateExif: bool = False, prefix: str = "...")
         return now
 
 
-def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str = "...") -> List[Path]:
+
+def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str = "...") -> List[Tuple[Path, datetime.datetime]]:
     """
     Sort images by their best available date.
-    
-    Uses getImageDate() to determine the date for each image,
-    which tries EXIF, filename parsing, then modification time.
-    
+
+    Uses getImageDate() to determine the date for each image, which tries:
+      1) EXIF DateTimeOriginal (in-file)
+      2) EXIF/metadata sidecars under exif/ subdirectories (if present)
+      3) Date parsed from filename
+      4) File modification time
+
     Args:
         images: List of image paths to sort
         updateExif: If True, write filename dates to EXIF when no EXIF date exists
         prefix: Logging prefix for debug messages
-        
+
     Returns:
-        New list of image paths sorted by date (oldest first)
-        
-    Note:
-        For better performance with large collections, this function
-        processes all images sequentially. EXIF reading is only attempted
-        once per image and results are not cached between calls.
-        
-        When updateExif=True, EXIF data will be updated for images that have
-        dates in their filenames but no EXIF DateTimeOriginal field. This
-        requires the piexif library and only works with JPEG files.
+        List of (imagePath, date) tuples sorted by date (oldest first)
     """
-    imageWithDates = []
+    imageWithDates: List[Tuple[Path, datetime.datetime]] = []
     for img in images:
         try:
             date = getImageDate(img, updateExif=updateExif, prefix=prefix)
-            imageWithDates.append((img, date))
-        except (OSError, ValueError, ImportError):
-            # If any error occurs, use current time as fallback
-            now = datetime.datetime.now()
-            print(f"{prefix} date: {img.name} -> {now.strftime('%Y-%m-%d')} [error fallback]")
-            imageWithDates.append((img, now))
-    
+        except Exception:
+            date = datetime.datetime.now()
+            print(f"{prefix} date: {img.name} -> {date.strftime('%Y-%m-%d')} [error fallback]")
+        imageWithDates.append((img, date))
+
     imageWithDates.sort(key=lambda x: x[1])
-    return [img for img, _ in imageWithDates]
+    return imageWithDates
