@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 """
-trainKohya.py
+createKohyaDirs.py
 
-CPU-only LoRA training launcher for kohya_ss using DreamBooth-style folders.
-
-Final layout:
+Prepare/restore Kohya training folders using the logical structure:
 
   trainingRoot/
     styleName/
-      10_styleName/      <-- trainDir (instance images)
+      10_styleName/
       output/
+      originals/   (optional)
 
-Notes:
-- trainDir is ALWAYS styleDir / f"10_{styleName}"
-- kohya expects --train_data_dir to be the PARENT (styleDir)
+Key behaviours:
+- Move TOP-LEVEL images from style root into style/10_styleName
+- As files are moved into 10_styleName, rename to: "yyyymmdd-style-nn.ext"
+  where yyyymmdd is the image date, nn is a sequence number
+- Multiple files for the same date are handled with incrementing sequence numbers
+- Captions follow the new filename: "yyyymmdd-style-nn.txt"
+- If no caption exists, create one using captionTemplate
+- Undo moves files from style/10_styleName back to style root but keeps renamed names
 
 Config:
 - automatically reads/writes ~/.config/kohya/kohyaConfig.json
@@ -22,106 +26,85 @@ Config:
 
 Logging:
 - prefix is "..." normally
-- prefix is "...[] " when --dry-run is set
+- prefix is "...[]" when --dry-run is set
 """
 
 from __future__ import annotations
 
 import argparse
-import subprocess
+import datetime
+import re
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Set, Tuple
 
+from kohyaUtils import (
+    buildDefaultCaption,
+    ensureDirs,
+    getCaptionPath,
+    getImageDate,
+    isImageFile,
+    resolveKohyaPaths,
+    sortImagesByDate,
+    updateExifDate,
+    writeCaptionIfMissing,
+)
 from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateCfgFromArgs
 
 
-def resolveTrainScriptPath(kohyaDir: Path) -> Path:
-    candidates = [
-        kohyaDir / "train_network.py",
-        kohyaDir / "sd-scripts" / "train_network.py",
-        kohyaDir / "scripts" / "train_network.py",
-    ]
-
-    for path in candidates:
-        if path.exists():
-            return path
-
-    raise FileNotFoundError(f"train_network.py not found under: {kohyaDir}")
+# Constants for date formatting
+FALLBACK_DATE_STRING = "00000000"  # Used when no date is available
+DATE_FORMAT_LENGTH = 8  # YYYYMMDD format
 
 
 def parseArgs() -> argparse.Namespace:
+    """
+    Parse command-line arguments with defaults loaded from config.
+    
+    Returns:
+        Parsed command-line arguments
+    """
     cfg = loadConfig()
 
-    defaultTrainingRoot = Path(
-        getCfgValue(
-            cfg,
-            "trainingRoot",
-            getCfgValue(cfg, "baseDataDir", "/mnt/myVideo/Adult/tumblrForMovie"),
-        )
-    )
-
-    defaultBaseModelPath = Path(getCfgValue(cfg, "baseModelPath", "/mnt/models/v1-5-pruned-emaonly.safetensors"))
-    defaultKohyaDir = Path(getCfgValue(cfg, "kohyaDir", str(Path.home() / "Source/kohya_ss")))
-    defaultCondaEnvName = getCfgValue(cfg, "condaEnvName", "kohya")
-
-    defaultEpochs = int(getCfgValue(cfg, "epochs", 10))
-    defaultCpuThreads = int(getCfgValue(cfg, "cpuThreads", 8))
-    defaultMinImages = int(getCfgValue(cfg, "minImages", 12))
-
+    defaultTrainingRoot = Path(getCfgValue(cfg, "trainingRoot", "/mnt/myVideo/Adult/tumblrForMovie"))
+    defaultCaptionTemplate = getCfgValue(cfg, "captionTemplate", "{token}, photo")
     defaultCaptionExtension = getCfgValue(cfg, "captionExtension", ".txt")
-    defaultResolution = getCfgValue(cfg, "resolution", "512,512")
-    defaultRank = int(getCfgValue(cfg, "rank", 8))
-    defaultAlpha = int(getCfgValue(cfg, "alpha", 8))
-    defaultLearningRate = float(getCfgValue(cfg, "learningRate", 1e-4))
-    defaultTextEncoderLr = float(getCfgValue(cfg, "textEncoderLr", 5e-5))
-    defaultUnetLr = float(getCfgValue(cfg, "unetLr", 1e-4))
+    defaultIncludeOriginalsDir = bool(getCfgValue(cfg, "includeOriginalsDir", False))
 
-    parser = argparse.ArgumentParser(description="CPU-only LoRA training launcher (kohya_ss, SD1.5).")
-
-    parser.add_argument("styleName", help="style / person name (e.g. kathy)")
+    parser = argparse.ArgumentParser(description="Create or restore Kohya training folder structure (style/train).")
 
     parser.add_argument(
         "--trainingRoot",
         type=Path,
         default=defaultTrainingRoot,
-        help=f"root folder containing style training folders (default: {defaultTrainingRoot})",
+        help=f"root folder containing style folders (default: {defaultTrainingRoot})",
     )
 
     parser.add_argument(
-        "--baseModelPath",
-        type=Path,
-        default=defaultBaseModelPath,
-        help=f"SD1.5 checkpoint path (default: {defaultBaseModelPath})",
-    )
-
-    parser.add_argument(
-        "--kohyaDir",
-        type=Path,
-        default=defaultKohyaDir,
-        help=f"kohya_ss repo directory (default: {defaultKohyaDir})",
-    )
-
-    parser.add_argument(
-        "--condaEnvName",
+        "--style",
         type=str,
-        default=defaultCondaEnvName,
-        help=f"conda env name (default: {defaultCondaEnvName})",
-    )
-
-    parser.add_argument("--epochs", type=int, default=defaultEpochs, help=f"max train epochs (default: {defaultEpochs})")
-    parser.add_argument(
-        "--cpuThreads",
-        type=int,
-        default=defaultCpuThreads,
-        help=f"accelerate cpu threads (default: {defaultCpuThreads})",
+        default=None,
+        help="process only a specific style folder (e.g. 'kathy'). If omitted, processes all style folders.",
     )
 
     parser.add_argument(
-        "--minImages",
-        type=int,
-        default=defaultMinImages,
-        help=f"minimum required images in trainDir (default: {defaultMinImages})",
+        "--undo",
+        action="store_true",
+        help="restore from style/train back to a flat style folder structure (keeps renamed filenames)",
+    )
+
+    parser.add_argument(
+        "--dry-run",
+        dest="dryRun",
+        action="store_true",
+        help="show what would be done without changing anything",
+    )
+
+    parser.add_argument(
+        "--captionTemplate",
+        type=str,
+        default=defaultCaptionTemplate,
+        help=f"caption template used when creating missing captions (default: '{defaultCaptionTemplate}')",
     )
 
     parser.add_argument(
@@ -132,171 +115,379 @@ def parseArgs() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--resolution",
-        type=str,
-        default=defaultResolution,
-        help=f"training resolution (default: {defaultResolution})",
+        "--includeOriginalsDir",
+        action="store_true" if not defaultIncludeOriginalsDir else "store_false",
+        help="toggle creation of style/originals directory (default from config)",
     )
-
-    parser.add_argument("--rank", type=int, default=defaultRank, help=f"LoRA rank/network dim (default: {defaultRank})")
-    parser.add_argument("--alpha", type=int, default=defaultAlpha, help=f"LoRA alpha (default: {defaultAlpha})")
-
-    parser.add_argument(
-        "--learningRate",
-        type=float,
-        default=defaultLearningRate,
-        help=f"learning rate (default: {defaultLearningRate})",
-    )
-
-    parser.add_argument(
-        "--textEncoderLr",
-        type=float,
-        default=defaultTextEncoderLr,
-        help=f"text encoder lr (default: {defaultTextEncoderLr})",
-    )
-
-    parser.add_argument(
-        "--unetLr",
-        type=float,
-        default=defaultUnetLr,
-        help=f"u-net lr (default: {defaultUnetLr})",
-    )
-
-    parser.add_argument(
-        "--dry-run",
-        dest="dry_run",
-        action="store_true",
-        help="show actions without executing",
-    )
+    parser.set_defaults(includeOriginalsDir=defaultIncludeOriginalsDir)
 
     return parser.parse_args()
 
 
-def buildTrainingCommand(
-    args: argparse.Namespace,
-    styleDir: Path,
-    trainScriptPath: Path,
-) -> List[str]:
-    outputDir = styleDir / "output"
-    outputName = f"{args.styleName}_r{args.rank}_{args.resolution.replace(',', 'x')}"
-
-    shellCommand = (
-        f"cd {args.kohyaDir} && "
-        f"source ~/miniconda3/etc/profile.d/conda.sh && "
-        f"conda activate {args.condaEnvName} && "
-        f"accelerate launch --num_cpu_threads_per_process={args.cpuThreads} "
-        f"'{trainScriptPath}' "
-        f"--pretrained_model_name_or_path='{args.baseModelPath}' "
-        f"--train_data_dir='{styleDir}' "
-        f"--output_dir='{outputDir}' "
-        f"--output_name='{outputName}' "
-        f"--caption_extension='{args.captionExtension}' "
-        f"--resolution='{args.resolution}' "
-        f"--enable_bucket "
-        f"--min_bucket_reso=320 "
-        f"--max_bucket_reso=768 "
-        f"--bucket_reso_steps=64 "
-        f"--network_module=networks.lora "
-        f"--network_dim={args.rank} "
-        f"--network_alpha={args.alpha} "
-        f"--train_batch_size=1 "
-        f"--gradient_accumulation_steps=1 "
-        f"--max_train_epochs={args.epochs} "
-        f"--learning_rate={args.learningRate} "
-        f"--text_encoder_lr={args.textEncoderLr} "
-        f"--unet_lr={args.unetLr} "
-        f"--optimizer_type=AdamW "
-        f"--lr_scheduler=cosine "
-        f"--lr_warmup_steps=50 "
-        f"--mixed_precision=no "
-        f"--save_every_n_epochs=1 "
-        f"--save_model_as=safetensors "
-        f"--clip_skip=2"
-    )
-
-    return ["bash", "-lc", shellCommand]
-
-
 def updateConfigFromArgs(args: argparse.Namespace) -> bool:
+    """
+    Update configuration file with command-line arguments.
+    
+    Args:
+        args: Parsed command-line arguments
+        
+    Returns:
+        True if configuration was changed, False otherwise
+    """
     cfg = loadConfig()
 
     updates = {
         "trainingRoot": str(args.trainingRoot),
-        "baseModelPath": str(args.baseModelPath),
-        "kohyaDir": str(args.kohyaDir),
-        "condaEnvName": args.condaEnvName,
-        "epochs": args.epochs,
-        "cpuThreads": args.cpuThreads,
-        "minImages": args.minImages,
+        "captionTemplate": args.captionTemplate,
         "captionExtension": args.captionExtension,
-        "resolution": args.resolution,
-        "rank": args.rank,
-        "alpha": args.alpha,
-        "learningRate": args.learningRate,
-        "textEncoderLr": args.textEncoderLr,
-        "unetLr": args.unetLr,
+        "includeOriginalsDir": bool(args.includeOriginalsDir),
     }
 
     changed = updateCfgFromArgs(cfg, updates)
-    if changed and not args.dry_run:
+    if changed and not args.dryRun:
         saveConfig(cfg)
 
     return changed
 
 
-def runTraining() -> None:
-    args = parseArgs()
-    prefix = "...[] " if args.dry_run else "..."
+def getStyleFolders(trainingRoot: Path, styleNameFilter: Optional[str]) -> List[Path]:
+    """
+    Get list of style folders to process.
+    
+    Args:
+        trainingRoot: Base directory containing style folders
+        styleNameFilter: Optional specific style name to process
+        
+    Returns:
+        List of style folder paths
+        
+    Raises:
+        FileNotFoundError: If trainingRoot or specific style folder doesn't exist
+    """
+    if not trainingRoot.is_dir():
+        raise FileNotFoundError(f"trainingRoot does not exist or is not a directory: {trainingRoot}")
 
-    trainingRoot = args.trainingRoot.expanduser().resolve()
-    styleDir = trainingRoot / args.styleName
-    trainDir = styleDir / f"10_{args.styleName}"
+    if styleNameFilter:
+        styleDir = trainingRoot / styleNameFilter
+        if not styleDir.is_dir():
+            raise FileNotFoundError(f"style folder not found: {styleDir}")
+        return [styleDir]
 
-    baseModelPath = args.baseModelPath.expanduser().resolve()
-    kohyaDir = args.kohyaDir.expanduser().resolve()
+    return sorted([p for p in trainingRoot.iterdir() if p.is_dir()])
 
-    print(f"{prefix}starting cpu-only lora training")
-    print(f"{prefix}style: {args.styleName}")
-    print(f"{prefix}training root: {trainingRoot}")
-    print(f"{prefix}train dir: {trainDir}")
-    print(f"{prefix}output dir: {styleDir / 'output'}")
 
+def listTopLevelImages(styleDir: Path) -> List[Path]:
+    """
+    List all image files at the top level of styleDir (non-recursive).
+    
+    Args:
+        styleDir: Directory to scan for images
+        
+    Returns:
+        Sorted list of image file paths
+    """
+    images: List[Path] = []
+    for entry in styleDir.iterdir():
+        if entry.is_dir():
+            continue
+        if isImageFile(entry):
+            images.append(entry)
+    return sorted(images)
+
+
+def formatIndex(index: int) -> str:
+    """
+    Format an index number with appropriate zero-padding.
+    
+    Args:
+        index: Index number to format
+        
+    Returns:
+        Formatted index string (2-3 digits with leading zeros)
+    """
+    if index < 100:
+        return f"{index:02d}"
+    if index < 1000:
+        return f"{index:03d}"
+    return str(index)
+
+
+def buildTargetStem(styleName: str, index: int, dateStr: str = "") -> str:
+    """
+    Build a target filename stem in the format 'yyyymmdd-styleName-nn'.
+    
+    Args:
+        styleName: Style/person name
+        index: Index number
+        dateStr: Date string in YYYYMMDD format (e.g., "20040117")
+        
+    Returns:
+        Formatted filename stem
+    """
+    if dateStr:
+        return f"{dateStr}-{styleName}-{formatIndex(index)}"
+    else:
+        # Fallback if no date available
+        return f"{FALLBACK_DATE_STRING}-{styleName}-{formatIndex(index)}"
+
+
+def findUsedIndices(trainDir: Path, styleName: str, dateStr: str = "") -> Set[int]:
+    """
+    Find all index numbers already used in trainDir for the given style and date.
+    
+    Args:
+        trainDir: Training directory to scan
+        styleName: Style name to match in filenames
+        dateStr: Date string in YYYYMMDD format (optional)
+        
+    Returns:
+        Set of index numbers already in use
+    """
+    used: Set[int] = set()
     if not trainDir.exists():
-        sys.exit(f"ERROR: train dir not found: {trainDir}")
+        return used
 
-    imageFiles = list(trainDir.glob("*.jpg")) + list(trainDir.glob("*.png"))
-    if len(imageFiles) < args.minImages:
-        sys.exit(f"ERROR: insufficient training images in {trainDir} ({len(imageFiles)} found)")
+    # New format: yyyymmdd-styleName-nn
+    # Also support old format for backward compatibility: styleName #nn
+    if dateStr:
+        pattern = re.compile(rf"^{re.escape(dateStr)}-{re.escape(styleName)}-(\d+)$", re.IGNORECASE)
+    else:
+        # Match any date with this style name
+        pattern = re.compile(rf"^\d{{{DATE_FORMAT_LENGTH}}}-{re.escape(styleName)}-(\d+)$", re.IGNORECASE)
+    
+    # Also check old format for backward compatibility
+    old_pattern = re.compile(rf"^{re.escape(styleName)}\s+#(\d+)$", re.IGNORECASE)
 
-    if not baseModelPath.exists():
-        sys.exit(f"ERROR: base model not found: {baseModelPath}")
+    for entry in trainDir.iterdir():
+        if not entry.is_file():
+            continue
+        # Try new format first
+        match = pattern.match(entry.stem)
+        if not match:
+            # Try old format
+            match = old_pattern.match(entry.stem)
+        
+        if match:
+            try:
+                used.add(int(match.group(1)))
+            except ValueError:
+                pass
 
-    if not kohyaDir.exists():
-        sys.exit(f"ERROR: kohya repo dir not found: {kohyaDir}")
+    return used
 
-    trainScriptPath = resolveTrainScriptPath(kohyaDir)
-    print(f"{prefix}train script: {trainScriptPath}")
 
-    configChanged = updateConfigFromArgs(args)
-    if configChanged and not args.dry_run:
-        print(f"{prefix}updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
+def nextAvailableIndex(usedIndices: Set[int], startAt: int = 1) -> int:
+    """
+    Find the next available index number not in the used set.
+    
+    Args:
+        usedIndices: Set of already-used indices (will be updated)
+        startAt: Starting index number
+        
+    Returns:
+        Next available index number
+    """
+    index = startAt
+    while index in usedIndices:
+        index += 1
+    usedIndices.add(index)
+    return index
 
-    command = buildTrainingCommand(
-        args=args,
-        styleDir=styleDir,
-        trainScriptPath=trainScriptPath,
-    )
 
-    print(f"{prefix}training command: {command[2]}")
-
-    if args.dry_run:
-        print(f"{prefix}training skipped (--dry-run)")
+def moveFile(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> None:
+    """
+    Move a file from source to destination.
+    
+    Args:
+        srcPath: Source file path
+        destPath: Destination file path
+        dryRun: If True, only print action without executing
+        prefix: Logging prefix string
+        
+    Raises:
+        OSError: If move operation fails
+    """
+    print(f"{prefix} move: {srcPath.name} -> {destPath}")
+    if dryRun:
         return
 
-    print(f"{prefix}launching training")
-    subprocess.run(command, check=True)
-    print(f"{prefix}training complete")
+    destPath.parent.mkdir(parents=True, exist_ok=True)
+    srcPath.rename(destPath)
+
+
+def processStyleFolder(
+    styleDir: Path,
+    captionTemplate: str,
+    captionExtension: str,
+    dryRun: bool,
+    includeOriginalsDir: bool,
+    prefix: str,
+) -> None:
+    """
+    Process a style folder: move images to train dir and create captions.
+    
+    Args:
+        styleDir: Style folder to process
+        captionTemplate: Template for default captions
+        captionExtension: Caption file extension
+        dryRun: If True, only print actions without executing
+        includeOriginalsDir: Whether to create originals directory
+        prefix: Logging prefix string
+    """
+    styleName = styleDir.name
+    paths = resolveKohyaPaths(styleName=styleName, trainingRoot=styleDir.parent)
+
+    ensureDirs(paths, includeOriginals=includeOriginalsDir)
+
+    images = listTopLevelImages(styleDir)
+    if not images:
+        return
+
+    # Sort images by date (EXIF, filename pattern, or modification time)
+    # Always update EXIF data from filename dates when possible
+    # Returns list of (imagePath, date) tuples sorted by date
+    imagesWithDates = sortImagesByDate(images, updateExif=(not dryRun), prefix=prefix)
+
+    defaultCaption = buildDefaultCaption(styleName=styleName, template=captionTemplate)
+
+    # Cache used indices per date to avoid redundant filesystem scans
+    usedIndicesCache = {}
+
+    for imagePath, imageDate in imagesWithDates:
+        # Format date as YYYYMMDD for filename
+        dateStr = imageDate.strftime("%Y%m%d")
+        
+        # Get or compute used indices for this date
+        if dateStr not in usedIndicesCache:
+            usedIndicesCache[dateStr] = findUsedIndices(paths.trainDir, styleName=styleName, dateStr=dateStr)
+        usedIndices = usedIndicesCache[dateStr]
+        
+        index = nextAvailableIndex(usedIndices)
+        targetStem = buildTargetStem(styleName, index, dateStr)
+        destImagePath = (paths.trainDir / targetStem).with_suffix(imagePath.suffix.lower())
+
+        if destImagePath.exists():
+            print(f"{prefix} skip: {destImagePath.name}")
+            continue
+
+        try:
+            moveFile(imagePath, destImagePath, dryRun=dryRun, prefix=prefix)
+        except OSError as e:
+            print(f"ERROR: failed to move {imagePath.name}: {e}")
+            continue
+
+        srcCaptionPath = getCaptionPath(imagePath, captionExtension=captionExtension)
+        destCaptionPath = getCaptionPath(destImagePath, captionExtension=captionExtension)
+
+        if destCaptionPath.exists():
+            continue
+
+        if srcCaptionPath.exists():
+            try:
+                moveFile(srcCaptionPath, destCaptionPath, dryRun=dryRun, prefix=prefix)
+            except OSError as e:
+                print(f"ERROR: failed to move caption {srcCaptionPath.name}: {e}")
+        else:
+            # keep this silent unless it actually creates
+            created = writeCaptionIfMissing(
+                imagePath=destImagePath,
+                captionText=defaultCaption,
+                captionExtension=captionExtension,
+                dryRun=dryRun,
+            )
+            if created:
+                print(f"{prefix} caption: {destCaptionPath.name}")
+
+
+def undoStyleFolder(styleDir: Path, dryRun: bool, prefix: str) -> None:
+    """
+    Undo train structure: move files from train dir back to style root.
+    
+    Args:
+        styleDir: Style folder to process
+        dryRun: If True, only print actions without executing
+        prefix: Logging prefix string
+    """
+    styleName = styleDir.name
+    paths = resolveKohyaPaths(styleName=styleName, trainingRoot=styleDir.parent)
+
+    if not paths.trainDir.exists():
+        return
+
+    for entry in sorted(paths.trainDir.iterdir()):
+        if not entry.is_file():
+            continue
+
+        destPath = styleDir / entry.name
+        if destPath.exists():
+            print(f"{prefix} skip: {destPath.name}")
+            continue
+
+        try:
+            moveFile(entry, destPath, dryRun=dryRun, prefix=prefix)
+        except OSError as e:
+            print(f"ERROR: failed to move {entry.name}: {e}")
+            continue
+
+    if not dryRun:
+        try:
+            if paths.trainDir.exists() and not any(paths.trainDir.iterdir()):
+                paths.trainDir.rmdir()
+        except Exception:
+            pass
+
+
+def main() -> None:
+    """
+    Main entry point: parse arguments, validate setup, and process style folders.
+    
+    Raises:
+        SystemExit: On validation failures or errors during processing
+    """
+    args = parseArgs()
+    prefix = "...[]" if args.dryRun else "..."
+
+    # Check if PIL is available for EXIF extraction
+    try:
+        from PIL import Image
+        pil_available = True
+    except ImportError:
+        pil_available = False
+        print(f"{prefix} WARNING: PIL/Pillow not installed - EXIF dates will not be extracted")
+        print(f"{prefix}          Install with: pip install pillow")
+
+    trainingRoot = args.trainingRoot.expanduser().resolve()
+
+    try:
+        styleFolders = getStyleFolders(trainingRoot, args.style)
+    except Exception as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
+
+    configChanged = updateConfigFromArgs(args)
+    if configChanged and not args.dryRun:
+        print(f"{prefix} updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
+
+    if args.undo:
+        print(f"{prefix} undoing train structure in: {trainingRoot}")
+        for styleDir in styleFolders:
+            undoStyleFolder(styleDir=styleDir, dryRun=args.dryRun, prefix=prefix)
+        return
+
+    print(f"{prefix} scanning: {trainingRoot}")
+    if pil_available:
+        print(f"{prefix} EXIF extraction enabled (PIL available)")
+    
+    for styleDir in styleFolders:
+        processStyleFolder(
+            styleDir=styleDir,
+            captionTemplate=args.captionTemplate,
+            captionExtension=args.captionExtension,
+            dryRun=args.dryRun,
+            includeOriginalsDir=args.includeOriginalsDir,
+            prefix=prefix,
+        )
 
 
 if __name__ == "__main__":
-    runTraining()
+    main()

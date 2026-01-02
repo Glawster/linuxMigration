@@ -22,7 +22,7 @@ Config:
 
 Logging:
 - prefix is "..." normally
-- prefix is "...[] " when --dry-run is set
+- prefix is "...[]" when --dry-run is set
 """
 
 from __future__ import annotations
@@ -164,7 +164,7 @@ def parseArgs() -> argparse.Namespace:
 
     parser.add_argument(
         "--dry-run",
-        dest="dry_run",
+        dest="dryRun",
         action="store_true",
         help="show actions without executing",
     )
@@ -246,7 +246,7 @@ def updateConfigFromArgs(args: argparse.Namespace) -> bool:
 
 def runTraining() -> None:
     args = parseArgs()
-    prefix = "...[] " if args.dry_run else "..."
+    prefix = "...[] " if args.dryRun else "..."
 
     trainingRoot = args.trainingRoot.expanduser().resolve()
     styleDir = trainingRoot / args.styleName
