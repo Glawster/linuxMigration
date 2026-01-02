@@ -7,7 +7,7 @@ Shared helpers for kohya dataset preparation + training.
 Folder layout standard:
   trainingRoot/
     styleName/
-      train/
+      10_styleName/
       output/
       originals/   (optional)
 
@@ -55,7 +55,7 @@ def resolveKohyaPaths(styleName: str, trainingRoot: Path) -> KohyaPaths:
         raise ValueError("styleName cannot be empty")
     
     styleDir = trainingRoot / styleName
-    trainDir = styleDir / "train"
+    trainDir = styleDir / f"10_{styleName}"
     outputDir = styleDir / "output"
     originalsDir = styleDir / "originals"
     return KohyaPaths(
@@ -314,24 +314,19 @@ def copyFiles(
     return copied
 
 
-def extractExifDate(imagePath: Path, prefix: str = "...") -> tuple[Optional[datetime.datetime], Optional[str]]:
+def extractExifDate(imagePath: Path, prefix: str = "...") -> Optional[datetime.datetime]:
     """
-    Extract EXIF date/time from an image file.
-    
-    Tries multiple EXIF date/time tags in order of preference:
-    1. DateTimeOriginal (36867) - when photo was taken
-    2. DateTimeDigitized (36868) - when photo was digitized
-    3. DateTime (306) - file modification date/time
+    Extract EXIF DateTimeOriginal from an image file.
     
     Args:
         imagePath: Path to the image file
         prefix: Logging prefix for debug messages
         
     Returns:
-        Tuple of (datetime object, tag name) if EXIF date is found, (None, None) otherwise
+        datetime object if EXIF date is found, None otherwise
         
     Note:
-        Requires PIL/Pillow. Returns (None, None) if PIL is not available.
+        Requires PIL/Pillow. Returns None if PIL is not available.
     """
     try:
         from PIL import Image, ExifTags
@@ -357,7 +352,7 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> tuple[Optional[date
             
             if not exif:
                 print(f"{prefix} exif-debug: No EXIF data found in image")
-                return (None, None)
+                return None
             
             print(f"{prefix} exif-debug: EXIF data type: {type(exif)}")
             print(f"{prefix} exif-debug: EXIF keys count: {len(exif) if hasattr(exif, '__len__') else 'N/A'}")
@@ -365,91 +360,53 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> tuple[Optional[date
             # Show all EXIF tags for debugging
             if hasattr(exif, 'keys'):
                 all_tags = list(exif.keys())
-                print(f"{prefix} exif-debug: All EXIF tag IDs in main IFD: {all_tags}")
+                print(f"{prefix} exif-debug: All EXIF tag IDs: {all_tags}")
                 # Also show the tag names if we can look them up
                 tag_names = []
                 for tag_id in all_tags[:20]:  # Limit to first 20 for readability
                     tag_name = ExifTags.TAGS.get(tag_id, f"Unknown-{tag_id}")
                     tag_names.append(f"{tag_id}={tag_name}")
-                print(f"{prefix} exif-debug: EXIF tag names in main IFD: {tag_names}")
+                print(f"{prefix} exif-debug: EXIF tag names: {tag_names}")
             
-            # Try to get the Exif IFD sub-directory which contains DateTimeOriginal
-            # This is where the issue likely is - DateTimeOriginal is in the Exif IFD, not the main IFD
-            exif_ifd = None
-            try:
-                if hasattr(exif, 'get_ifd'):
-                    from PIL.ExifTags import IFD
-                    exif_ifd = exif.get_ifd(IFD.Exif)
-                    if exif_ifd:
-                        print(f"{prefix} exif-debug: Exif IFD found with {len(exif_ifd)} tags")
-                        exif_ifd_tags = list(exif_ifd.keys())
-                        print(f"{prefix} exif-debug: Exif IFD tag IDs: {exif_ifd_tags}")
-                        exif_ifd_names = []
-                        for tag_id in exif_ifd_tags[:20]:
-                            tag_name = ExifTags.TAGS.get(tag_id, f"Unknown-{tag_id}")
-                            exif_ifd_names.append(f"{tag_id}={tag_name}")
-                        print(f"{prefix} exif-debug: Exif IFD tag names: {exif_ifd_names}")
-            except Exception as e:
-                print(f"{prefix} exif-debug: Could not access Exif IFD: {e}")
-            
-            # Try multiple date/time tags in order of preference
-            # Most relevant first: DateTimeOriginal, DateTimeDigitized, DateTime
-            date_tags_to_try = [
-                ("DateTimeOriginal", 36867, "when photo was taken"),
-                ("DateTimeDigitized", 36868, "when photo was digitized"),
-                ("DateTime", 306, "file modification date"),
-            ]
-            
+            # Get DateTimeOriginal tag value
             dateStr = None
-            tagUsed = None
             
             # For modern getexif() - it returns a dict-like object
             if hasattr(exif, 'get'):
                 print(f"{prefix} exif-debug: EXIF has 'get' method")
                 
-                # Try each date tag in order of preference
-                for tag_name, tag_id, tag_desc in date_tags_to_try:
-                    if dateStr:
-                        break  # Already found a date
+                # Try using ExifTags.Base enum if available (Pillow 9.0+)
+                try:
+                    from PIL.ExifTags import Base
+                    dateStr = exif.get(Base.DateTimeOriginal)
+                    print(f"{prefix} exif-debug: Base.DateTimeOriginal lookup: {dateStr}")
+                except (ImportError, AttributeError) as e:
+                    print(f"{prefix} exif-debug: Base enum not available: {e}")
+                    pass
+                
+                # If that didn't work, try the numeric tag ID (36867 is DateTimeOriginal)
+                if not dateStr:
+                    print(f"{prefix} exif-debug: Trying numeric tag ID lookup...")
+                    # Find the tag ID for DateTimeOriginal
+                    datetime_original_tag = None
+                    for k, v in ExifTags.TAGS.items():
+                        if v == "DateTimeOriginal":
+                            datetime_original_tag = k
+                            break
                     
-                    print(f"{prefix} exif-debug: Trying {tag_name} (tag {tag_id}): {tag_desc}")
+                    print(f"{prefix} exif-debug: DateTimeOriginal tag ID: {datetime_original_tag}")
                     
-                    # First, try the Exif IFD if we have it (this is where DateTimeOriginal usually lives)
-                    if exif_ifd and tag_id in [36867, 36868]:  # These tags are in Exif IFD
-                        if tag_id in exif_ifd:
-                            dateStr = exif_ifd[tag_id]
-                            tagUsed = tag_name
-                            print(f"{prefix} exif-debug: Found via Exif IFD tag ID {tag_id} ({tag_name}): {dateStr}")
-                            continue
+                    if datetime_original_tag:
+                        if datetime_original_tag in exif:
+                            dateStr = exif[datetime_original_tag]
+                            print(f"{prefix} exif-debug: Found DateTimeOriginal via tag ID: {dateStr}")
                         else:
-                            print(f"{prefix} exif-debug: Tag {tag_id} ({tag_name}) not in Exif IFD")
-                    
-                    # Try using ExifTags.Base enum if available (Pillow 9.0+)
-                    try:
-                        from PIL.ExifTags import Base
-                        base_attr = getattr(Base, tag_name, None)
-                        if base_attr:
-                            dateStr = exif.get(base_attr)
-                            if dateStr:
-                                tagUsed = tag_name
-                                print(f"{prefix} exif-debug: Found via Base.{tag_name}: {dateStr}")
-                    except (ImportError, AttributeError) as e:
-                        print(f"{prefix} exif-debug: Base enum not available: {e}")
-                        pass
-                    
-                    # If that didn't work, try the numeric tag ID directly in main exif
-                    if not dateStr:
-                        if tag_id in exif:
-                            dateStr = exif[tag_id]
-                            tagUsed = tag_name
-                            print(f"{prefix} exif-debug: Found via main IFD tag ID {tag_id} ({tag_name}): {dateStr}")
-                        else:
-                            print(f"{prefix} exif-debug: Tag {tag_id} ({tag_name}) not in main IFD")
+                            print(f"{prefix} exif-debug: Tag {datetime_original_tag} not in EXIF data")
+                            print(f"{prefix} exif-debug: Available EXIF tags: {list(exif.keys())[:10]}...")
             else:
                 print(f"{prefix} exif-debug: EXIF doesn't have 'get' method")
             
             if dateStr:
-                print(f"{prefix} exif-debug: Using {tagUsed} for date")
                 print(f"{prefix} exif-debug: Raw date string: {dateStr}")
                 # "YYYY:MM:DD HH:MM:SS" -> "YYYY-MM-DD HH:MM:SS"
                 dateStr = str(dateStr).replace(":", "-", 2)
@@ -457,19 +414,19 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> tuple[Optional[date
                 try:
                     result = datetime.datetime.fromisoformat(dateStr)
                     print(f"{prefix} exif-debug: Parsed with fromisoformat: {result}")
-                    return (result, tagUsed)
+                    return result
                 except ValueError as e:
                     print(f"{prefix} exif-debug: fromisoformat failed: {e}")
                     # Fallback to strptime if fromisoformat fails
                     try:
                         result = datetime.datetime.strptime(dateStr, "%Y-%m-%d %H:%M:%S")
                         print(f"{prefix} exif-debug: Parsed with strptime: {result}")
-                        return (result, tagUsed)
+                        return result
                     except ValueError as e2:
                         print(f"{prefix} exif-debug: strptime also failed: {e2}")
                         pass
             else:
-                print(f"{prefix} exif-debug: No date/time tags found in EXIF")
+                print(f"{prefix} exif-debug: No DateTimeOriginal found in EXIF")
                 
     except ImportError as e:
         # PIL/Pillow not available
@@ -482,8 +439,8 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> tuple[Optional[date
         traceback.print_exc()
         pass
     
-    print(f"{prefix} exif-debug: Returning (None, None)")
-    return (None, None)
+    print(f"{prefix} exif-debug: Returning None")
+    return None
 
 
 def updateExifDate(imagePath: Path, date: datetime.datetime) -> bool:
@@ -685,10 +642,9 @@ def getImageDate(imagePath: Path, updateExif: bool = False, prefix: str = "...")
     """
     # Try EXIF first
     try:
-        exifDate, tagName = extractExifDate(imagePath, prefix=prefix)
+        exifDate = extractExifDate(imagePath, prefix=prefix)
         if exifDate:
-            tagLabel = f"EXIF {tagName}" if tagName else "EXIF"
-            print(f"{prefix} date: {imagePath.name} -> {exifDate.strftime('%Y-%m-%d')} [{tagLabel}]")
+            print(f"{prefix} date: {imagePath.name} -> {exifDate.strftime('%Y-%m-%d')} [EXIF DateTimeOriginal]")
             return exifDate
     except (OSError, ValueError, ImportError):
         pass
@@ -721,7 +677,7 @@ def getImageDate(imagePath: Path, updateExif: bool = False, prefix: str = "...")
         return now
 
 
-def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str = "...") -> List[Tuple[Path, datetime.datetime]]:
+def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str = "...") -> List[Path]:
     """
     Sort images by their best available date.
     
@@ -734,7 +690,7 @@ def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str =
         prefix: Logging prefix for debug messages
         
     Returns:
-        New list of tuples (image_path, date) sorted by date (oldest first)
+        New list of image paths sorted by date (oldest first)
         
     Note:
         For better performance with large collections, this function
@@ -757,4 +713,4 @@ def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str =
             imageWithDates.append((img, now))
     
     imageWithDates.sort(key=lambda x: x[1])
-    return imageWithDates
+    return [img for img, _ in imageWithDates]
