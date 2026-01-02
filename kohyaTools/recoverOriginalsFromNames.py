@@ -262,7 +262,7 @@ def main() -> None:
             # copy from wantedDir to destDir 
             try:
                 copyFile(wantedPath, destDir, args.dryRun, prefix)
-            except (OSError, IOError) as e:
+            except (OSError, IOError, PermissionError) as e:
                 print(f"ERROR: {e}")
             continue
 
