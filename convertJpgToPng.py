@@ -25,6 +25,17 @@ try:
     from recoveryCommon import printProgress
 except ImportError:
     # Fallback implementation if recoveryCommon is not available
+    def formatEta(seconds: float) -> str:
+        if seconds <= 0 or seconds != seconds:
+            return "--:--:--"
+        seconds = int(seconds)
+        h = seconds // 3600
+        m = (seconds % 3600) // 60
+        s = seconds % 60
+        if h > 99:
+            return "99:59:59"
+        return f"{h:02d}:{m:02d}:{s:02d}"
+
     def printProgress(
         done: int,
         total: int,
@@ -36,11 +47,17 @@ except ImportError:
         if total <= 0:
             return
         ratio = min(done / total, 1.0)
+        filled = int(width * ratio)
+        bar = "#" * filled + "-" * (width - filled)
         pct = int(ratio * 100)
         elapsed = time.time() - startTime
         remaining = ((total - done) * elapsed / done) if done > 0 else 0
-        etaStr = time.strftime("%H:%M:%S", time.gmtime(remaining))
-        print(f"\r{label}: {done}/{total} ({pct}%) - ETA: {etaStr}", end="", flush=True)
+        etaStr = formatEta(remaining)
+        print(
+            f"\r{label}: [{bar}] {pct:3d}% ({done}/{total}) ETA {etaStr}",
+            end="",
+            flush=True,
+        )
 
 
 def isJpeg(path: Path) -> bool:
