@@ -72,29 +72,30 @@ def convertImage(path: Path, dryRun: bool, logger: logging.Logger) -> Tuple[bool
     """
     # Determine output path
     outPath = path.with_suffix(".png")
+    prefix = "...[]" if dryRun else "..."
 
     # Check if PNG already exists - if so, just delete the JPG
     if outPath.exists():
         if dryRun:
-            return True, f"[DRY RUN] would delete JPG (PNG exists): {path}"
+            return True, f"{prefix} would delete jpg (png exists): {path}"
         else:
             try:
                 path.unlink()
-                return True, f"DELETED JPG (PNG exists): {path}"
+                return True, f"{prefix} deleted jpg (png exists): {path}"
             except Exception as e:
-                return False, f"ERROR deleting {path}: {e}"
+                return False, f"Error deleting {path}: {e}"
 
     try:
         # Open and load the image
         img = Image.open(path)
         img.load()
     except UnidentifiedImageError:
-        return False, f"SKIP (not a valid image): {path}"
+        return False, f"...skip (not a valid image): {path}"
     except Exception as e:
-        return False, f"ERROR opening {path}: {e}"
+        return False, f"Error opening {path}: {e}"
 
     if dryRun:
-        return True, f"[DRY RUN] would convert: {path} -> {outPath}"
+        return True, f"{prefix} would convert: {path} -> {outPath}"
 
     # Preserve timestamps
     try:
@@ -117,7 +118,7 @@ def convertImage(path: Path, dryRun: bool, logger: logging.Logger) -> Tuple[bool
         # Delete the original JPEG file
         path.unlink()
 
-        return True, f"CONVERTED: {path} -> {outPath}"
+        return True, f"{prefix} converted: {path} -> {outPath}"
     except Exception as e:
         # If conversion failed and PNG was created, clean it up
         if outPath.exists():
@@ -125,7 +126,7 @@ def convertImage(path: Path, dryRun: bool, logger: logging.Logger) -> Tuple[bool
                 outPath.unlink()
             except Exception:
                 pass
-        return False, f"ERROR converting {path}: {e}"
+        return False, f"Error converting {path}: {e}"
 
 
 def main():
@@ -138,6 +139,7 @@ def main():
     )
     parser.add_argument(
         "--dry-run",
+        dest="dryRun",
         action="store_true",
         help="Do not modify anything, just print what would be done.",
     )
@@ -164,9 +166,9 @@ def main():
         logger.error(f"{root} is not a directory.")
         return
 
-    logger.info(f"Scanning: {root}")
-    if args.dry_run:
-        logger.info("[DRY RUN] No files will be changed.")
+    logger.info(f"...scanning: {root}")
+    if args.dryRun:
+        logger.info("...[] no files will be changed.")
 
     # Collect all JPEG files
     jpegFiles = []
@@ -178,10 +180,10 @@ def main():
         jpegFiles.append(path)
 
     total = len(jpegFiles)
-    logger.info(f"Found {total} JPEG file(s) to convert")
+    logger.info(f"...found {total} jpeg file(s) to convert")
 
     if total == 0:
-        logger.info("No JPEG files found. Nothing to do.")
+        logger.info("...no jpeg files found. nothing to do.")
         return
 
     converted = 0
@@ -193,17 +195,17 @@ def main():
     for idx, path in enumerate(jpegFiles, start=1):
         printProgress(idx, total, startTime, label="Converting")
 
-        success, msg = convertImage(path, args.dry_run, logger)
+        success, msg = convertImage(path, args.dryRun, logger)
 
         # Log detailed message
         print()  # Clear progress line
-        if msg.startswith("ERROR"):
+        if msg.startswith("Error"):
             logger.error(msg)
             errors += 1
-        elif msg.startswith("SKIP"):
+        elif msg.startswith("...skip"):
             logger.debug(msg)
             skipped += 1
-        elif "DELETED JPG" in msg or "would delete JPG" in msg:
+        elif "deleted jpg" in msg or "would delete jpg" in msg:
             logger.info(msg)
             deleted += 1
         elif success:
@@ -211,8 +213,9 @@ def main():
             converted += 1
 
     print()  # Final newline after progress
-    logger.info(f"Done. JPEG files found: {total}")
-    logger.info(f"Converted: {converted}, Deleted (PNG exists): {deleted}, Skipped: {skipped}, Errors: {errors}")
+    logger.info(f"...conversion complete")
+    logger.info(f"...jpeg files found: {total}")
+    logger.info(f"...converted: {converted}, deleted (png exists): {deleted}, skipped: {skipped}, errors: {errors}")
 
 
 if __name__ == "__main__":
