@@ -164,6 +164,20 @@ python -m pytest
 
 ## Code Examples
 
+### Dry Run
+in argparse setup:
+'''python
+    parser.add_argument("--dry-run", dest="dryRun", action="store_true", help="print actions/command only")
+'''
+in use, set up once:
+'''python
+    prefix = "...[]" if dryRun else "..."
+'''
+in logging/print statements:
+'''python
+    logger.info(f"{prefix} moving {sourcePath} to {destPath}")
+'''
+
 ### GUI Component Creation
 ```python
 class MyFrame(ScanFrame):
