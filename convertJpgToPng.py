@@ -21,8 +21,7 @@ from PIL import Image, UnidentifiedImageError, PngImagePlugin
 
 # Try to import shared utilities if available
 try:
-    sys.path.insert(0, str(Path(__file__).parent / "recoveryTools"))
-    from recoveryCommon import printProgress
+    from recoveryTools.recoveryCommon import printProgress
 except ImportError:
     # Fallback implementation if recoveryCommon is not available
     def formatEta(seconds: float) -> str:
@@ -219,13 +218,18 @@ def main():
     jpegFiles = []
     try:
         for path in root.rglob("*"):
-            if not path.is_file():
+            try:
+                if not path.is_file():
+                    continue
+                if not isJpeg(path):
+                    continue
+                jpegFiles.append(path)
+            except OSError as e:
+                # Handle I/O errors for individual files (corrupted files, permission issues, etc.)
+                logger.warning(f"...skipping file due to error: {path}: {e}")
                 continue
-            if not isJpeg(path):
-                continue
-            jpegFiles.append(path)
     except Exception as e:
-        logger.error(f"Error scanning directory: {e}")
+        logger.error(f"Error scanning directory structure: {e}")
         return 1
 
     total = len(jpegFiles)
