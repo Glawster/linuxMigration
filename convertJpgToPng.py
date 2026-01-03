@@ -12,15 +12,15 @@ Usage:
 import argparse
 import logging
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Tuple
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError, PngImagePlugin
 
 # Try to import shared utilities if available
 try:
-    import sys
     sys.path.insert(0, str(Path(__file__).parent / "recoveryTools"))
     from recoveryCommon import printProgress
 except ImportError:
@@ -68,6 +68,7 @@ def isJpeg(path: Path) -> bool:
 def convertImage(path: Path, dryRun: bool, logger: logging.Logger) -> Tuple[bool, str]:
     """
     Convert a JPEG image to PNG format and delete the original.
+    Preserves EXIF metadata by converting it to PNG text chunks.
     Returns (success, message).
     """
     # Determine output path
@@ -76,14 +77,12 @@ def convertImage(path: Path, dryRun: bool, logger: logging.Logger) -> Tuple[bool
 
     # Check if PNG already exists - if so, just delete the JPG
     if outPath.exists():
-        if dryRun:
-            return True, f"{prefix} would delete jpg (png exists): {path}"
-        else:
+        if not dryRun:
             try:
                 path.unlink()
-                return True, f"{prefix} deleted jpg (png exists): {path}"
             except Exception as e:
                 return False, f"Error deleting {path}: {e}"
+        return True, f"{prefix} deleted jpg (png exists): {path}"
 
     try:
         # Open and load the image
@@ -94,39 +93,80 @@ def convertImage(path: Path, dryRun: bool, logger: logging.Logger) -> Tuple[bool
     except Exception as e:
         return False, f"Error opening {path}: {e}"
 
-    if dryRun:
-        return True, f"{prefix} would convert: {path} -> {outPath}"
-
     # Preserve timestamps
     try:
         stat = path.stat()
     except FileNotFoundError:
         stat = None
 
-    try:
-        # Convert to RGB if necessary (PNG supports RGB and RGBA)
-        if img.mode not in ("RGB", "RGBA", "L", "LA"):
-            img = img.convert("RGB")
+    if not dryRun:
+        try:
+            # Convert to RGB if necessary (PNG supports RGB and RGBA)
+            if img.mode not in ("RGB", "RGBA", "L", "LA"):
+                img = img.convert("RGB")
 
-        # Save as PNG
-        img.save(outPath, format="PNG", optimize=True)
-
-        # Restore timestamps to the new PNG file
-        if stat is not None:
-            os.utime(outPath, (stat.st_atime, stat.st_mtime))
-
-        # Delete the original JPEG file
-        path.unlink()
-
-        return True, f"{prefix} converted: {path} -> {outPath}"
-    except Exception as e:
-        # If conversion failed and PNG was created, clean it up
-        if outPath.exists():
+            # Extract and preserve EXIF metadata
+            pngInfo = PngImagePlugin.PngInfo()
+            
+            # Try to get EXIF data from the JPEG
             try:
-                outPath.unlink()
+                exif = img.getexif()
+                if exif:
+                    # Convert EXIF data to PNG text chunks
+                    for tag, value in exif.items():
+                        try:
+                            # Convert tag to string and value to string representation
+                            pngInfo.add_text(f"exif:{tag}", str(value))
+                        except Exception:
+                            # Skip tags that can't be converted
+                            pass
+            except AttributeError:
+                # Fallback for older Pillow versions
+                try:
+                    exif = img._getexif()
+                    if exif:
+                        for tag, value in exif.items():
+                            try:
+                                pngInfo.add_text(f"exif:{tag}", str(value))
+                            except Exception:
+                                pass
+                except Exception:
+                    # No EXIF data available
+                    pass
             except Exception:
+                # Failed to read EXIF, continue without it
                 pass
-        return False, f"Error converting {path}: {e}"
+
+            # Also preserve any other metadata
+            if hasattr(img, 'info'):
+                for key, value in img.info.items():
+                    if key not in ('exif', 'jfif', 'jfif_version', 'jfif_unit', 
+                                   'jfif_density', 'dpi', 'adobe', 'adobe_transform'):
+                        try:
+                            pngInfo.add_text(str(key), str(value))
+                        except Exception:
+                            pass
+
+            # Save as PNG with metadata
+            img.save(outPath, format="PNG", pnginfo=pngInfo, optimize=True)
+
+            # Restore timestamps to the new PNG file
+            if stat is not None:
+                os.utime(outPath, (stat.st_atime, stat.st_mtime))
+
+            # Delete the original JPEG file
+            path.unlink()
+
+        except Exception as e:
+            # If conversion failed and PNG was created, clean it up
+            if outPath.exists():
+                try:
+                    outPath.unlink()
+                except Exception:
+                    pass
+            return False, f"Error converting {path}: {e}"
+
+    return True, f"{prefix} converted: {path} -> {outPath}"
 
 
 def main():
@@ -160,31 +200,40 @@ def main():
     )
     logger = logging.getLogger(__name__)
 
-    root = Path(args.folder).expanduser().resolve()
+    try:
+        root = Path(args.folder).expanduser().resolve()
+    except Exception as e:
+        logger.error(f"Error resolving folder path: {e}")
+        return 1
 
     if not root.is_dir():
         logger.error(f"{root} is not a directory.")
-        return
+        return 1
 
     logger.info(f"...scanning: {root}")
+    prefix = "...[]" if args.dryRun else "..."
     if args.dryRun:
-        logger.info("...[] no files will be changed.")
+        logger.info(f"{prefix} no files will be changed.")
 
     # Collect all JPEG files
     jpegFiles = []
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        if not isJpeg(path):
-            continue
-        jpegFiles.append(path)
+    try:
+        for path in root.rglob("*"):
+            if not path.is_file():
+                continue
+            if not isJpeg(path):
+                continue
+            jpegFiles.append(path)
+    except Exception as e:
+        logger.error(f"Error scanning directory: {e}")
+        return 1
 
     total = len(jpegFiles)
     logger.info(f"...found {total} jpeg file(s) to convert")
 
     if total == 0:
         logger.info("...no jpeg files found. nothing to do.")
-        return
+        return 0
 
     converted = 0
     deleted = 0
@@ -205,7 +254,7 @@ def main():
         elif msg.startswith("...skip"):
             logger.debug(msg)
             skipped += 1
-        elif "deleted jpg" in msg or "would delete jpg" in msg:
+        elif "deleted jpg" in msg:
             logger.info(msg)
             deleted += 1
         elif success:
@@ -216,7 +265,16 @@ def main():
     logger.info(f"...conversion complete")
     logger.info(f"...jpeg files found: {total}")
     logger.info(f"...converted: {converted}, deleted (png exists): {deleted}, skipped: {skipped}, errors: {errors}")
+    
+    return 0 if errors == 0 else 1
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        exit(main())
+    except KeyboardInterrupt:
+        print("\n...interrupted by user")
+        exit(130)
+    except Exception as e:
+        print(f"Fatal error: {e}", file=sys.stderr)
+        exit(1)
