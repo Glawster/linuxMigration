@@ -18,6 +18,47 @@ from typing import Tuple
 
 from PIL import Image, UnidentifiedImageError
 
+# Try to import shared utilities if available
+try:
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent / "recoveryTools"))
+    from recoveryCommon import printProgress
+except ImportError:
+    # Fallback implementation if recoveryCommon is not available
+    def formatEta(seconds: float) -> str:
+        if seconds <= 0 or seconds != seconds:
+            return "--:--:--"
+        seconds = int(seconds)
+        h = seconds // 3600
+        m = (seconds % 3600) // 60
+        s = seconds % 60
+        if h > 99:
+            return "99:59:59"
+        return f"{h:02d}:{m:02d}:{s:02d}"
+
+    def printProgress(
+        done: int,
+        total: int,
+        startTime: float,
+        *,
+        width: int = 40,
+        label: str = "Progress",
+    ):
+        if total <= 0:
+            return
+        ratio = min(done / total, 1.0)
+        filled = int(width * ratio)
+        bar = "#" * filled + "-" * (width - filled)
+        pct = int(ratio * 100)
+        elapsed = time.time() - startTime
+        remaining = ((total - done) * elapsed / done) if done > 0 else 0
+        etaStr = formatEta(remaining)
+        print(
+            f"\r{label}: [{bar}] {pct:3d}% ({done}/{total}) ETA {etaStr}",
+            end="",
+            flush=True,
+        )
+
 
 def isJpeg(path: Path) -> bool:
     """Check if a file is a JPEG based on its extension."""
@@ -85,21 +126,6 @@ def convertImage(path: Path, dryRun: bool, logger: logging.Logger) -> Tuple[bool
             except Exception:
                 pass
         return False, f"ERROR converting {path}: {e}"
-
-
-def printProgress(current: int, total: int, startTime: float, label: str = "Progress"):
-    """Print a progress indicator."""
-    if total == 0:
-        return
-    percent = (current / total) * 100
-    elapsed = time.time() - startTime
-    if current > 0:
-        eta = (elapsed / current) * (total - current)
-        etaStr = time.strftime("%H:%M:%S", time.gmtime(eta))
-    else:
-        etaStr = "??:??:??"
-
-    print(f"\r{label}: {current}/{total} ({percent:.1f}%) - ETA: {etaStr}", end="", flush=True)
 
 
 def main():
