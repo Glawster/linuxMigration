@@ -29,6 +29,20 @@ def convertImage(path: Path, dryRun: bool, logger: logging.Logger) -> Tuple[bool
     Convert a JPEG image to PNG format and delete the original.
     Returns (success, message).
     """
+    # Determine output path
+    outPath = path.with_suffix(".png")
+
+    # Check if PNG already exists - if so, just delete the JPG
+    if outPath.exists():
+        if dryRun:
+            return True, f"[DRY RUN] would delete JPG (PNG exists): {path}"
+        else:
+            try:
+                path.unlink()
+                return True, f"DELETED JPG (PNG exists): {path}"
+            except Exception as e:
+                return False, f"ERROR deleting {path}: {e}"
+
     try:
         # Open and load the image
         img = Image.open(path)
@@ -37,13 +51,6 @@ def convertImage(path: Path, dryRun: bool, logger: logging.Logger) -> Tuple[bool
         return False, f"SKIP (not a valid image): {path}"
     except Exception as e:
         return False, f"ERROR opening {path}: {e}"
-
-    # Determine output path
-    outPath = path.with_suffix(".png")
-
-    # Check if output file already exists
-    if outPath.exists():
-        return False, f"SKIP (PNG already exists): {path} -> {outPath}"
 
     if dryRun:
         return True, f"[DRY RUN] would convert: {path} -> {outPath}"
@@ -152,6 +159,7 @@ def main():
         return
 
     converted = 0
+    deleted = 0
     skipped = 0
     errors = 0
     startTime = time.time()
@@ -169,13 +177,16 @@ def main():
         elif msg.startswith("SKIP"):
             logger.debug(msg)
             skipped += 1
+        elif "DELETED JPG" in msg or "would delete JPG" in msg:
+            logger.info(msg)
+            deleted += 1
         elif success:
             logger.info(msg)
             converted += 1
 
     print()  # Final newline after progress
     logger.info(f"Done. JPEG files found: {total}")
-    logger.info(f"Converted: {converted}, Skipped: {skipped}, Errors: {errors}")
+    logger.info(f"Converted: {converted}, Deleted (PNG exists): {deleted}, Skipped: {skipped}, Errors: {errors}")
 
 
 if __name__ == "__main__":
