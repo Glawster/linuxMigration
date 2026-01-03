@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import logging
 import os
 import time
 from pathlib import Path
@@ -18,12 +19,12 @@ from typing import Tuple
 from PIL import Image, UnidentifiedImageError
 
 
-def is_jpeg(path: Path) -> bool:
+def isJpeg(path: Path) -> bool:
     """Check if a file is a JPEG based on its extension."""
     return path.suffix.lower() in {".jpg", ".jpeg"}
 
 
-def convert_image(path: Path, dry_run: bool) -> Tuple[bool, str]:
+def convertImage(path: Path, dryRun: bool, logger: logging.Logger) -> Tuple[bool, str]:
     """
     Convert a JPEG image to PNG format and delete the original.
     Returns (success, message).
@@ -38,14 +39,14 @@ def convert_image(path: Path, dry_run: bool) -> Tuple[bool, str]:
         return False, f"ERROR opening {path}: {e}"
 
     # Determine output path
-    out_path = path.with_suffix(".png")
+    outPath = path.with_suffix(".png")
 
     # Check if output file already exists
-    if out_path.exists():
-        return False, f"SKIP (PNG already exists): {path} -> {out_path}"
+    if outPath.exists():
+        return False, f"SKIP (PNG already exists): {path} -> {outPath}"
 
-    if dry_run:
-        return True, f"[DRY RUN] would convert: {path} -> {out_path}"
+    if dryRun:
+        return True, f"[DRY RUN] would convert: {path} -> {outPath}"
 
     # Preserve timestamps
     try:
@@ -59,39 +60,39 @@ def convert_image(path: Path, dry_run: bool) -> Tuple[bool, str]:
             img = img.convert("RGB")
 
         # Save as PNG
-        img.save(out_path, format="PNG", optimize=True)
+        img.save(outPath, format="PNG", optimize=True)
 
         # Restore timestamps to the new PNG file
         if stat is not None:
-            os.utime(out_path, (stat.st_atime, stat.st_mtime))
+            os.utime(outPath, (stat.st_atime, stat.st_mtime))
 
         # Delete the original JPEG file
         path.unlink()
 
-        return True, f"CONVERTED: {path} -> {out_path}"
+        return True, f"CONVERTED: {path} -> {outPath}"
     except Exception as e:
         # If conversion failed and PNG was created, clean it up
-        if out_path.exists():
+        if outPath.exists():
             try:
-                out_path.unlink()
+                outPath.unlink()
             except Exception:
                 pass
         return False, f"ERROR converting {path}: {e}"
 
 
-def print_progress(current: int, total: int, start_time: float, label: str = "Progress"):
+def printProgress(current: int, total: int, startTime: float, label: str = "Progress"):
     """Print a progress indicator."""
     if total == 0:
         return
     percent = (current / total) * 100
-    elapsed = time.time() - start_time
+    elapsed = time.time() - startTime
     if current > 0:
         eta = (elapsed / current) * (total - current)
-        eta_str = time.strftime("%H:%M:%S", time.gmtime(eta))
+        etaStr = time.strftime("%H:%M:%S", time.gmtime(eta))
     else:
-        eta_str = "??:??:??"
-    
-    print(f"\r{label}: {current}/{total} ({percent:.1f}%) - ETA: {eta_str}", end="", flush=True)
+        etaStr = "??:??:??"
+
+    print(f"\r{label}: {current}/{total} ({percent:.1f}%) - ETA: {etaStr}", end="", flush=True)
 
 
 def main():
@@ -107,61 +108,74 @@ def main():
         action="store_true",
         help="Do not modify anything, just print what would be done.",
     )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Set logging level (default: INFO).",
+    )
 
     args = parser.parse_args()
+
+    # Setup logging
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    logger = logging.getLogger(__name__)
+
     root = Path(args.folder).expanduser().resolve()
 
     if not root.is_dir():
-        print(f"ERROR: {root} is not a directory.")
+        logger.error(f"{root} is not a directory.")
         return
 
-    print(f"Scanning: {root}")
+    logger.info(f"Scanning: {root}")
     if args.dry_run:
-        print("[DRY RUN] No files will be changed.\n")
-    else:
-        print()
+        logger.info("[DRY RUN] No files will be changed.")
 
     # Collect all JPEG files
-    jpeg_files = []
+    jpegFiles = []
     for path in root.rglob("*"):
         if not path.is_file():
             continue
-        if not is_jpeg(path):
+        if not isJpeg(path):
             continue
-        jpeg_files.append(path)
+        jpegFiles.append(path)
 
-    total = len(jpeg_files)
-    print(f"Found {total} JPEG file(s) to convert\n")
+    total = len(jpegFiles)
+    logger.info(f"Found {total} JPEG file(s) to convert")
 
     if total == 0:
-        print("No JPEG files found. Nothing to do.")
+        logger.info("No JPEG files found. Nothing to do.")
         return
 
     converted = 0
     skipped = 0
     errors = 0
-    start_time = time.time()
+    startTime = time.time()
 
-    for idx, path in enumerate(jpeg_files, start=1):
-        print_progress(idx, total, start_time, label="Converting")
-        
-        success, msg = convert_image(path, args.dry_run)
-        
-        # Print detailed message on new line
-        print(f"\r{msg}")
-        
+    for idx, path in enumerate(jpegFiles, start=1):
+        printProgress(idx, total, startTime, label="Converting")
+
+        success, msg = convertImage(path, args.dry_run, logger)
+
+        # Log detailed message
+        print()  # Clear progress line
         if msg.startswith("ERROR"):
+            logger.error(msg)
             errors += 1
         elif msg.startswith("SKIP"):
+            logger.debug(msg)
             skipped += 1
         elif success:
+            logger.info(msg)
             converted += 1
 
-    print()
-    print(f"Done. JPEG files found: {total}")
-    print(f"Converted: {converted}")
-    print(f"Skipped: {skipped}")
-    print(f"Errors: {errors}")
+    print()  # Final newline after progress
+    logger.info(f"Done. JPEG files found: {total}")
+    logger.info(f"Converted: {converted}, Skipped: {skipped}, Errors: {errors}")
 
 
 if __name__ == "__main__":
