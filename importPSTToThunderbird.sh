@@ -1,209 +1,229 @@
 #!/usr/bin/env bash
 set -euo pipefail
+#
+# importPSTToThunderbird.sh
+#
+# Purpose:
+#   Import a pst-utils/readpst export into Thunderbird "Local Folders".
+#
+# Important:
+#   readpst in recursive mode creates directories for folders and writes a file
+#   named "mbox" inside each folder directory. Thunderbird does NOT read
+#   <Folder>/mbox. Thunderbird expects an mbox file named exactly <Folder>
+#   (no extension) plus an optional <Folder>.sbd directory for subfolders.
+#
+#   This script converts the readpst recursive layout into Thunderbird's mbox
+#   layout.
+#
+# Typical workflow:
+#   1) Convert PST:
+#        mkdir -p ~/pst_imports
+#        readpst -r -o ~/pst_imports /path/to/mail.pst
+#
+#   2) Import into Thunderbird Local Folders:
+#        bash importPSTToThunderbird.sh
+#
 
-# Config
-sourceRoot="$HOME/pst_import"
-imports=("andyw@glawster.com.2025" "kathyMail" "myMail")
+# ------------------------------------------------------------------
+# Configuration
+# ------------------------------------------------------------------
 
-# Override profile manually if needed (leave empty for auto-detect)
-profileDir="$HOME/.var/app/org.mozilla.Thunderbird/.thunderbird/r0q0pjdo.default-esr"
+# Root directory containing one or more readpst output directories
+sourceRoot="$HOME/pst_imports"
 
-# Arg parsing
+# Flatpak Thunderbird profile root (contains one or more *.default* profiles)
+profileRoot="$HOME/.var/app/org.mozilla.Thunderbird/.thunderbird"
+
+# ------------------------------------------------------------------
+# Argument parsing
+# ------------------------------------------------------------------
+
 dryRun=0
 if [[ "${1-}" == "--dry-run" ]]; then
   dryRun=1
-  echo "Dry-run mode enabled — no changes will be written."
+  echo "Dry-run mode enabled — no files will be copied."
   echo
 fi
 
-# Helper: run command (respects dry-run)
-run() {
-  echo "+ $*"
-  if [[ "${dryRun}" -eq 0 ]]; then
-    eval "$@"
+# ------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------
+
+shortenPath() {
+  sed "s|$HOME|~|g" <<<"$1"
+}
+
+findThunderbirdProfile() {
+  # Select the most recently modified Thunderbird profile directory.
+  local best=""
+  local bestMtime=0
+
+  shopt -s nullglob
+  for d in "$profileRoot"/*.default*; do
+    [[ -d "$d" ]] || continue
+    [[ -f "$d/prefs.js" ]] || continue
+
+    local mtime
+    mtime=$(stat -c %Y "$d/prefs.js" 2>/dev/null || echo 0)
+    if (( mtime > bestMtime )); then
+      bestMtime=$mtime
+      best="$d"
+    fi
+  done
+  shopt -u nullglob
+
+  if [[ -z "$best" ]]; then
+    echo "ERROR: Thunderbird profile not found under: $profileRoot" >&2
+    exit 1
+  fi
+
+  profileDir="$best"
+}
+
+backupLocalFolders() {
+  local localFolders="$1"
+  local backupDir
+  backupDir="${localFolders}.backup.$(date +%Y%m%d_%H%M%S)"
+
+  echo "...backing up local folders to: $(shortenPath "$backupDir")"
+  if [[ $dryRun -eq 0 ]]; then
+    cp -a "$localFolders" "$backupDir"
   fi
 }
 
-# Find Thunderbird profile
-findThunderbirdProfile() {
-  if [[ -n "${profileDir}" ]]; then
+# Convert a readpst recursive folder directory into Thunderbird format.
+# srcDir is a directory that may contain a file named "mbox" and subfolder dirs.
+# destDir is the directory where Thunderbird expects the mbox files for siblings.
+importReadpstFolder() {
+  local srcDir="$1"
+  local destDir="$2"
+  local folderName
+  folderName=$(basename "$srcDir")
+
+  # Skip non-mail artifacts that readpst may produce.
+  # Calendar and Contacts are not mail folders for Thunderbird Local Folders.
+  if [[ "$folderName" == "Calendar" || "$folderName" == "Contacts" ]]; then
+    echo "...skipping non-mail folder: $folderName"
     return 0
   fi
 
-  local candidates=(
-    "$HOME/.var/app/org.mozilla.Thunderbird/.thunderbird"
-  )
+  local srcMbox="$srcDir/mbox"
+  local destMbox="$destDir/$folderName"
+  local destSbd="$destDir/${folderName}.sbd"
 
-  for root in "${candidates[@]}"; do
-    if [[ -d "${root}" ]]; then
-      profileDir="$(ls -d "${root}"/*.default* 2>/dev/null | head -n1 || true)"
-      if [[ -n "${profileDir}" ]]; then
-        return 0
+  # If this folder contains mail, copy the mbox file to the expected location.
+  if [[ -f "$srcMbox" ]]; then
+    echo "...writing mbox: $(shortenPath "$destMbox")"
+    if [[ $dryRun -eq 0 ]]; then
+      # If a directory exists where the mbox file should be, remove it.
+      if [[ -d "$destMbox" ]]; then
+        rm -rf "$destMbox"
+      fi
+      cp -a "$srcMbox" "$destMbox"
+    fi
+  else
+    # No mail at this level, but it may still have subfolders. Ensure a container file exists.
+    if [[ $dryRun -eq 0 ]]; then
+      if [[ ! -f "$destMbox" ]]; then
+        : > "$destMbox"
       fi
     fi
-  done
-
-  echo "Error: Could not detect Thunderbird profile directory."
-  exit 1
-}
-
-# Backup the profile Mail directory
-backupMailDir() {
-  local mailDir="${profileDir}/Mail"
-
-  if [[ "${dryRun}" -eq 1 ]]; then
-    echo "[] back up: $(shortenPath "${mailDir}")"
-    echo
-    return
   fi
 
-  if [[ -d "${mailDir}" ]]; then
-    local timestamp
-    timestamp=$(date +%Y%m%d-%H%M%S)
-    local backupDir="${mailDir}.backup-${timestamp}"
-    echo "Backing up: $(shortenPath "${mailDir}")"
-    echo "     to:    $(shortenPath "${backupDir}")"
-    run "cp -a \"${mailDir}\" \"${backupDir}\""
-    echo
-  else
-    echo "Warning: Mail directory not found at $(shortenPath "${mailDir}")"
-    echo
+  # Recurse into subfolders (directories other than readpst metadata)
+  local hasSubfolders=0
+  while IFS= read -r -d '' child; do
+    hasSubfolders=1
+    if [[ $dryRun -eq 0 ]]; then
+      mkdir -p "$destSbd"
+    fi
+    importReadpstFolder "$child" "$destSbd"
+  done < <(find "$srcDir" -mindepth 1 -maxdepth 1 -type d -print0)
+
+  # If there are subfolders, Thunderbird expects a .sbd directory.
+  # If there are none, we leave it as just an mbox file.
+  if [[ $hasSubfolders -eq 1 ]]; then
+    echo "...subfolders in: $folderName"
   fi
 }
 
-# Combine message files into mbox format
-createMboxFromDirectory() {
-  local srcDir="$1"
-  local destFile="$2"
-
-  if [[ "${dryRun}" -eq 1 ]]; then
-    echo "     [] create: $(shortenPath "${destFile}")"
-    return
-  fi
-  
-  # Build a proper mbox with "From " separators
-  : > "${destFile}"  # truncate/create
-
-  (
-    cd "${srcDir}" || exit 1
-    # Only include regular files, ignore subdirectories
-    find . -maxdepth 1 -type f -printf '%f\n' | sort -n
-  ) | while read -r msgFile; do
-    # Simple mbox separator; Thunderbird uses message headers for real dates
-    printf 'From - %s\n' "$(date)" >> "${destFile}"
-    cat "${srcDir}/${msgFile}" >> "${destFile}"
-    printf '\n' >> "${destFile}"
-  done
-}
-
-# Import an individual tree (Inbox, Sent Items, etc.)
 importTree() {
-  local importName="$1"
-  local srcBase="${sourceRoot}/${importName}"
+  local tree="$1"
+  local src="$sourceRoot/$tree"
 
-  if [[ ! -d "${srcBase}" ]]; then
-    echo "Skipping missing import: ${importName}"
-    echo
-    return
+  echo "Importing tree: $tree"
+  echo "  from: $(shortenPath "$src")"
+  echo "  to:   $(shortenPath "$localFolders")"
+
+  local dstRootMbox="$localFolders/$tree"
+  local dstRootSbd="$localFolders/${tree}.sbd"
+
+  if [[ $dryRun -eq 0 ]]; then
+    # Ensure root container exists and is a FILE
+    if [[ -d "$dstRootMbox" ]]; then
+      rm -rf "$dstRootMbox"
+    fi
+    if [[ ! -f "$dstRootMbox" ]]; then
+      : > "$dstRootMbox"
+    fi
+
+    # Recreate the .sbd container for this import
+    rm -rf "$dstRootSbd"
+    mkdir -p "$dstRootSbd"
+
+    # Remove root index so Thunderbird rebuilds
+    rm -f "$localFolders/${tree}.msf"
   fi
 
-  echo "=== Importing ${importName} ==="
+  # Import each top-level folder from the readpst export
+  while IFS= read -r -d '' top; do
+    importReadpstFolder "$top" "$dstRootSbd"
+  done < <(find "$src" -mindepth 1 -maxdepth 1 -type d -print0)
 
-  local localFolders="${profileDir}/Mail/Local Folders"
-  local rootMailbox="${localFolders}/${importName}"
-  local rootSbd="${rootMailbox}.sbd"
-
-  if [[ "${dryRun}" -eq 1 ]]; then
-    echo "[] create mailbox and folder: ${rootMailbox}"
-  else
-    mkdir -p "${localFolders}"
-    touch "${rootMailbox}"
-    mkdir -p "${rootSbd}"
+  if [[ $dryRun -eq 0 ]]; then
+    # Remove any copied indexes (Thunderbird will rebuild)
+    find "$dstRootSbd" -type f -name "*.msf" -delete
   fi
-
-  # Walk subdirectories
-  while IFS= read -r -d '' dir; do
-    local relPath="${dir#${srcBase}}"
-    relPath="${relPath#/}"
-
-    # Skip Deleted Items folders
-    if [[ "${relPath}" == "Deleted Items"* ]]; then
-      echo "  -> Skipping Deleted Items folder: $(shortenPath "${relPath}")"
-      continue
-    fi
-
-    [[ -z "${relPath}" ]] && continue
-
-    # Count regular files and subdirectories in this folder
-    local fileCount dirCount
-    fileCount=$(find "${dir}" -maxdepth 1 -type f | wc -l)
-    dirCount=$(find "${dir}" -mindepth 1 -maxdepth 1 -type d | wc -l)
-
-    # Log what we're looking at
-    echo "  -> $(shortenPath "${relPath}") (${fileCount} files, ${dirCount} subfolders)"
-
-    # If it has subdirectories but no files, it's just a container → skip as leaf
-    if [[ "${fileCount}" -eq 0 && "${dirCount}" -gt 0 ]]; then
-      continue
-    fi
-
-    # If it has neither files nor subdirectories, it's empty → skip
-    if [[ "${fileCount}" -eq 0 && "${dirCount}" -eq 0 ]]; then
-      continue
-    fi
-
-    IFS='/' read -r -a parts <<< "${relPath}"
-    local parent="${rootSbd}"
-
-    # build parent chain under Local Folders/importName.sbd
-    for (( i=0; i<${#parts[@]}-1; i++ )); do
-      local folder="${parts[$i]}"
-      if [[ "${dryRun}" -eq 1 ]]; then
-        echo "     [] create parent: $(shortenPath "${parent}/${folder}")"
-      else
-        touch "${parent}/${folder}"
-        mkdir -p "${parent}/${folder}.sbd"
-      fi
-      parent="${parent}/${folder}.sbd"
-    done
-
-    local leaf="${parts[-1]}"
-    local destMbox="${parent}/${leaf}"
-
-    echo "     => $(shortenPath "${destMbox}")"
-    createMboxFromDirectory "${dir}" "${destMbox}"
-
-  done < <(find "${srcBase}" -type d -print0)
 
   echo
 }
 
-# Truncate a path to the last characters so total length ≤ 110
-shortenPath() {
-  local fullPath="$1"
-  local max=90
-
-  local len=${#fullPath}
-  if (( len <= max )); then
-    echo "$fullPath"
-  else
-    # Keep last max-20 characters and prefix with …
-    local tail="${fullPath: -(max-20)}"
-    echo "...${tail}"
-  fi
-}
-
+# ------------------------------------------------------------------
 # Main
+# ------------------------------------------------------------------
+
+if [[ ! -d "$sourceRoot" ]]; then
+  echo "ERROR: source directory not found: $sourceRoot" >&2
+  exit 1
+fi
+
 findThunderbirdProfile
-echo "Using profile:       $(shortenPath "${profileDir}")"
-echo "Local Folders path:  $(shortenPath "${profileDir}/Mail/Local Folders")"
+localFolders="$profileDir/Mail/Local Folders"
+
+if [[ ! -d "$localFolders" ]]; then
+  echo "ERROR: Thunderbird Local Folders not found: $localFolders" >&2
+  exit 1
+fi
+
+echo "Using profile:      $(shortenPath "$profileDir")"
+echo "Local Folders path: $(shortenPath "$localFolders")"
+echo "Source root:        $(shortenPath "$sourceRoot")"
 echo
 
-backupMailDir
+mapfile -t imports < <(find "$sourceRoot" -mindepth 1 -maxdepth 1 -type d -printf "%f
+" | sort)
 
-for importName in "${imports[@]}"; do
-  importTree "${importName}"
+if [[ ${#imports[@]} -eq 0 ]]; then
+  echo "No PST import directories found in $(shortenPath "$sourceRoot")"
+  exit 0
+fi
+
+backupLocalFolders "$localFolders"
+echo
+
+for tree in "${imports[@]}"; do
+  importTree "$tree"
 done
 
-echo "Import complete. Restart Thunderbird to see:"
-printf "  - %s\n" "${imports[@]}"
+echo "Import complete."
+echo "Restart Thunderbird to view the imported folders under Local Folders."
