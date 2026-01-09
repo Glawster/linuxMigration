@@ -753,4 +753,4 @@ def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str =
                 imageWithDates.append((img, now))
     
     imageWithDates.sort(key=lambda x: x[1])
-    return [img for img, _ in imageWithDates]
+    return imageWithDates
