@@ -159,6 +159,46 @@ def getStyleFolders(trainingRoot: Path, styleNameFilter: Optional[str]) -> List[
     return sorted([p for p in trainingRoot.iterdir() if p.is_dir()])
 
 
+def formatIndex(index: int) -> str:
+    """
+    Format an index number with zero-padding to a minimum of 2 digits.
+    
+    Args:
+        index: Index number to format
+        
+    Returns:
+        Zero-padded string with minimum 2 digits (e.g., "01", "02", "99", "123")
+        
+    Examples:
+        formatIndex(1) -> "01"
+        formatIndex(99) -> "99"
+        formatIndex(123) -> "123"
+    """
+    return f"{index:02d}"
+
+
+def listTopLevelImages(styleDir: Path) -> List[Path]:
+    """
+    List all image files directly in the style directory (not in subdirectories).
+    
+    Args:
+        styleDir: Style directory to scan
+        
+    Returns:
+        Sorted list of image file paths at the top level of the directory
+        
+    Note:
+        Excludes images in subdirectories like 10_styleName, output, originals
+    """
+    if not styleDir.exists() or not styleDir.is_dir():
+        return []
+    
+    images = []
+    for entry in styleDir.iterdir():
+        if entry.is_file() and isImageFile(entry):
+            images.append(entry)
+    
+    return sorted(images)
 
 
 
