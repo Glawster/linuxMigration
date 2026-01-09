@@ -718,7 +718,7 @@ def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str =
         prefix: Logging prefix for debug messages
         
     Returns:
-        New list of image paths sorted by date (oldest first)
+        List of (imagePath, datetime) tuples sorted by date (oldest first)
         
     Note:
         For better performance with large collections, this function

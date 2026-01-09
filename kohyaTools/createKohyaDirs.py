@@ -161,18 +161,18 @@ def getStyleFolders(trainingRoot: Path, styleNameFilter: Optional[str]) -> List[
 
 def formatIndex(index: int) -> str:
     """
-    Format an index number as a zero-padded 2-digit string.
+    Format an index number with zero-padding to a minimum of 2 digits.
     
     Args:
         index: Index number to format
         
     Returns:
-        Zero-padded 2-digit string (e.g., "01", "02", "99")
+        Zero-padded string with minimum 2 digits (e.g., "01", "02", "99", "123")
         
     Examples:
         formatIndex(1) -> "01"
         formatIndex(99) -> "99"
-        formatIndex(123) -> "123"  # Numbers over 99 are not padded
+        formatIndex(123) -> "123"
     """
     return f"{index:02d}"
 
