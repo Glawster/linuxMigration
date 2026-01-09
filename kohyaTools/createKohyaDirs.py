@@ -49,7 +49,7 @@ from kohyaUtils import (
     updateExifDate,
     writeCaptionIfMissing,
 )
-from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateCfgFromArgs
+from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateConfigFromArgs
 
 
 # Constants for date formatting
@@ -94,6 +94,15 @@ def parseArgs() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--check",
+        action="store_true",
+        help=(
+            "check existing kohya structure (10_style folders) and rename files/captions "
+            "that don't match the expected 'yyyymmdd-style-nn.ext' naming"
+        ),
+    )
+
+    parser.add_argument(
         "--dry-run",
         dest="dryRun",
         action="store_true",
@@ -124,32 +133,6 @@ def parseArgs() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def updateConfigFromArgs(args: argparse.Namespace) -> bool:
-    """
-    Update configuration file with command-line arguments.
-    
-    Args:
-        args: Parsed command-line arguments
-        
-    Returns:
-        True if configuration was changed, False otherwise
-    """
-    cfg = loadConfig()
-
-    updates = {
-        "trainingRoot": str(args.trainingRoot),
-        "captionTemplate": args.captionTemplate,
-        "captionExtension": args.captionExtension,
-        "includeOriginalsDir": bool(args.includeOriginalsDir),
-    }
-
-    changed = updateCfgFromArgs(cfg, updates)
-    if changed and not args.dryRun:
-        saveConfig(cfg)
-
-    return changed
-
-
 def getStyleFolders(trainingRoot: Path, styleNameFilter: Optional[str]) -> List[Path]:
     """
     Get list of style folders to process.
@@ -176,40 +159,133 @@ def getStyleFolders(trainingRoot: Path, styleNameFilter: Optional[str]) -> List[
     return sorted([p for p in trainingRoot.iterdir() if p.is_dir()])
 
 
-def listTopLevelImages(styleDir: Path) -> List[Path]:
-    """
-    List all image files at the top level of styleDir (non-recursive).
-    
-    Args:
-        styleDir: Directory to scan for images
-        
-    Returns:
-        Sorted list of image file paths
-    """
-    images: List[Path] = []
-    for entry in styleDir.iterdir():
-        if entry.is_dir():
+
+
+
+def checkAndFixStyleFolder(
+    styleDir: Path,
+    captionExtension: str,
+    dryRun: bool,
+    prefix: str,
+) -> None:
+    """Validate and fix filenames inside style/10_styleName."""
+    styleName = styleDir.name
+    paths = resolveKohyaPaths(styleName=styleName, trainingRoot=styleDir.parent)
+
+    if not paths.trainDir.exists():
+        print(f"{prefix} check: missing train dir, skipping: {paths.trainDir}")
+        return
+
+    # Build list of images currently in trainDir
+    images = [p for p in sorted(paths.trainDir.iterdir()) if isImageFile(p)]
+    if not images:
+        return
+
+    # Sort by best-available date to keep renames stable
+    imagesWithDates = sortImagesByDate(images, updateExif=False, prefix=prefix)
+
+    # Cache used indices per date. Start with indices already present in correctly named files.
+    usedIndicesCache: dict[str, Set[int]] = {}
+    for img in images:
+        if isCorrectKohyaStem(img.stem, styleName=styleName):
+            dateStr = img.stem[:DATE_FORMAT_LENGTH]
+            if dateStr not in usedIndicesCache:
+                usedIndicesCache[dateStr] = set()
+            idx = parseKohyaStemIndex(img.stem, styleName=styleName)
+            if idx is not None:
+                usedIndicesCache[dateStr].add(idx)
+
+    # Track captions so we can also flag orphans
+    captions = {p.name: p for p in paths.trainDir.iterdir() if p.is_file() and p.suffix == captionExtension}
+
+    renamedImages = 0
+    renamedCaptions = 0
+
+    for imagePath, imageDate in imagesWithDates:
+        dateStr = imageDate.strftime("%Y%m%d")
+
+        # Ensure cache exists
+        if dateStr not in usedIndicesCache:
+            usedIndicesCache[dateStr] = findUsedIndices(paths.trainDir, styleName=styleName, dateStr=dateStr)
+        usedIndices = usedIndicesCache[dateStr]
+
+        # If already correct (and index already reserved), leave it.
+        if isCorrectKohyaStem(imagePath.stem, styleName=styleName) and imagePath.stem.startswith(dateStr):
             continue
-        if isImageFile(entry):
-            images.append(entry)
-    return sorted(images)
+
+        index = nextAvailableIndex(usedIndices)
+        targetStem = buildTargetStem(styleName=styleName, index=index, dateStr=dateStr)
+        destImagePath = (paths.trainDir / targetStem).with_suffix(imagePath.suffix.lower())
+
+        # Caption move/rename alongside image
+        srcCaptionPath = getCaptionPath(imagePath, captionExtension=captionExtension)
+        destCaptionPath = getCaptionPath(destImagePath, captionExtension=captionExtension)
+
+        if renameFileSafe(imagePath, destImagePath, dryRun=dryRun, prefix=prefix):
+            renamedImages += 1
+            # If we renamed the image, update imagePath reference for caption logic
+            imagePath = destImagePath
+
+        # Rename caption if it exists and destination doesn't
+        if srcCaptionPath.exists() and not destCaptionPath.exists():
+            if renameFileSafe(srcCaptionPath, destCaptionPath, dryRun=dryRun, prefix=prefix):
+                renamedCaptions += 1
+
+    # Report orphan captions
+    if captions:
+        imageStems = {p.stem for p in paths.trainDir.iterdir() if isImageFile(p)}
+        orphans = []
+        for capName, capPath in captions.items():
+            if capPath.stem not in imageStems:
+                orphans.append(capName)
+        if orphans:
+            print(f"{prefix} check: orphan captions in {paths.trainDir.name}: {len(orphans)} (e.g. {orphans[0]})")
+
+    if renamedImages or renamedCaptions:
+        print(f"{prefix} check: renamed images: {renamedImages}, captions: {renamedCaptions} in {styleName}")
 
 
-def formatIndex(index: int) -> str:
-    """
-    Format an index number with appropriate zero-padding.
-    
-    Args:
-        index: Index number to format
-        
-    Returns:
-        Formatted index string (2-3 digits with leading zeros)
-    """
-    if index < 100:
-        return f"{index:02d}"
-    if index < 1000:
-        return f"{index:03d}"
-    return str(index)
+
+def isCorrectKohyaStem(stem: str, styleName: str) -> bool:
+    """Return True if stem matches 'yyyymmdd-styleName-nn' for this style."""
+    pattern = re.compile(
+        rf"^\d{{{DATE_FORMAT_LENGTH}}}-{re.escape(styleName)}-(\d+)$",
+        re.IGNORECASE,
+    )
+    return bool(pattern.match(stem))
+
+
+def parseKohyaStemIndex(stem: str, styleName: str) -> Optional[int]:
+    """Parse the index from a correctly-named kohya stem, else None."""
+    pattern = re.compile(
+        rf"^\d{{{DATE_FORMAT_LENGTH}}}-{re.escape(styleName)}-(\d+)$",
+        re.IGNORECASE,
+    )
+    match = pattern.match(stem)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def renameFileSafe(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> bool:
+    """Rename srcPath to destPath, guarding against collisions. Returns True if renamed."""
+    if srcPath == destPath:
+        return False
+
+    if destPath.exists():
+        print(f"ERROR: destination exists, cannot rename: {srcPath.name} -> {destPath.name}")
+        return False
+
+    print(f"{prefix} rename: {srcPath.name} -> {destPath.name}")
+    if dryRun:
+        return True
+
+    destPath.parent.mkdir(parents=True, exist_ok=True)
+    srcPath.rename(destPath)
+    return True
 
 
 def buildTargetStem(styleName: str, index: int, dateStr: str = "") -> str:
@@ -464,14 +540,33 @@ def main() -> None:
         print(f"ERROR: {e}")
         sys.exit(1)
 
-    configChanged = updateConfigFromArgs(args)
+    cfg = loadConfig()
+    updates = {
+        "trainingRoot": str(args.trainingRoot),
+        "captionTemplate": args.captionTemplate,
+        "captionExtension": args.captionExtension,
+        "includeOriginalsDir": bool(args.includeOriginalsDir),
+    }
+    configChanged = updateConfigFromArgs(cfg, updates=updates)
     if configChanged and not args.dryRun:
+        saveConfig(cfg)
         print(f"{prefix} updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
 
     if args.undo:
         print(f"{prefix} undoing train structure in: {trainingRoot}")
         for styleDir in styleFolders:
             undoStyleFolder(styleDir=styleDir, dryRun=args.dryRun, prefix=prefix)
+        return
+
+    if args.check:
+        print(f"{prefix} checking existing kohya structure in: {trainingRoot}")
+        for styleDir in styleFolders:
+            checkAndFixStyleFolder(
+                styleDir=styleDir,
+                captionExtension=args.captionExtension,
+                dryRun=args.dryRun,
+                prefix=prefix,
+            )
         return
 
     print(f"{prefix} scanning: {trainingRoot}")

@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Set
 
-from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateCfgFromArgs
+from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateConfigFromArgs
 
 
 DEFAULT_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
@@ -104,7 +104,7 @@ def updateConfigFromArgs(args: argparse.Namespace) -> bool:
         "onAmbiguous": args.onAmbiguous,
     }
 
-    changed = updateCfgFromArgs(cfg, updates)
+    changed = updateConfigFromArgs(cfg, updates)
     if changed and not args.dryRun:
         saveConfig(cfg)
 

@@ -19,13 +19,13 @@ from __future__ import annotations
 import datetime
 import os
 import re
+import subprocess
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
-
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".cr2", ".nef"}
-
 
 @dataclass(frozen=True)
 class KohyaPaths:
@@ -35,7 +35,6 @@ class KohyaPaths:
     trainDir: Path
     outputDir: Path
     originalsDir: Path
-
 
 def resolveKohyaPaths(styleName: str, trainingRoot: Path) -> KohyaPaths:
     """
@@ -240,6 +239,32 @@ def validateTrainingSet(
 
     return problems
 
+def stripPngMetadata(
+    imagePath: Path,
+    dryRun: bool,
+    prefix: str,
+) -> None:
+    """Strip metadata from PNG files using ImageMagick."""
+    if imagePath.suffix.lower() != ".png":
+        return
+
+    if dryRun:
+        print(f"{prefix} would strip metadata: {imagePath.name}")
+        return
+
+    try:
+        subprocess.run(
+            ["convert", str(imagePath), "-strip", str(imagePath)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        print(f"{prefix} stripped metadata: {imagePath.name}")
+    except FileNotFoundError:
+        print("WARNING: imagemagick 'convert' not found, png metadata not stripped")
+    except subprocess.CalledProcessError:
+        print(f"WARNING: failed to strip metadata: {imagePath.name}")
+
 
 def moveFiles(
     sourceFiles: Sequence[Path],
@@ -344,7 +369,7 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> Optional[datetime.d
                 print(f"{prefix} exif-debug: getexif() not available: {e}")
                 # Try legacy _getexif()
                 try:
-                    exif = img._getexif()
+                    exif = img._getexif()  # type: ignore
                     print(f"{prefix} exif-debug: _getexif() succeeded, exif data: {bool(exif)}")
                 except AttributeError as e2:
                     print(f"{prefix} exif-debug: _getexif() failed: {e2}")
@@ -640,14 +665,17 @@ def getImageDate(imagePath: Path, updateExif: bool = False, prefix: str = "...")
         the function will attempt to write that date to the image's EXIF data.
         This requires the piexif library and only works with JPEG files.
     """
+    suffix = imagePath.suffix.lower()
+
     # Try EXIF first
-    try:
-        exifDate = extractExifDate(imagePath, prefix=prefix)
-        if exifDate:
-            print(f"{prefix} date: {imagePath.name} -> {exifDate.strftime('%Y-%m-%d')} [EXIF DateTimeOriginal]")
-            return exifDate
-    except (OSError, ValueError, ImportError):
-        pass
+    if suffix in ['.jpg', '.jpeg']:
+        try:
+            exifDate = extractExifDate(imagePath, prefix=prefix)
+            if exifDate:
+                print(f"{prefix} date: {imagePath.name} -> {exifDate.strftime('%Y-%m-%d')} [EXIF DateTimeOriginal]")
+                return exifDate
+        except (OSError, ValueError, ImportError):
+            pass
     
     # Try filename parsing
     try:
@@ -676,8 +704,8 @@ def getImageDate(imagePath: Path, updateExif: bool = False, prefix: str = "...")
         print(f"{prefix} date: {imagePath.name} -> {now.strftime('%Y-%m-%d')} [current time - fallback]")
         return now
 
+def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str = "...") -> List[Tuple[Path, datetime.datetime]]:
 
-def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str = "...") -> List[Path]:
     """
     Sort images by their best available date.
     
@@ -703,14 +731,26 @@ def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str =
     """
     imageWithDates = []
     for img in images:
-        try:
-            date = getImageDate(img, updateExif=updateExif, prefix=prefix)
-            imageWithDates.append((img, date))
-        except (OSError, ValueError, ImportError):
-            # If any error occurs, use current time as fallback
-            now = datetime.datetime.now()
-            print(f"{prefix} date: {img.name} -> {now.strftime('%Y-%m-%d')} [error fallback]")
-            imageWithDates.append((img, now))
+        suffix = img.suffix.lower()
+        if suffix in ('.jpg', '.jpeg'):
+            try:
+                date = getImageDate(img, updateExif=updateExif, prefix=prefix)
+                imageWithDates.append((img, date))
+            except (OSError, ValueError, ImportError):
+                # If any error occurs, use current time as fallback
+                now = datetime.datetime.now()
+                print(f"{prefix} date: {img.name} -> {now.strftime('%Y-%m-%d')} [error fallback]")
+                imageWithDates.append((img, now))
+
+        else:
+            # For non-JPEGs, skip EXIF and use filename/mtime only
+            try:
+                date = getImageDate(img, updateExif=False, prefix=prefix)
+                imageWithDates.append((img, date))
+            except (OSError, ValueError):
+                now = datetime.datetime.now()
+                print(f"{prefix} date: {img.name} -> {now.strftime('%Y-%m-%d')} [error fallback]")
+                imageWithDates.append((img, now))
     
     imageWithDates.sort(key=lambda x: x[1])
     return [img for img, _ in imageWithDates]

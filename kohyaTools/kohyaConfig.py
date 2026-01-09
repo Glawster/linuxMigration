@@ -94,7 +94,7 @@ def getCfgValue(cfg: Dict[str, Any], key: str, defaultValue: Any) -> Any:
     return cfg.get(key, defaultValue)
 
 
-def updateCfgFromArgs(cfg: Dict[str, Any], updates: Dict[str, Any]) -> bool:
+def updateConfigFromArgs(cfg: Dict[str, Any], updates: Dict[str, Any]) -> bool:
     """
     Update cfg in-place for keys in updates where value is not None and differs.
     
