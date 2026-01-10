@@ -239,7 +239,7 @@ def validateTrainingSet(
 
     return problems
 
-def stripPngMetadata(
+def stripPNGMetadata(
     imagePath: Path,
     dryRun: bool,
     prefix: str,
