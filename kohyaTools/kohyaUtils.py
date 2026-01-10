@@ -239,7 +239,7 @@ def validateTrainingSet(
 
     return problems
 
-def stripPngMetadata(
+def stripPNGMetadata(
     imagePath: Path,
     dryRun: bool,
     prefix: str,
@@ -248,22 +248,20 @@ def stripPngMetadata(
     if imagePath.suffix.lower() != ".png":
         return
 
-    if dryRun:
-        print(f"{prefix} would strip metadata: {imagePath.name}")
-        return
-
-    try:
-        subprocess.run(
-            ["convert", str(imagePath), "-strip", str(imagePath)],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+    if not dryRun:
+        try:
+            subprocess.run(
+                ["convert", str(imagePath), "-strip", str(imagePath)],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except FileNotFoundError:
+            print("WARNING: imagemagick 'convert' not found, png metadata not stripped")
+        except subprocess.CalledProcessError:
+            print(f"WARNING: failed to strip metadata: {imagePath.name}")
+    else:
         print(f"{prefix} stripped metadata: {imagePath.name}")
-    except FileNotFoundError:
-        print("WARNING: imagemagick 'convert' not found, png metadata not stripped")
-    except subprocess.CalledProcessError:
-        print(f"WARNING: failed to strip metadata: {imagePath.name}")
 
 
 def moveFiles(

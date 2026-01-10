@@ -48,6 +48,7 @@ from kohyaUtils import (
     sortImagesByDate,
     updateExifDate,
     writeCaptionIfMissing,
+    stripPNGMetadata
 )
 from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateConfigFromArgs
 
@@ -227,6 +228,7 @@ def checkAndFixStyleFolder(
     # Cache used indices per date. Start with indices already present in correctly named files.
     usedIndicesCache: dict[str, Set[int]] = {}
     for img in images:
+        stripPNGMetadata(imagePath=img, dryRun=dryRun, prefix=prefix)
         if isCorrectKohyaStem(img.stem, styleName=styleName):
             dateStr = img.stem[:DATE_FORMAT_LENGTH]
             if dateStr not in usedIndicesCache:
