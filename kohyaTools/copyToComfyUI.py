@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-copyToComfui.py
+copyToComfyUI.py
 
 Scan a training directory for images and:
 - detect faces
@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import os
 import shutil
 from dataclasses import dataclass
@@ -34,6 +33,8 @@ from typing import Iterable, Optional, Tuple
 
 import cv2
 
+from kohyaConfig import loadConfig, saveConfig, updateConfigFromArgs
+
 
 # ============================================================
 # logging helpers
@@ -41,14 +42,6 @@ import cv2
 
 def prefixFor(dryRun: bool) -> str:
     return "...[]" if dryRun else "..."
-
-
-def logInfo(msg: str) -> None:
-    print(msg)
-
-
-def logError(msg: str) -> None:
-    print(f"ERROR: {msg}")
 
 
 # ============================================================
@@ -96,24 +89,11 @@ class FramingConfig:
 
 
 # ============================================================
-# config loader
+# config helpers
 # ============================================================
 
-def loadKohyaConfig() -> dict:
-    configPath = Path.home() / ".config" / "kohya" / "kohyaConfig.json"
-    if not configPath.exists():
-        return {}
-
-    try:
-        with configPath.open("r", encoding="utf-8") as fh:
-            data = json.load(fh)
-            return data if isinstance(data, dict) else {}
-    except Exception as ex:
-        logError(f"Failed to load config: {configPath} ({ex})")
-        return {}
-
-
 def getNestedDictValue(config: dict, keys: Tuple[str, ...]) -> Optional[object]:
+    """Get a nested dictionary value using a tuple of keys."""
     node: object = config
     for k in keys:
         if not isinstance(node, dict):
@@ -238,7 +218,7 @@ def copyFile(srcPath: Path, destDir: Path, dryRun: bool, tag: str, extra: str = 
     prefix = prefixFor(dryRun)
     destPath = uniqueDestPath(destDir, srcPath)
     extraPart = f" {extra}" if extra else ""
-    logInfo(f"{prefix} {tag}: {srcPath} -> {destPath}{extraPart}")
+    print(f"{prefix} {tag}: {srcPath} -> {destPath}{extraPart}")
 
     if not dryRun:
         shutil.copy2(srcPath, destPath)
@@ -270,7 +250,7 @@ REPORT_FIELDS = [
 
 
 def defaultReportPath(sourceRoot: Path) -> Path:
-    return sourceRoot / "copyToComfui_report.csv"
+    return sourceRoot / "copyToComfyUI_report.csv"
 
 
 def writeCsvReport(reportPath: Path, rows: list[dict], dryRun: bool, append: bool) -> None:
@@ -287,7 +267,7 @@ def writeCsvReport(reportPath: Path, rows: list[dict], dryRun: bool, append: boo
         for row in rows:
             writer.writerow(row)
 
-    logInfo(f"{prefix} report: {reportPath}")
+    print(f"{prefix} report: {reportPath}")
 
 
 # ============================================================
@@ -303,31 +283,46 @@ def main() -> None:
     parser.add_argument("--include-portrait", action="store_true")
 
     parser.add_argument("--report", default="",
-                        help="CSV report path. Default: <trainingRoot>/copyToComfui_report.csv")
+                        help="CSV report path. Default: <trainingRoot>/copyToComfyUI_report.csv")
     parser.add_argument("--append-report", action="store_true",
                         help="Append to report if it already exists.")
 
     args = parser.parse_args()
 
-    config = loadKohyaConfig()
+    config = loadConfig()
 
     trainingRoot = config.get("trainingRoot")
     comfyInput = getNestedDictValue(config, ("comfyUI", "inputDir"))
     configSkipDirs = set(config.get("skipDirs", [])) if isinstance(config.get("skipDirs", []), list) else set()
 
+    # Track config changes for auto-save
+    configUpdates = {}
+    if args.source:
+        configUpdates["trainingRoot"] = args.source
+    if args.dest:
+        if "comfyUI" not in config:
+            config["comfyUI"] = {}
+        if config["comfyUI"].get("inputDir") != args.dest:
+            config["comfyUI"]["inputDir"] = args.dest
+
     if not (args.source or trainingRoot):
-        logError("Training root not provided (use --source or set trainingRoot in config)")
+        print("ERROR: Training root not provided (use --source or set trainingRoot in config)")
         raise SystemExit(2)
     if not (args.dest or comfyInput):
-        logError("ComfyUI input folder not provided (use --dest or set comfyUI.inputDir in config)")
+        print("ERROR: ComfyUI input folder not provided (use --dest or set comfyUI.inputDir in config)")
         raise SystemExit(2)
 
     sourceRoot = Path(args.source or trainingRoot).expanduser().resolve()
     destRoot = Path(args.dest or comfyInput).expanduser().resolve()
 
     if not sourceRoot.exists():
-        logError("Training root does not exist")
+        print("ERROR: Training root does not exist")
         raise SystemExit(2)
+    
+    # Update config if CLI args provided new values
+    configChanged = updateConfigFromArgs(config, configUpdates)
+    if configChanged and not args.dry_run:
+        saveConfig(config)
 
     skipDirs = set(DEFAULT_SKIP_DIRS)
     skipDirs.update(configSkipDirs)
@@ -360,12 +355,12 @@ def main() -> None:
     reportPath = Path(args.report).expanduser().resolve() if args.report else defaultReportPath(sourceRoot)
 
     prefix = prefixFor(args.dry_run)
-    logInfo(f"{prefix} training root: {sourceRoot}")
-    logInfo(f"{prefix} comfyui input: {destRoot}")
-    logInfo(f"{prefix} report path: {reportPath}")
-    logInfo(f"{prefix} lowres thresholds: minShortSide={lowResCfg.minShortSide}, minPixels={lowResCfg.minPixels}")
-    logInfo(f"{prefix} framing thresholds: fullBodyMaxFaceRatio={framingCfg.fullBodyMaxFaceRatio}, "
-            f"halfBodyMaxFaceRatio={framingCfg.halfBodyMaxFaceRatio}")
+    print(f"{prefix} training root: {sourceRoot}")
+    print(f"{prefix} comfyui input: {destRoot}")
+    print(f"{prefix} report path: {reportPath}")
+    print(f"{prefix} lowres thresholds: minShortSide={lowResCfg.minShortSide}, minPixels={lowResCfg.minPixels}")
+    print(f"{prefix} framing thresholds: fullBodyMaxFaceRatio={framingCfg.fullBodyMaxFaceRatio}, "
+          f"halfBodyMaxFaceRatio={framingCfg.halfBodyMaxFaceRatio}")
 
     rows: list[dict] = []
 
@@ -472,14 +467,14 @@ def main() -> None:
             errors += 1
             row["error"] = str(ex)
             rows.append(row)
-            logError(f"Failed to process {imagePath}: {ex}")
+            print(f"ERROR: Failed to process {imagePath}: {ex}")
 
     writeCsvReport(reportPath, rows, args.dry_run, append=args.append_report)
 
-    logInfo(f"{prefix} scanned: {scanned}")
-    logInfo(f"{prefix} matched: {matched}")
-    logInfo(f"{prefix} copied: {copied}")
-    logInfo(f"{prefix} errors: {errors}")
+    print(f"{prefix} scanned: {scanned}")
+    print(f"{prefix} matched: {matched}")
+    print(f"{prefix} copied: {copied}")
+    print(f"{prefix} errors: {errors}")
 
 
 if __name__ == "__main__":
