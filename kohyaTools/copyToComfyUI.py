@@ -4,16 +4,27 @@ copyToComfui.py
 
 Scan a training directory for images and:
 - detect faces
-- classify faces into full-body / half-body / portrait
+- classify faces into full-body / half-body / portrait (heuristic)
 - detect low-resolution images
 - copy matches into ComfyUI input subfolders
+- write a CSV report
 
 Config (optional): ~/.config/kohya/kohyaConfig.json
+
+Example config additions:
+{
+  "trainingRoot": "/mnt/backup",
+  "comfyUI": { "inputDir": "/home/andy/Source/ComfyUI/input" },
+  "skipDirs": [".wastebasket", ".Trash", "@eaDir"],
+  "lowRes": { "minShortSide": 768, "minPixels": 589824 },
+  "framing": { "fullBodyMaxFaceRatio": 0.18, "halfBodyMaxFaceRatio": 0.35 }
+}
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import shutil
@@ -162,15 +173,18 @@ def detectLargestFace(
     return (int(x), int(y), int(w), int(h), int(imgW), int(imgH))
 
 
-def classifyFraming(largestFace, cfg: FramingConfig) -> str:
+def classifyFraming(largestFace, cfg: FramingConfig) -> Tuple[str, float]:
+    """
+    Returns (framing, faceRatio) where faceRatio = faceHeight / imageHeight
+    """
     _, _, _, faceH, _, imgH = largestFace
     ratio = faceH / float(imgH)
 
     if ratio <= cfg.fullBodyMaxFaceRatio:
-        return "full_body"
+        return ("full_body", ratio)
     if ratio <= cfg.halfBodyMaxFaceRatio:
-        return "half_body"
-    return "portrait"
+        return ("half_body", ratio)
+    return ("portrait", ratio)
 
 
 # ============================================================
@@ -220,7 +234,7 @@ def uniqueDestPath(destDir: Path, srcPath: Path) -> Path:
         i += 1
 
 
-def copyFile(srcPath: Path, destDir: Path, dryRun: bool, tag: str, extra: str = "") -> None:
+def copyFile(srcPath: Path, destDir: Path, dryRun: bool, tag: str, extra: str = "") -> Path:
     prefix = prefixFor(dryRun)
     destPath = uniqueDestPath(destDir, srcPath)
     extraPart = f" {extra}" if extra else ""
@@ -229,18 +243,69 @@ def copyFile(srcPath: Path, destDir: Path, dryRun: bool, tag: str, extra: str = 
     if not dryRun:
         shutil.copy2(srcPath, destPath)
 
+    return destPath
+
+
+# ============================================================
+# report helpers
+# ============================================================
+
+REPORT_FIELDS = [
+    "srcPath",
+    "destPath",
+    "bucket",
+    "copied",
+    "hasFace",
+    "framing",
+    "faceRatio",
+    "isLowRes",
+    "width",
+    "height",
+    "shortSide",
+    "pixels",
+    "lowResMinShortSide",
+    "lowResMinPixels",
+    "error",
+]
+
+
+def defaultReportPath(sourceRoot: Path) -> Path:
+    return sourceRoot / "copyToComfui_report.csv"
+
+
+def writeCsvReport(reportPath: Path, rows: list[dict], dryRun: bool, append: bool) -> None:
+    prefix = prefixFor(dryRun)
+    reportPath.parent.mkdir(parents=True, exist_ok=True)
+
+    mode = "a" if append and reportPath.exists() else "w"
+    writeHeader = (mode == "w")
+
+    with reportPath.open(mode, newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=REPORT_FIELDS, extrasaction="ignore")
+        if writeHeader:
+            writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+    logInfo(f"{prefix} report: {reportPath}")
+
 
 # ============================================================
 # main
 # ============================================================
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Copy training images into ComfyUI buckets.")
+    parser = argparse.ArgumentParser(description="Copy training images into ComfyUI buckets and write a CSV report.")
     parser.add_argument("--source", help="Training root (overrides config)")
     parser.add_argument("--dest", help="ComfyUI input folder (overrides config)")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--skip-dir", action="append", default=[])
     parser.add_argument("--include-portrait", action="store_true")
+
+    parser.add_argument("--report", default="",
+                        help="CSV report path. Default: <trainingRoot>/copyToComfui_report.csv")
+    parser.add_argument("--append-report", action="store_true",
+                        help="Append to report if it already exists.")
 
     args = parser.parse_args()
 
@@ -248,7 +313,14 @@ def main() -> None:
 
     trainingRoot = config.get("trainingRoot")
     comfyInput = getNestedDictValue(config, ("comfyUI", "inputDir"))
-    configSkipDirs = set(config.get("skipDirs", []))
+    configSkipDirs = set(config.get("skipDirs", [])) if isinstance(config.get("skipDirs", []), list) else set()
+
+    if not (args.source or trainingRoot):
+        logError("Training root not provided (use --source or set trainingRoot in config)")
+        raise SystemExit(2)
+    if not (args.dest or comfyInput):
+        logError("ComfyUI input folder not provided (use --dest or set comfyUI.inputDir in config)")
+        raise SystemExit(2)
 
     sourceRoot = Path(args.source or trainingRoot).expanduser().resolve()
     destRoot = Path(args.dest or comfyInput).expanduser().resolve()
@@ -261,9 +333,12 @@ def main() -> None:
     skipDirs.update(configSkipDirs)
     skipDirs.update(args.skip_dir)
 
+    lowResMinShort = int(getNestedDictValue(config, ("lowRes", "minShortSide")) or DEFAULT_MIN_SHORT_SIDE)
+    lowResMinPixels = int(getNestedDictValue(config, ("lowRes", "minPixels")) or DEFAULT_MIN_PIXELS)
+
     lowResCfg = LowResConfig(
-        minShortSide=int(getNestedDictValue(config, ("lowRes", "minShortSide")) or DEFAULT_MIN_SHORT_SIDE),
-        minPixels=int(getNestedDictValue(config, ("lowRes", "minPixels")) or DEFAULT_MIN_PIXELS),
+        minShortSide=lowResMinShort,
+        minPixels=lowResMinPixels,
     )
 
     framingCfg = FramingConfig(
@@ -274,38 +349,137 @@ def main() -> None:
     faceCfg = FaceDetectConfig()
     detector = loadDetector()
 
+    # output buckets
     facesFullDir = destRoot / "faces_full_body"
     facesHalfDir = destRoot / "faces_half_body"
     facesPortraitDir = destRoot / "faces_portrait"
     facesLowResDir = destRoot / "faces_lowres"
     lowResDir = destRoot / "lowres"
 
+    # report target
+    reportPath = Path(args.report).expanduser().resolve() if args.report else defaultReportPath(sourceRoot)
+
     prefix = prefixFor(args.dry_run)
     logInfo(f"{prefix} training root: {sourceRoot}")
     logInfo(f"{prefix} comfyui input: {destRoot}")
+    logInfo(f"{prefix} report path: {reportPath}")
+    logInfo(f"{prefix} lowres thresholds: minShortSide={lowResCfg.minShortSide}, minPixels={lowResCfg.minPixels}")
+    logInfo(f"{prefix} framing thresholds: fullBodyMaxFaceRatio={framingCfg.fullBodyMaxFaceRatio}, "
+            f"halfBodyMaxFaceRatio={framingCfg.halfBodyMaxFaceRatio}")
+
+    rows: list[dict] = []
+
+    scanned = 0
+    matched = 0
+    copied = 0
+    errors = 0
 
     for imagePath in iterImages(sourceRoot, skipDirs):
-        largestFace = detectLargestFace(imagePath, detector, faceCfg)
-        lowRes, w, h = isLowRes(imagePath, lowResCfg)
+        scanned += 1
 
-        sizeInfo = f"[{w}x{h}]" if (w and h) else ""
+        row = {
+            "srcPath": str(imagePath),
+            "destPath": "",
+            "bucket": "",
+            "copied": False,
+            "hasFace": False,
+            "framing": "",
+            "faceRatio": "",
+            "isLowRes": False,
+            "width": "",
+            "height": "",
+            "shortSide": "",
+            "pixels": "",
+            "lowResMinShortSide": lowResCfg.minShortSide,
+            "lowResMinPixels": lowResCfg.minPixels,
+            "error": "",
+        }
 
-        if largestFace:
-            framing = classifyFraming(largestFace, framingCfg)
-            _, _, _, faceH, _, imgH = largestFace
-            ratioInfo = f" faceRatio={faceH/imgH:.3f}"
+        try:
+            lowRes, w, h = isLowRes(imagePath, lowResCfg)
+            row["isLowRes"] = bool(lowRes)
 
-            if lowRes:
-                copyFile(imagePath, facesLowResDir, args.dry_run, "faces_lowres", f"{sizeInfo}{ratioInfo}")
-            elif framing == "full_body":
-                copyFile(imagePath, facesFullDir, args.dry_run, "face_full_body", f"{sizeInfo}{ratioInfo}")
-            elif framing == "half_body":
-                copyFile(imagePath, facesHalfDir, args.dry_run, "face_half_body", f"{sizeInfo}{ratioInfo}")
-            elif args.include_portrait:
-                copyFile(imagePath, facesPortraitDir, args.dry_run, "face_portrait", f"{sizeInfo}{ratioInfo}")
+            if w is not None and h is not None:
+                row["width"] = w
+                row["height"] = h
+                row["shortSide"] = min(w, h)
+                row["pixels"] = int(w) * int(h)
 
-        elif lowRes:
-            copyFile(imagePath, lowResDir, args.dry_run, "lowres", sizeInfo)
+            largestFace = detectLargestFace(imagePath, detector, faceCfg)
+            hasFace = largestFace is not None
+            row["hasFace"] = bool(hasFace)
+
+            destDir: Optional[Path] = None
+            bucket = ""
+            tag = ""
+            extra = ""
+
+            if hasFace:
+                framing, faceRatio = classifyFraming(largestFace, framingCfg)
+                row["framing"] = framing
+                row["faceRatio"] = f"{faceRatio:.4f}"
+
+                extra = f"[{w}x{h}] faceRatio={faceRatio:.3f}" if (w and h) else f"faceRatio={faceRatio:.3f}"
+
+                if lowRes:
+                    bucket = "faces_lowres"
+                    tag = "faces_lowres"
+                    destDir = facesLowResDir
+                else:
+                    if framing == "full_body":
+                        bucket = "faces_full_body"
+                        tag = "face_full_body"
+                        destDir = facesFullDir
+                    elif framing == "half_body":
+                        bucket = "faces_half_body"
+                        tag = "face_half_body"
+                        destDir = facesHalfDir
+                    else:
+                        if args.include_portrait:
+                            bucket = "faces_portrait"
+                            tag = "face_portrait"
+                            destDir = facesPortraitDir
+                        else:
+                            # Not copied, but still reportable
+                            bucket = "portrait_skipped"
+                            destDir = None
+
+            elif lowRes:
+                bucket = "lowres"
+                tag = "lowres"
+                destDir = lowResDir
+                extra = f"[{w}x{h}]" if (w and h) else ""
+
+            # no match -> skip report row unless you want full inventory
+            if not hasFace and not lowRes:
+                continue
+
+            matched += 1
+            row["bucket"] = bucket
+
+            if destDir is not None:
+                destPath = copyFile(imagePath, destDir, args.dry_run, tag, extra)
+                row["destPath"] = str(destPath)
+                row["copied"] = True
+                copied += 1
+            else:
+                row["destPath"] = ""
+                row["copied"] = False
+
+            rows.append(row)
+
+        except Exception as ex:
+            errors += 1
+            row["error"] = str(ex)
+            rows.append(row)
+            logError(f"Failed to process {imagePath}: {ex}")
+
+    writeCsvReport(reportPath, rows, args.dry_run, append=args.append_report)
+
+    logInfo(f"{prefix} scanned: {scanned}")
+    logInfo(f"{prefix} matched: {matched}")
+    logInfo(f"{prefix} copied: {copied}")
+    logInfo(f"{prefix} errors: {errors}")
 
 
 if __name__ == "__main__":
