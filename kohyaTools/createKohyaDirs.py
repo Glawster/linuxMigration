@@ -51,6 +51,10 @@ from kohyaUtils import (
     stripPNGMetadata
 )
 from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateConfigFromArgs
+from organiseMyProjects.logUtils import getLogger  # type: ignore
+
+logger = None  # type: ignore
+
 
 
 # Constants for date formatting
@@ -565,6 +569,10 @@ def main() -> None:
     args = parseArgs()
     prefix = "...[]" if args.dryRun else "..."
 
+    global logger
+    logger = getLogger("createKohyaDirs", includeConsole=True)
+
+
     # Check if PIL is available for EXIF extraction
     try:
         from PIL import Image
@@ -592,7 +600,7 @@ def main() -> None:
     configChanged = updateConfigFromArgs(cfg, updates=updates)
     if configChanged and not args.dryRun:
         saveConfig(cfg)
-        print(f"{prefix} updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
+        logger.info(f"{prefix} updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
 
     if args.undo:
         print(f"{prefix} undoing train structure in: {trainingRoot}")

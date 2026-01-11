@@ -25,6 +25,28 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
+
+def _log(level: str, message: str) -> None:
+    if logger is None:
+        print(message)
+        return
+    if level == "error":
+        logger.error(message)
+    elif level == "warning":
+        logger.warning(message)
+    else:
+        logger.info(message)
+
+
+logger = None  # global logger, set by caller
+
+
+def setLogger(externalLogger) -> None:
+    """Set a global logger for kohyaUtils."""
+    global logger
+    logger = externalLogger
+
+
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".cr2", ".nef"}
 
 @dataclass(frozen=True)
@@ -84,7 +106,16 @@ def ensureDirs(paths: KohyaPaths, includeOriginals: bool = False) -> None:
 
 def isImageFile(filePath: Path) -> bool:
     """Check if a file is a supported image type."""
-    return filePath.is_file() and filePath.suffix.lower() in IMAGE_EXTENSIONS
+    return filePath.is_file() and filePath.suffix.lower() in logger = None  # global logger, set by caller
+
+
+def setLogger(externalLogger) -> None:
+    """Set a global logger for kohyaUtils."""
+    global logger
+    logger = externalLogger
+
+
+IMAGE_EXTENSIONS
 
 
 def listImageFiles(folderPath: Path, recursive: bool = False) -> List[Path]:
@@ -257,11 +288,11 @@ def stripPNGMetadata(
                 stderr=subprocess.DEVNULL,
             )
         except FileNotFoundError:
-            print("WARNING: imagemagick 'convert' not found, png metadata not stripped")
+            _log("warning", "WARNING: imagemagick 'convert' not found, png metadata not stripped")
         except subprocess.CalledProcessError:
-            print(f"WARNING: failed to strip metadata: {imagePath.name}")
+            _log("warning", f"WARNING: failed to strip metadata: {imagePath.name}")
     else:
-        print(f"{prefix} stripped metadata: {imagePath.name}")
+        _log("info", f"{prefix} stripped metadata: {imagePath.name}")
 
 
 def moveFiles(

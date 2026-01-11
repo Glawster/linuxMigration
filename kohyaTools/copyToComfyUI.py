@@ -2,19 +2,32 @@
 """
 copyToComfyUI.py
 
-Scan a training directory for images and:
+Forward mode (default):
+- scan trainingRoot for images
 - detect faces
-- classify faces into full-body / half-body / portrait (heuristic)
+- classify framing into full-body / half-body / portrait (heuristic)
 - detect low-resolution images
-- copy matches into ComfyUI input subfolders
-- write a CSV report
+- bucket rules:
+    - if low-res => copy to input/lowres (regardless of face/framing)
+    - else if face => copy to input/faces_full_body or faces_half_body or faces_portrait
+- log what happened (no CSV report)
+
+Reverse mode (--reverse):
+- scan ALL folders under ComfyUI inputDir and (optionally) outputDir
+- ONLY act on directories whose name starts with "fixed"
+- for each image in fixed* folders, infer kohya style from filename and copy back to:
+    trainingRoot/<style>/10_<style>/<filename>
+- BEFORE overwrite, backup existing original by renaming it with suffix "__orig"
+- overwrite mode is always on; --dry-run shows operations without executing
 
 Config (optional): ~/.config/kohya/kohyaConfig.json
-
-Example config additions:
+Expected keys (examples):
 {
   "trainingRoot": "/mnt/backup",
-  "comfyUI": { "inputDir": "/home/andy/Source/ComfyUI/input" },
+  "comfyUI": {
+    "inputDir": "/home/andy/Source/ComfyUI/input",
+    "outputDir": "/home/andy/Source/ComfyUI/output"
+  },
   "skipDirs": [".wastebasket", ".Trash", "@eaDir"],
   "lowRes": { "minShortSide": 768, "minPixels": 589824 },
   "framing": { "fullBodyMaxFaceRatio": 0.18, "halfBodyMaxFaceRatio": 0.35 }
@@ -24,8 +37,8 @@ Example config additions:
 from __future__ import annotations
 
 import argparse
-import csv
 import os
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,15 +46,22 @@ from typing import Iterable, Optional, Tuple
 
 import cv2
 
-from kohyaConfig import loadConfig, saveConfig, updateConfigFromArgs
+from kohyaConfig import loadConfig, saveConfig, updateConfigFromArgs, DEFAULT_CONFIG_PATH  # type: ignore
+from organiseMyProjects.logUtils import getLogger  # type: ignore
 
 
 # ============================================================
-# logging helpers
+# module logger (initialised in main)
 # ============================================================
 
-def prefixFor(dryRun: bool) -> str:
-    return "...[]" if dryRun else "..."
+logger = None  # type: ignore
+prefix = ""  # type: ignore 
+
+# ============================================================
+# helpers
+# ============================================================
+
+# (no helpers)
 
 
 # ============================================================
@@ -63,6 +83,12 @@ DEFAULT_SKIP_DIRS = {
 
 DEFAULT_MIN_SHORT_SIDE = 768
 DEFAULT_MIN_PIXELS = 768 * 768
+
+# filename pattern: 20221217-pretty-01.png  OR  2022-12-17-pretty-01.png  OR  ...-01a.png
+STYLE_FROM_FILENAME_RE = re.compile(
+    r"^(?:\d{8}|\d{4}-\d{2}-\d{2})-(?P<style>.+?)-\d+(?:[a-z])?\.[^.]+$",
+    re.IGNORECASE,
+)
 
 
 # ============================================================
@@ -112,6 +138,28 @@ def iterImages(root: Path, skipDirs: set[str]) -> Iterable[Path]:
         for name in fileNames:
             p = Path(dirPath) / name
             if p.suffix.lower() in IMAGE_EXTS:
+                yield p
+
+
+def iterImagesAny(root: Path) -> Iterable[Path]:
+    """Recursive image iterator without skip-dirs (used for fixed folders)."""
+    for dirPath, _, fileNames in os.walk(root):
+        for name in fileNames:
+            p = Path(dirPath) / name
+            if p.suffix.lower() in IMAGE_EXTS:
+                yield p
+
+
+def isFixedFolder(path: Path) -> bool:
+    return path.is_dir() and path.name.lower().startswith("fixed")
+
+
+def iterFixedFolders(root: Path) -> Iterable[Path]:
+    """Yield all directories named fixed* under root (recursive)."""
+    for dirPath, dirNames, _ in os.walk(root):
+        for d in dirNames:
+            p = Path(dirPath) / d
+            if isFixedFolder(p):
                 yield p
 
 
@@ -215,10 +263,9 @@ def uniqueDestPath(destDir: Path, srcPath: Path) -> Path:
 
 
 def copyFile(srcPath: Path, destDir: Path, dryRun: bool, tag: str, extra: str = "") -> Path:
-    prefix = prefixFor(dryRun)
     destPath = uniqueDestPath(destDir, srcPath)
     extraPart = f" {extra}" if extra else ""
-    print(f"{prefix} {tag}: {srcPath} -> {destPath}{extraPart}")
+    logger.info(f"{prefix} {tag}: {srcPath} -> {destPath}{extraPart}")
 
     if not dryRun:
         shutil.copy2(srcPath, destPath)
@@ -227,47 +274,108 @@ def copyFile(srcPath: Path, destDir: Path, dryRun: bool, tag: str, extra: str = 
 
 
 # ============================================================
-# report helpers
+# reverse helpers (fixed -> trainingRoot)
 # ============================================================
 
-REPORT_FIELDS = [
-    "srcPath",
-    "destPath",
-    "bucket",
-    "copied",
-    "hasFace",
-    "framing",
-    "faceRatio",
-    "isLowRes",
-    "width",
-    "height",
-    "shortSide",
-    "pixels",
-    "lowResMinShortSide",
-    "lowResMinPixels",
-    "error",
-]
+def styleFromFilename(filePath: Path) -> Optional[str]:
+    m = STYLE_FROM_FILENAME_RE.match(filePath.name)
+    if not m:
+        return None
+    style = m.group("style").strip()
+    return style or None
 
 
-def defaultReportPath(sourceRoot: Path) -> Path:
-    return sourceRoot / "copyToComfyUI_report.csv"
+def uniqueBackupPath(originalPath: Path, suffix: str = "__orig") -> Path:
+    """
+    If /path/file.png exists, produce:
+      /path/file__orig.png
+    If that exists:
+      /path/file__orig_001.png
+    etc.
+    """
+    base = originalPath.stem
+    ext = originalPath.suffix
+    candidate = originalPath.with_name(f"{base}{suffix}{ext}")
+    if not candidate.exists():
+        return candidate
+
+    i = 1
+    while True:
+        candidate = originalPath.with_name(f"{base}{suffix}_{i:03d}{ext}")
+        if not candidate.exists():
+            return candidate
+        i += 1
 
 
-def writeCsvReport(reportPath: Path, rows: list[dict], dryRun: bool, append: bool) -> None:
-    prefix = prefixFor(dryRun)
-    reportPath.parent.mkdir(parents=True, exist_ok=True)
+def backupThenCopyReplace(srcFixed: Path, destOriginal: Path, dryRun: bool) -> None:
+    """
+    Always overwrite, but first backup any existing destOriginal by renaming it.
+    Then copy srcFixed to destOriginal.
+    """
 
-    mode = "a" if append and reportPath.exists() else "w"
-    writeHeader = (mode == "w")
+    destOriginal.parent.mkdir(parents=True, exist_ok=True)
 
-    with reportPath.open(mode, newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=REPORT_FIELDS, extrasaction="ignore")
-        if writeHeader:
-            writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
+    if destOriginal.exists():
+        backupPath = uniqueBackupPath(destOriginal, suffix="__orig")
+        logger.info(f"{prefix} backup: {destOriginal} -> {backupPath}")
+        if not dryRun:
+            destOriginal.rename(backupPath)
 
-    print(f"{prefix} report: {reportPath}")
+    logger.info(f"{prefix} replace: {srcFixed} -> {destOriginal}")
+    if not dryRun:
+        shutil.copy2(srcFixed, destOriginal)
+
+
+def reverseFromFixedFolders(
+    trainingRoot: Path,
+    comfyInput: Path,
+    comfyOutput: Optional[Path],
+    dryRun: bool,
+) -> None:
+
+    rootsToScan: list[Tuple[str, Path]] = [("input", comfyInput)]
+    if comfyOutput is not None:
+        rootsToScan.append(("output", comfyOutput))
+
+    fixedFolders: list[Tuple[str, Path]] = []
+    for label, root in rootsToScan:
+        if root.exists():
+            for f in iterFixedFolders(root):
+                fixedFolders.append((label, f))
+
+    if not fixedFolders:
+        logger.info(f"{prefix} no fixed folders found under input/output")
+        return
+
+    scanned = 0
+    replaced = 0
+    errors = 0
+
+    for label, fixedFolder in fixedFolders:
+        logger.info(f"{prefix} fixed folder ({label}): {fixedFolder}")
+
+        for fixedImg in iterImagesAny(fixedFolder):
+            scanned += 1
+
+            style = styleFromFilename(fixedImg)
+            if not style:
+                errors += 1
+                logger.error(f"Cannot determine style from filename: {fixedImg.name}")
+                continue
+
+            destDir = trainingRoot / style / f"10_{style}"
+            destOriginal = destDir / fixedImg.name
+
+            try:
+                backupThenCopyReplace(fixedImg, destOriginal, dryRun)
+                replaced += 1
+            except Exception as ex:
+                errors += 1
+                logger.error(f"Failed to replace {destOriginal.name}: {ex}")
+
+    logger.info(f"{prefix} reversing scanned: {scanned}")
+    logger.info(f"{prefix} reversing replaced: {replaced}")
+    logger.info(f"{prefix} reversing errors: {errors}")
 
 
 # ============================================================
@@ -275,55 +383,101 @@ def writeCsvReport(reportPath: Path, rows: list[dict], dryRun: bool, append: boo
 # ============================================================
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Copy training images into ComfyUI buckets and write a CSV report.")
+    global logger
+
+    parser = argparse.ArgumentParser(description="Copy training images into ComfyUI buckets (logging only, no CSV report).")
     parser.add_argument("--source", help="Training root (overrides config)")
     parser.add_argument("--dest", help="ComfyUI input folder (overrides config)")
-    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--output", help="ComfyUI output folder (overrides config)")
+    parser.add_argument(
+        "--dry-run",
+        dest="dryRun",
+        action="store_true",
+        help="show what would be done without changing anything",
+    )
     parser.add_argument("--skip-dir", action="append", default=[])
     parser.add_argument("--include-portrait", action="store_true")
-
-    parser.add_argument("--report", default="",
-                        help="CSV report path. Default: <trainingRoot>/copyToComfyUI_report.csv")
-    parser.add_argument("--append-report", action="store_true",
-                        help="Append to report if it already exists.")
+    parser.add_argument("--reverse", action="store_true",
+                        help="Reverse mode: scan fixed* folders under ComfyUI input/output and replace originals in trainingRoot (with backup).")
 
     args = parser.parse_args()
 
+    logger = getLogger("copyToComfyUI", includeConsole=True)
+
+    global prefix
+    prefix = "...[]" if args.dryRun else "..."
+
+    logger.info(f"{prefix} dry run enabled")
+
     config = loadConfig()
 
-    trainingRoot = config.get("trainingRoot")
-    comfyInput = getNestedDictValue(config, ("comfyUI", "inputDir"))
+    # resolve config values
+    trainingRootCfg = config.get("trainingRoot")
+    comfyInputCfg = getNestedDictValue(config, ("comfyUI", "inputDir"))
+    comfyOutputCfg = getNestedDictValue(config, ("comfyUI", "outputDir"))
     configSkipDirs = set(config.get("skipDirs", [])) if isinstance(config.get("skipDirs", []), list) else set()
 
-    # Track config changes for auto-save
-    configUpdates = {}
+    # track config changes for auto-save
+    configUpdates: dict = {}
+
     if args.source:
         configUpdates["trainingRoot"] = args.source
+
     if args.dest:
         if "comfyUI" not in config:
             config["comfyUI"] = {}
         if config["comfyUI"].get("inputDir") != args.dest:
             config["comfyUI"]["inputDir"] = args.dest
 
-    if not (args.source or trainingRoot):
-        print("ERROR: Training root not provided (use --source or set trainingRoot in config)")
+    if args.output:
+        if "comfyUI" not in config:
+            config["comfyUI"] = {}
+        if config["comfyUI"].get("outputDir") != args.output:
+            config["comfyUI"]["outputDir"] = args.output
+
+    # validate required paths
+    trainingRootVal = args.source or trainingRootCfg
+    comfyInputVal = args.dest or comfyInputCfg
+    comfyOutputVal = args.output or comfyOutputCfg
+
+    if not trainingRootVal:
+        logger.error("Training root not provided (use --source or set trainingRoot in config)")
         raise SystemExit(2)
-    if not (args.dest or comfyInput):
-        print("ERROR: ComfyUI input folder not provided (use --dest or set comfyUI.inputDir in config)")
+    if not comfyInputVal:
+        logger.error("ComfyUI input folder not provided (use --dest or set comfyUI.inputDir in config)")
         raise SystemExit(2)
 
-    sourceRoot = Path(args.source or trainingRoot).expanduser().resolve()
-    destRoot = Path(args.dest or comfyInput).expanduser().resolve()
+    trainingRoot = Path(str(trainingRootVal)).expanduser().resolve()
+    comfyInput = Path(str(comfyInputVal)).expanduser().resolve()
+    comfyOutput = Path(str(comfyOutputVal)).expanduser().resolve() if comfyOutputVal else None
 
-    if not sourceRoot.exists():
-        print("ERROR: Training root does not exist")
+    if not trainingRoot.exists():
+        logger.error("Training root does not exist")
         raise SystemExit(2)
-    
-    # Update config if CLI args provided new values
+
+    # update config if CLI args provided new values
     configChanged = updateConfigFromArgs(config, configUpdates)
-    if configChanged and not args.dry_run:
+    if configChanged and not args.dryRun:
         saveConfig(config)
+    if configChanged:
+        logger.info(f"{prefix} updated config: {DEFAULT_CONFIG_PATH}")
 
+    logger.info(f"{prefix} training root: {trainingRoot}")
+    logger.info(f"{prefix} comfyui input: {comfyInput}")
+    if comfyOutput is not None:
+        logger.info(f"{prefix} comfyui output: {comfyOutput}")
+
+    # reverse mode: fixed -> trainingRoot (with backup)
+    if args.reverse:
+        reverseFromFixedFolders(
+            trainingRoot=trainingRoot,
+            comfyInput=comfyInput,
+            comfyOutput=comfyOutput,
+            dryRun=args.dryRun,
+        )
+        return
+
+    # forward mode: trainingRoot -> comfyui input buckets
     skipDirs = set(DEFAULT_SKIP_DIRS)
     skipDirs.update(configSkipDirs)
     skipDirs.update(args.skip_dir)
@@ -344,137 +498,77 @@ def main() -> None:
     faceCfg = FaceDetectConfig()
     detector = loadDetector()
 
-    # output buckets
-    facesFullDir = destRoot / "faces_full_body"
-    facesHalfDir = destRoot / "faces_half_body"
-    facesPortraitDir = destRoot / "faces_portrait"
-    facesLowResDir = destRoot / "faces_lowres"
-    lowResDir = destRoot / "lowres"
+    # buckets (under ComfyUI input)
+    fullBodyDir = comfyInput / "full_body"
+    halfBodyDir = comfyInput / "half_body"
+    portraitDir = comfyInput / "portrait"
+    lowResDir = comfyInput / "lowres"
 
-    # report target
-    reportPath = Path(args.report).expanduser().resolve() if args.report else defaultReportPath(sourceRoot)
-
-    prefix = prefixFor(args.dry_run)
-    print(f"{prefix} training root: {sourceRoot}")
-    print(f"{prefix} comfyui input: {destRoot}")
-    print(f"{prefix} report path: {reportPath}")
-    print(f"{prefix} lowres thresholds: minShortSide={lowResCfg.minShortSide}, minPixels={lowResCfg.minPixels}")
-    print(f"{prefix} framing thresholds: fullBodyMaxFaceRatio={framingCfg.fullBodyMaxFaceRatio}, "
-          f"halfBodyMaxFaceRatio={framingCfg.halfBodyMaxFaceRatio}")
-
-    rows: list[dict] = []
+    logger.info(f"{prefix} lowres thresholds: minShortSide={lowResCfg.minShortSide}, minPixels={lowResCfg.minPixels}")
+    logger.info(
+        f"{prefix} framing thresholds: fullBodyMaxFaceRatio={framingCfg.fullBodyMaxFaceRatio}, "
+        f"halfBodyMaxFaceRatio={framingCfg.halfBodyMaxFaceRatio}"
+    )
 
     scanned = 0
     matched = 0
     copied = 0
     errors = 0
 
-    for imagePath in iterImages(sourceRoot, skipDirs):
+    for imagePath in iterImages(trainingRoot, skipDirs):
         scanned += 1
-
-        row = {
-            "srcPath": str(imagePath),
-            "destPath": "",
-            "bucket": "",
-            "copied": False,
-            "hasFace": False,
-            "framing": "",
-            "faceRatio": "",
-            "isLowRes": False,
-            "width": "",
-            "height": "",
-            "shortSide": "",
-            "pixels": "",
-            "lowResMinShortSide": lowResCfg.minShortSide,
-            "lowResMinPixels": lowResCfg.minPixels,
-            "error": "",
-        }
 
         try:
             lowRes, w, h = isLowRes(imagePath, lowResCfg)
-            row["isLowRes"] = bool(lowRes)
-
-            if w is not None and h is not None:
-                row["width"] = w
-                row["height"] = h
-                row["shortSide"] = min(w, h)
-                row["pixels"] = int(w) * int(h)
 
             largestFace = detectLargestFace(imagePath, detector, faceCfg)
             hasFace = largestFace is not None
-            row["hasFace"] = bool(hasFace)
 
             destDir: Optional[Path] = None
-            bucket = ""
             tag = ""
             extra = ""
 
-            if hasFace:
-                framing, faceRatio = classifyFraming(largestFace, framingCfg)
-                row["framing"] = framing
-                row["faceRatio"] = f"{faceRatio:.4f}"
-
-                extra = f"[{w}x{h}] faceRatio={faceRatio:.3f}" if (w and h) else f"faceRatio={faceRatio:.3f}"
-
-                if lowRes:
-                    bucket = "faces_lowres"
-                    tag = "faces_lowres"
-                    destDir = facesLowResDir
-                else:
-                    if framing == "full_body":
-                        bucket = "faces_full_body"
-                        tag = "face_full_body"
-                        destDir = facesFullDir
-                    elif framing == "half_body":
-                        bucket = "faces_half_body"
-                        tag = "face_half_body"
-                        destDir = facesHalfDir
-                    else:
-                        if args.include_portrait:
-                            bucket = "faces_portrait"
-                            tag = "face_portrait"
-                            destDir = facesPortraitDir
-                        else:
-                            # Not copied, but still reportable
-                            bucket = "portrait_skipped"
-                            destDir = None
-
-            elif lowRes:
-                bucket = "lowres"
-                tag = "lowres"
+            # low-res overrides any face/framing buckets
+            if lowRes:
                 destDir = lowResDir
+                tag = "lowres"
                 extra = f"[{w}x{h}]" if (w and h) else ""
 
-            # no match -> skip report row unless you want full inventory
-            if not hasFace and not lowRes:
+            # not low-res: if face then classify framing
+            elif hasFace:
+                framing, faceRatio = classifyFraming(largestFace, framingCfg)
+                extra = f"[{w}x{h}] framing={framing} faceRatio={faceRatio:.3f}" if (w and h) else f"framing={framing} faceRatio={faceRatio:.3f}"
+
+                if framing == "full_body":
+                    destDir = fullBodyDir
+                    tag = "full_body"
+                elif framing == "half_body":
+                    destDir = halfBodyDir
+                    tag = "half_body"
+                else:
+                    if args.include_portrait:
+                        destDir = portraitDir
+                        tag = "portrait"
+                    else:
+                        # portrait detected but not requested
+                        destDir = None
+
+            if destDir is None:
                 continue
 
             matched += 1
-            row["bucket"] = bucket
 
-            if destDir is not None:
-                destPath = copyFile(imagePath, destDir, args.dry_run, tag, extra)
-                row["destPath"] = str(destPath)
-                row["copied"] = True
-                copied += 1
-            else:
-                row["destPath"] = ""
-                row["copied"] = False
-
-            rows.append(row)
+            _ = copyFile(imagePath, destDir, args.dryRun, tag, extra)
+            copied += 1
 
         except Exception as ex:
             errors += 1
-            row["error"] = str(ex)
-            rows.append(row)
-            print(f"ERROR: Failed to process {imagePath}: {ex}")
+            logger.error(f"Failed to process {imagePath}: {ex}")
 
-    writeCsvReport(reportPath, rows, args.dry_run, append=args.append_report)
-
-    print(f"{prefix} scanned: {scanned}")
-    print(f"{prefix} matched: {matched}")
-    print(f"{prefix} copied: {copied}")
-    print(f"{prefix} errors: {errors}")
+    logger.info(f"{prefix} scanned: {scanned}")
+    logger.info(f"{prefix} matched: {matched}")
+    logger.info(f"{prefix} copied: {copied}")
+    logger.info(f"{prefix} errors: {errors}")
 
 
 if __name__ == "__main__":

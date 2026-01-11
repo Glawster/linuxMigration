@@ -10,87 +10,22 @@ Folder layout:
       10_<styleName>/   (trainDir / instance images)
       output/           (outputDir)
 
-Important:
-  sd-scripts expects --train_data_dir to be the *parent* of folders that contain images,
-  so we pass styleDir (NOT trainDir).
-
-Config:
-  Defaults are read from ~/.config/kohya/kohyaConfig.json and updated when args differ.
+Conventions:
+- config: ~/.config/kohya/kohyaConfig.json via kohyaConfig.py (no --configPath)
+- logging: organiseMyProjects.logUtils.getLogger
+- --dry-run: no side effects, logs stay the same, prefix indicates dry-run
 """
 
 from __future__ import annotations
 
 import argparse
-import json
-import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 
-
-def prefixFor(dryRun: bool) -> str:
-    return "...[]" if dryRun else "..."
-
-
-def defaultConfigPath() -> Path:
-    return Path.home() / ".config" / "kohya" / "kohyaConfig.json"
-
-
-def loadConfig(configPath: Path) -> Dict[str, Any]:
-    configPath.parent.mkdir(parents=True, exist_ok=True)
-    if not configPath.exists():
-        configPath.write_text("{}\n", encoding="utf-8")
-        return {}
-    text = configPath.read_text(encoding="utf-8").strip()
-    if not text:
-        return {}
-    data = json.loads(text)
-    if not isinstance(data, dict):
-        raise ValueError(f"config file is not a json object: {configPath}")
-    return data
-
-
-def saveConfig(configPath: Path, data: Dict[str, Any]) -> None:
-    configPath.parent.mkdir(parents=True, exist_ok=True)
-    configPath.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def mergeArgsWithConfig(args: argparse.Namespace, config: Dict[str, Any]) -> Tuple[argparse.Namespace, bool]:
-    """
-    Apply config defaults into args (only for None/unset-like values),
-    then detect if args differs from config and should update config.
-    """
-    changed = False
-
-    def applyDefault(key: str, attr: str) -> None:
-        nonlocal changed
-        if getattr(args, attr) is None and key in config:
-            setattr(args, attr, config[key])
-
-    applyDefault("trainingRoot", "trainingRoot")
-    applyDefault("kohyaRoot", "kohyaRoot")
-    applyDefault("pretrainedModel", "pretrainedModel")
-    applyDefault("numCpuThreads", "numCpuThreads")
-    applyDefault("trainFor", "trainFor")
-
-    # Now detect differences and update config dict in-memory
-    def syncBack(key: str, attr: str) -> None:
-        nonlocal changed
-        val = getattr(args, attr)
-        if val is None:
-            return
-        if config.get(key) != val:
-            config[key] = val
-            changed = True
-
-    syncBack("trainingRoot", "trainingRoot")
-    syncBack("kohyaRoot", "kohyaRoot")
-    syncBack("pretrainedModel", "pretrainedModel")
-    syncBack("numCpuThreads", "numCpuThreads")
-    syncBack("trainFor", "trainFor")
-
-    return args, changed
+from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateConfigFromArgs, DEFAULT_CONFIG_PATH  # type: ignore
+from organiseMyProjects.logUtils import getLogger  # type: ignore
 
 
 @dataclass(frozen=True)
@@ -105,7 +40,6 @@ class TrainPreset:
 
 
 def presetFor(trainFor: str) -> TrainPreset:
-    # Tuned defaults (safe-ish starting points). You can refine later.
     if trainFor == "person":
         return TrainPreset(
             networkDim=16,
@@ -117,7 +51,6 @@ def presetFor(trainFor: str) -> TrainPreset:
             clipSkip=2,
         )
 
-    # default: style
     return TrainPreset(
         networkDim=8,
         networkAlpha=8,
@@ -146,7 +79,6 @@ def buildTrainingCommand(
     numCpuThreads: int,
     preset: TrainPreset,
 ) -> str:
-    # CPU-only launch (avoid VRAM OOM issues)
     launch = (
         f"cd {kohyaRoot} && "
         f"source ~/miniconda3/etc/profile.d/conda.sh && "
@@ -156,71 +88,98 @@ def buildTrainingCommand(
         f"'{trainScript}' "
     )
 
-    # IMPORTANT: pass styleDir as train_data_dir (parent of 10_style folders)
     args = [
         f"--pretrained_model_name_or_path='{pretrainedModel}'",
         f"--train_data_dir='{styleDir}'",
         f"--output_dir='{outputDir}'",
         f"--output_name='{outputName}'",
         "--caption_extension='.txt'",
+
         "--resolution='512,512'",
+
         "--network_module=networks.lora",
+
         f"--network_dim={preset.networkDim}",
+
         f"--network_alpha={preset.networkAlpha}",
+
         "--train_batch_size=1",
+
         "--gradient_accumulation_steps=1",
+
         f"--max_train_epochs={preset.maxTrainEpochs}",
+
         f"--learning_rate={preset.learningRate}",
+
         f"--text_encoder_lr={preset.textEncoderLr}",
+
         f"--unet_lr={preset.unetLr}",
+
         "--optimizer_type=AdamW",
+
         "--lr_scheduler=cosine",
+
         "--lr_warmup_steps=50",
+
         "--mixed_precision=no",
+
         "--save_every_n_epochs=1",
+
         "--save_model_as=safetensors",
+
         f"--clip_skip={preset.clipSkip}",
+
         "--enable_bucket",
+
         "--min_bucket_reso=320",
+
         "--max_bucket_reso=768",
+
         "--bucket_reso_steps=64",
+
     ]
 
     return launch + " ".join(args)
 
 
-def parseArgs() -> argparse.Namespace:
+def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="run kohya sd-scripts LoRA training")
     parser.add_argument("styleName", help="style/person name (used for folder + output name)")
-    parser.add_argument("--trainingRoot", type=str, default=None, help="root containing style folders (e.g. /mnt/backup)")
-    parser.add_argument("--kohyaRoot", type=str, default=None, help="path to kohya_ss repo (e.g. /home/andy/Source/kohya_ss)")
-    parser.add_argument("--pretrainedModel", type=str, default=None, help="checkpoint safetensors path")
-    parser.add_argument("--numCpuThreads", type=int, default=None, help="accelerate --num_cpu_threads_per_process")
-    parser.add_argument("--trainFor", choices=["style", "person"], default=None, help="training preset (default: style)")
-    parser.add_argument("--dry-run", dest="dryRun", action="store_true", help="print actions/command only")
+
+    parser.add_argument("--trainingRoot", type=str, default=getCfgValue(cfg, "trainingRoot", "/mnt/myVideo/Adult/tumblrForMovie"))
+    parser.add_argument("--kohyaRoot", type=str, default=getCfgValue(cfg, "kohyaRoot", str(Path.home() / "Source" / "kohya_ss")))
+    parser.add_argument("--pretrainedModel", type=str, default=getCfgValue(cfg, "pretrainedModel", "/mnt/models/v1-5-pruned-emaonly.safetensors"))
+    parser.add_argument("--numCpuThreads", type=int, default=int(getCfgValue(cfg, "numCpuThreads", 8)))
+    parser.add_argument("--trainFor", choices=["style", "person"], default=getCfgValue(cfg, "trainFor", "style"))
+
+    parser.add_argument(
+        "--dry-run",
+        dest="dryRun",
+        action="store_true",
+        help="show what would be done without changing anything",
+    )
+
     return parser.parse_args()
 
 
-def runTraining() -> None:
-    args = parseArgs()
-    prefix = prefixFor(args.dryRun)
+def main() -> int:
+    cfg = loadConfig()
+    args = parseArgs(cfg)
+    prefix = "...[]" if args.dryRun else "..."
+    logger = getLogger("trainKohya", includeConsole=True)
 
-    configPath = defaultConfigPath()
-    config = loadConfig(configPath)
-
-    # Hard defaults if neither args nor config provide them
-    if args.trainFor is None:
-        args.trainFor = "style"
-    if args.trainingRoot is None:
-        args.trainingRoot = "/mnt/myVideo/Adult/tumblrForMovie"
-    if args.kohyaRoot is None:
-        args.kohyaRoot = str(Path.home() / "Source" / "kohya_ss")
-    if args.pretrainedModel is None:
-        args.pretrainedModel = "/mnt/models/v1-5-pruned-emaonly.safetensors"
-    if args.numCpuThreads is None:
-        args.numCpuThreads = 8
-
-    args, configChanged = mergeArgsWithConfig(args, config)
+    updates = {
+        "trainingRoot": str(args.trainingRoot),
+        "kohyaRoot": str(args.kohyaRoot),
+        "pretrainedModel": str(args.pretrainedModel),
+        "numCpuThreads": int(args.numCpuThreads),
+        "trainFor": str(args.trainFor),
+    }
+    configChanged = updateConfigFromArgs(cfg, updates)
+    if configChanged and not args.dryRun:
+        saveConfig(cfg)
+    if configChanged:
+        logger.info("%s updated config: %s", prefix, DEFAULT_CONFIG_PATH)
 
     styleName = args.styleName
     trainingRoot = Path(args.trainingRoot).expanduser()
@@ -232,33 +191,23 @@ def runTraining() -> None:
     outputDir = styleDir / "output"
     trainScript = findTrainScript(kohyaRoot)
 
-    preset = presetFor(args.trainFor)
+    preset = presetFor(str(args.trainFor))
     outputName = f"{styleName}_{args.trainFor}_r{preset.networkDim}_512x512"
 
-    print(f"{prefix} starting lora training")
-    print(f"{prefix} style: {styleName}")
-    print(f"{prefix} train for: {args.trainFor}")
-    print(f"{prefix} training root: {trainingRoot}")
-    print(f"{prefix} style dir: {styleDir}")
-    print(f"{prefix} train dir: {trainDir}")
-    print(f"{prefix} output dir: {outputDir}")
-    print(f"{prefix} train script: {trainScript}")
-
-    if configChanged:
-        if args.dryRun:
-            print(f"{prefix} would update config: {configPath}")
-        else:
-            print(f"{prefix} saving config to {configPath}")
-            saveConfig(configPath, config)
-            print(f"{prefix} updated config: {configPath}")
+    logger.info("%s starting lora training", prefix)
+    logger.info("%s style: %s", prefix, styleName)
+    logger.info("%s train for: %s", prefix, args.trainFor)
+    logger.info("%s training root: %s", prefix, trainingRoot)
+    logger.info("%s style dir: %s", prefix, styleDir)
+    logger.info("%s train dir: %s", prefix, trainDir)
+    logger.info("%s output dir: %s", prefix, outputDir)
+    logger.info("%s train script: %s", prefix, trainScript)
 
     if not trainDir.exists():
-        raise FileNotFoundError(f"train dir not found: {trainDir}")
+        logger.error("Train dir not found: %s", trainDir)
+        return 2
 
-    # Make sure output exists
-    if args.dryRun:
-        print(f"{prefix} would ensure output dir exists: {outputDir}")
-    else:
+    if not args.dryRun:
         outputDir.mkdir(parents=True, exist_ok=True)
 
     commandStr = buildTrainingCommand(
@@ -272,15 +221,16 @@ def runTraining() -> None:
         preset=preset,
     )
 
-    print(f"{prefix} training command: {commandStr}")
+    logger.info("%s training command: %s", prefix, commandStr)
 
     if args.dryRun:
-        return
+        return 0
 
-    print(f"{prefix} launching training")
+    logger.info("%s launching training", prefix)
     subprocess.run(["bash", "-lc", commandStr], check=True)
-    print(f"{prefix} training complete")
+    logger.info("%s training complete", prefix)
+    return 0
 
 
 if __name__ == "__main__":
-    runTraining()
+    raise SystemExit(main())
