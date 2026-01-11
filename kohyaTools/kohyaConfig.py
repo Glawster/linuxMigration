@@ -72,7 +72,6 @@ def saveConfig(data: Dict[str, Any]) -> None:
         raise TypeError(f"config data must be a dict, got {type(data).__name__}")
     
     try:
-        print (f"Saving config to {DEFAULT_CONFIG_PATH}")
         DEFAULT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         DEFAULT_CONFIG_PATH.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     except (OSError, PermissionError) as e:
