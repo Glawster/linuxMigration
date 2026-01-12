@@ -85,8 +85,9 @@ DEFAULT_MIN_SHORT_SIDE = 768
 DEFAULT_MIN_PIXELS = 768 * 768
 
 # filename pattern: 20221217-pretty-01.png  OR  2022-12-17-pretty-01.png  OR  ...-01a.png
+# Also supports ComfyUI fixed_ prefix: fixed_20221217-pretty-01_00001_.png
 STYLE_FROM_FILENAME_RE = re.compile(
-    r"^(?:\d{8}|\d{4}-\d{2}-\d{2})-(?P<style>.+?)-\d+(?:[a-z])?\.[^.]+$",
+    r"^(?:fixed_)?(?:\d{8}|\d{4}-\d{2}-\d{2})-(?P<style>.+?)-\d+(?:[a-z])?(?:_\d+_)?\.[^.]+$",
     re.IGNORECASE,
 )
 

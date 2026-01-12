@@ -215,9 +215,9 @@ def main() -> int:
     if configChanged:
         logger.info("%s updated config: %s", prefix, DEFAULT_CONFIG_PATH)
 
-    fullWf = Path(args.workflowsDir) / getCfgValue(cfg, "comfyFullbodyWorkflow", "fullbody.json")
-    halfWf = Path(args.workflowsDir) / getCfgValue(cfg, "comfyHalfbodyWorkflow", "halfbody.json")
-    portWf = Path(args.workflowsDir) / getCfgValue(cfg, "comfyPortraitWorkflow", "portrait.json")
+    fullWf = Path(args.workflowsDir) / getCfgValue(cfg, "comfyFullbodyWorkflow", "fullbody_api.json")
+    halfWf = Path(args.workflowsDir) / getCfgValue(cfg, "comfyHalfbodyWorkflow", "halfbody_api.json")
+    portWf = Path(args.workflowsDir) / getCfgValue(cfg, "comfyPortraitWorkflow", "portrait_api.json")
 
     workflowPaths = {
         "fullbody": fullWf.resolve(),
@@ -253,7 +253,7 @@ def main() -> int:
         ),
     ]
 
-    filenamePrefixTemplate = str(getCfgValue(cfg, "comfyFilenamePrefixTemplate", "{bucket}/{stem}"))
+    filenamePrefixTemplate = str(getCfgValue(cfg, "comfyFilenamePrefixTemplate", "fixed_{stem}"))
     downloadPathTemplate = str(getCfgValue(cfg, "comfyDownloadPathTemplate", "{runDir}/{bucket}/{stem}"))
 
     allImages = [p for p in inputDir.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
