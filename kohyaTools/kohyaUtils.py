@@ -106,16 +106,13 @@ def ensureDirs(paths: KohyaPaths, includeOriginals: bool = False) -> None:
 
 def isImageFile(filePath: Path) -> bool:
     """Check if a file is a supported image type."""
-    return filePath.is_file() and filePath.suffix.lower() in logger = None  # global logger, set by caller
+    return filePath.is_file() and filePath.suffix.lower() in IMAGE_EXTENSIONS
 
 
 def setLogger(externalLogger) -> None:
     """Set a global logger for kohyaUtils."""
     global logger
     logger = externalLogger
-
-
-IMAGE_EXTENSIONS
 
 
 def listImageFiles(folderPath: Path, recursive: bool = False) -> List[Path]:
