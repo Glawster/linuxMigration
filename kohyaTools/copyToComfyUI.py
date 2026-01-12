@@ -24,10 +24,8 @@ Config (optional): ~/.config/kohya/kohyaConfig.json
 Expected keys (examples):
 {
   "trainingRoot": "/mnt/backup",
-  "comfyUI": {
-    "inputDir": "/home/andy/Source/ComfyUI/input",
-    "outputDir": "/home/andy/Source/ComfyUI/output"
-  },
+  "comfyInput": "/home/andy/Source/ComfyUI/input",
+  "comfyOutput": "/home/andy/Source/ComfyUI/output",
   "skipDirs": [".wastebasket", ".Trash", "@eaDir"],
   "lowRes": { "minShortSide": 768, "minPixels": 589824 },
   "framing": { "fullBodyMaxFaceRatio": 0.18, "halfBodyMaxFaceRatio": 0.35 }
@@ -414,30 +412,21 @@ def main() -> None:
 
     # resolve config values
     trainingRootCfg = config.get("trainingRoot")
-    comfyInputCfg = getNestedDictValue(config, ("comfyUI", "inputDir"))
-    comfyOutputCfg = getNestedDictValue(config, ("comfyUI", "outputDir"))
+    comfyInputCfg = config.get("comfyInput")
+    comfyOutputCfg = config.get("comfyOutput")
     configSkipDirs = set(config.get("skipDirs", [])) if isinstance(config.get("skipDirs", []), list) else set()
 
     # track config changes for auto-save
     configUpdates: dict = {}
-    nestedConfigChanged = False
 
     if args.trainingRoot:
         configUpdates["trainingRoot"] = args.trainingRoot
 
     if args.comfyInput:
-        if "comfyUI" not in config:
-            config["comfyUI"] = {}
-        if config["comfyUI"].get("inputDir") != args.comfyInput:
-            config["comfyUI"]["inputDir"] = args.comfyInput
-            nestedConfigChanged = True
+        configUpdates["comfyInput"] = args.comfyInput
 
     if args.comfyOutput:
-        if "comfyUI" not in config:
-            config["comfyUI"] = {}
-        if config["comfyUI"].get("outputDir") != args.comfyOutput:
-            config["comfyUI"]["outputDir"] = args.comfyOutput
-            nestedConfigChanged = True
+        configUpdates["comfyOutput"] = args.comfyOutput
 
     # validate required paths
     trainingRootVal = args.trainingRoot or trainingRootCfg
@@ -448,7 +437,7 @@ def main() -> None:
         logger.error("Training root not provided (use --trainingRoot or set trainingRoot in config)")
         raise SystemExit(2)
     if not comfyInputVal:
-        logger.error("ComfyUI input folder not provided (use --comfyInput or set comfyUI.inputDir in config)")
+        logger.error("ComfyUI input folder not provided (use --comfyInput or set comfyInput in config)")
         raise SystemExit(2)
 
     trainingRoot = Path(str(trainingRootVal)).expanduser().resolve()
@@ -460,7 +449,7 @@ def main() -> None:
         raise SystemExit(2)
 
     # update config if CLI args provided new values
-    configChanged = updateConfigFromArgs(config, configUpdates) or nestedConfigChanged
+    configChanged = updateConfigFromArgs(config, configUpdates)
     if configChanged and not args.dryRun:
         saveConfig(config)
     if configChanged:
