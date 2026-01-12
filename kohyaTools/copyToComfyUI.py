@@ -387,7 +387,7 @@ def main() -> None:
     global logger
 
     parser = argparse.ArgumentParser(description="Copy training images into ComfyUI buckets (logging only, no CSV report).")
-    parser.add_argument("--source", help="Training root (overrides config)")
+    parser.add_argument("--trainingRoot", help="Training root (overrides config)")
     parser.add_argument("--comfyInput", help="ComfyUI input folder (overrides config)")
     parser.add_argument("--comfyOutput", help="ComfyUI output folder (overrides config)")
     parser.add_argument(
@@ -422,8 +422,8 @@ def main() -> None:
     configUpdates: dict = {}
     nestedConfigChanged = False
 
-    if args.source:
-        configUpdates["trainingRoot"] = args.source
+    if args.trainingRoot:
+        configUpdates["trainingRoot"] = args.trainingRoot
 
     if args.comfyInput:
         if "comfyUI" not in config:
@@ -440,12 +440,12 @@ def main() -> None:
             nestedConfigChanged = True
 
     # validate required paths
-    trainingRootVal = args.source or trainingRootCfg
+    trainingRootVal = args.trainingRoot or trainingRootCfg
     comfyInputVal = args.comfyInput or comfyInputCfg
     comfyOutputVal = args.comfyOutput or comfyOutputCfg
 
     if not trainingRootVal:
-        logger.error("Training root not provided (use --source or set trainingRoot in config)")
+        logger.error("Training root not provided (use --trainingRoot or set trainingRoot in config)")
         raise SystemExit(2)
     if not comfyInputVal:
         logger.error("ComfyUI input folder not provided (use --comfyInput or set comfyUI.inputDir in config)")
