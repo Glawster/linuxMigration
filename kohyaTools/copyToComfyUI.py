@@ -85,8 +85,9 @@ DEFAULT_MIN_SHORT_SIDE = 768
 DEFAULT_MIN_PIXELS = 768 * 768
 
 # filename pattern: 20221217-pretty-01.png  OR  2022-12-17-pretty-01.png  OR  ...-01a.png
+# Also supports ComfyUI fixed_ prefix: fixed_20221217-pretty-01_00001_.png
 STYLE_FROM_FILENAME_RE = re.compile(
-    r"^(?:\d{8}|\d{4}-\d{2}-\d{2})-(?P<style>.+?)-\d+(?:[a-z])?\.[^.]+$",
+    r"^(?:fixed_)?(?:\d{8}|\d{4}-\d{2}-\d{2})-(?P<style>.+?)-\d+(?:[a-z])?(?:_\d+_)?\.[^.]+$",
     re.IGNORECASE,
 )
 
@@ -386,9 +387,9 @@ def main() -> None:
     global logger
 
     parser = argparse.ArgumentParser(description="Copy training images into ComfyUI buckets (logging only, no CSV report).")
-    parser.add_argument("--source", help="Training root (overrides config)")
-    parser.add_argument("--dest", help="ComfyUI input folder (overrides config)")
-    parser.add_argument("--output", help="ComfyUI output folder (overrides config)")
+    parser.add_argument("--trainingRoot", help="Training root (overrides config)")
+    parser.add_argument("--comfyInput", help="ComfyUI input folder (overrides config)")
+    parser.add_argument("--comfyOutput", help="ComfyUI output folder (overrides config)")
     parser.add_argument(
         "--dry-run",
         dest="dryRun",
@@ -419,32 +420,35 @@ def main() -> None:
 
     # track config changes for auto-save
     configUpdates: dict = {}
+    nestedConfigChanged = False
 
-    if args.source:
-        configUpdates["trainingRoot"] = args.source
+    if args.trainingRoot:
+        configUpdates["trainingRoot"] = args.trainingRoot
 
-    if args.dest:
+    if args.comfyInput:
         if "comfyUI" not in config:
             config["comfyUI"] = {}
-        if config["comfyUI"].get("inputDir") != args.dest:
-            config["comfyUI"]["inputDir"] = args.dest
+        if config["comfyUI"].get("inputDir") != args.comfyInput:
+            config["comfyUI"]["inputDir"] = args.comfyInput
+            nestedConfigChanged = True
 
-    if args.output:
+    if args.comfyOutput:
         if "comfyUI" not in config:
             config["comfyUI"] = {}
-        if config["comfyUI"].get("outputDir") != args.output:
-            config["comfyUI"]["outputDir"] = args.output
+        if config["comfyUI"].get("outputDir") != args.comfyOutput:
+            config["comfyUI"]["outputDir"] = args.comfyOutput
+            nestedConfigChanged = True
 
     # validate required paths
-    trainingRootVal = args.source or trainingRootCfg
-    comfyInputVal = args.dest or comfyInputCfg
-    comfyOutputVal = args.output or comfyOutputCfg
+    trainingRootVal = args.trainingRoot or trainingRootCfg
+    comfyInputVal = args.comfyInput or comfyInputCfg
+    comfyOutputVal = args.comfyOutput or comfyOutputCfg
 
     if not trainingRootVal:
-        logger.error("Training root not provided (use --source or set trainingRoot in config)")
+        logger.error("Training root not provided (use --trainingRoot or set trainingRoot in config)")
         raise SystemExit(2)
     if not comfyInputVal:
-        logger.error("ComfyUI input folder not provided (use --dest or set comfyUI.inputDir in config)")
+        logger.error("ComfyUI input folder not provided (use --comfyInput or set comfyUI.inputDir in config)")
         raise SystemExit(2)
 
     trainingRoot = Path(str(trainingRootVal)).expanduser().resolve()
@@ -456,7 +460,7 @@ def main() -> None:
         raise SystemExit(2)
 
     # update config if CLI args provided new values
-    configChanged = updateConfigFromArgs(config, configUpdates)
+    configChanged = updateConfigFromArgs(config, configUpdates) or nestedConfigChanged
     if configChanged and not args.dryRun:
         saveConfig(config)
     if configChanged:
