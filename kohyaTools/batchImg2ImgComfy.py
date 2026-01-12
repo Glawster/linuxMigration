@@ -156,6 +156,19 @@ class ComfyClient:
                 raise TimeoutError(f"timed out waiting for prompt {promptId}")
             time.sleep(pollSeconds)
 
+def hasExistingOutput(outputDir: Path, fixedPrefix: str, stem: str) -> bool:
+    """Return True if ComfyUI output already contains fixedPrefix+stem.* (any suffix/counter)."""
+    if not outputDir.exists() or not outputDir.is_dir():
+        return False
+
+    prefix = f"{fixedPrefix}{stem}"
+    # ComfyUI typically writes directly into outputDir, but allow subfolders as well.
+    for p in outputDir.rglob("*"):
+        if p.is_file() and p.name.startswith(prefix):
+            return True
+    return False
+
+
 
 def loadApiPromptJson(path: Path) -> Dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -230,6 +243,7 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
 
     parser.add_argument("--comfyUrl", default=getCfgValue(cfg, "comfyUrl", "http://127.0.0.1:8188"))
     parser.add_argument("--inputDir", type=Path, default=Path(getCfgValue(cfg, "comfyInputDir", "./input")))
+    parser.add_argument("--outputDir", type=Path, default=Path(getCfgValue(cfg, "comfyOutputDir", "")), help="comfyui output folder (default: <inputDir>/../output)")
     parser.add_argument("--workflowsDir", type=Path, default=Path(getCfgValue(cfg, "comfyWorkflowsDir", "./workflows")))
     parser.add_argument("--runsDir", type=Path, default=Path(getCfgValue(cfg, "comfyRunsDir", "./runs")))
 
@@ -292,6 +306,15 @@ def main() -> int:
         logger.error("Input dir does not exist: %s", inputDir)
         return 2
 
+    # Output folder used to decide whether an image has already been processed.
+    # If output already contains "fixed_<stem>*", we skip re-processing; delete the output to regenerate.
+    outputDir = Path(args.outputDir) if str(args.outputDir) not in ("", ".") else Path(getCfgValue(cfg, "comfyOutputDir", ""))
+    if str(outputDir) in ("", "."):
+        outputDir = inputDir.parent / "output"
+    outputDir = outputDir.expanduser().resolve()
+
+    fixedPrefix = str(getCfgValue(cfg, "comfyFixedOutputPrefix", "fixed_"))
+
     rules = [
         BucketRules(
             "fullbody",
@@ -321,6 +344,11 @@ def main() -> int:
     
     jobs: List[Tuple[Path, str]] = []
     for img in sorted(imagesToProcess):
+        stemSafe = safeStem(img.stem)
+        if hasExistingOutput(outputDir=outputDir, fixedPrefix=fixedPrefix, stem=stemSafe):
+            relSkip = img.relative_to(inputDir).as_posix()
+            logger.info("%s skip (output exists): %s", prefix, relSkip)
+            continue
         bucket = classifyImage(img, rules)
         if bucket:
             jobs.append((img, bucket))
@@ -355,7 +383,7 @@ def main() -> int:
         prefixValue = renderTemplate(filenamePrefixTemplate, bucket=bucket, stem=stem)
         _ = setSaveImagePrefix(prompt, prefixValue)
 
-        logger.info("%s[%d/%d] %s: %s", prefix, i, len(jobs), bucket, rel)
+        logger.info("%s [%d/%d] %s: %s", prefix, i, len(jobs), bucket, rel)
 
         if args.dryRun:
             continue
