@@ -420,6 +420,7 @@ def main() -> None:
 
     # track config changes for auto-save
     configUpdates: dict = {}
+    nestedConfigChanged = False
 
     if args.source:
         configUpdates["trainingRoot"] = args.source
@@ -429,12 +430,14 @@ def main() -> None:
             config["comfyUI"] = {}
         if config["comfyUI"].get("inputDir") != args.dest:
             config["comfyUI"]["inputDir"] = args.dest
+            nestedConfigChanged = True
 
     if args.output:
         if "comfyUI" not in config:
             config["comfyUI"] = {}
         if config["comfyUI"].get("outputDir") != args.output:
             config["comfyUI"]["outputDir"] = args.output
+            nestedConfigChanged = True
 
     # validate required paths
     trainingRootVal = args.source or trainingRootCfg
@@ -457,7 +460,7 @@ def main() -> None:
         raise SystemExit(2)
 
     # update config if CLI args provided new values
-    configChanged = updateConfigFromArgs(config, configUpdates)
+    configChanged = updateConfigFromArgs(config, configUpdates) or nestedConfigChanged
     if configChanged and not args.dryRun:
         saveConfig(config)
     if configChanged:
