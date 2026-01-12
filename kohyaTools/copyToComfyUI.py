@@ -388,8 +388,8 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Copy training images into ComfyUI buckets (logging only, no CSV report).")
     parser.add_argument("--source", help="Training root (overrides config)")
-    parser.add_argument("--dest", help="ComfyUI input folder (overrides config)")
-    parser.add_argument("--output", help="ComfyUI output folder (overrides config)")
+    parser.add_argument("--comfyInput", help="ComfyUI input folder (overrides config)")
+    parser.add_argument("--comfyOutput", help="ComfyUI output folder (overrides config)")
     parser.add_argument(
         "--dry-run",
         dest="dryRun",
@@ -425,30 +425,30 @@ def main() -> None:
     if args.source:
         configUpdates["trainingRoot"] = args.source
 
-    if args.dest:
+    if args.comfyInput:
         if "comfyUI" not in config:
             config["comfyUI"] = {}
-        if config["comfyUI"].get("inputDir") != args.dest:
-            config["comfyUI"]["inputDir"] = args.dest
+        if config["comfyUI"].get("inputDir") != args.comfyInput:
+            config["comfyUI"]["inputDir"] = args.comfyInput
             nestedConfigChanged = True
 
-    if args.output:
+    if args.comfyOutput:
         if "comfyUI" not in config:
             config["comfyUI"] = {}
-        if config["comfyUI"].get("outputDir") != args.output:
-            config["comfyUI"]["outputDir"] = args.output
+        if config["comfyUI"].get("outputDir") != args.comfyOutput:
+            config["comfyUI"]["outputDir"] = args.comfyOutput
             nestedConfigChanged = True
 
     # validate required paths
     trainingRootVal = args.source or trainingRootCfg
-    comfyInputVal = args.dest or comfyInputCfg
-    comfyOutputVal = args.output or comfyOutputCfg
+    comfyInputVal = args.comfyInput or comfyInputCfg
+    comfyOutputVal = args.comfyOutput or comfyOutputCfg
 
     if not trainingRootVal:
         logger.error("Training root not provided (use --source or set trainingRoot in config)")
         raise SystemExit(2)
     if not comfyInputVal:
-        logger.error("ComfyUI input folder not provided (use --dest or set comfyUI.inputDir in config)")
+        logger.error("ComfyUI input folder not provided (use --comfyInput or set comfyUI.inputDir in config)")
         raise SystemExit(2)
 
     trainingRoot = Path(str(trainingRootVal)).expanduser().resolve()
