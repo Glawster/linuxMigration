@@ -4,6 +4,11 @@ batchImg2ImgComfy.py
 
 Batch-run ComfyUI img2img workflows for images found under ComfyUI input.
 
+Input Precedence Rules:
+- For each unique image stem, prefer processed (fixed_*) versions over originals
+- If fixed_photo-01_00001_.png exists, use it instead of photo-01.png
+- This allows iterative processing without re-processing from scratch
+
 Conventions:
 - uses ~/.config/kohya/kohyaConfig.json via kohyaConfig.py (no --configPath)
 - logging via organiseMyProjects.logUtils.getLogger
@@ -53,6 +58,58 @@ def classifyImage(path: Path, rules: List[BucketRules]) -> Optional[str]:
             if re.search(rx, fileLower):
                 return rule.name
     return None
+
+
+def extractBaseStem(filename: str) -> str:
+    """
+    Extract the base stem from a filename, removing fixed_ prefix and ComfyUI numbering.
+    
+    Examples:
+        fixed_photo-01_00001_.png -> photo-01
+        photo-01.png -> photo-01
+        fixed_style-name-01_00002_.png -> style-name-01
+    """
+    stem = Path(filename).stem
+    # Remove fixed_ prefix if present
+    if stem.lower().startswith("fixed_"):
+        stem = stem[6:]
+    # Remove ComfyUI numbering pattern (_00001_)
+    stem = re.sub(r"_\d+_$", "", stem)
+    return stem
+
+
+def applyPrecedenceRules(allImages: List[Path]) -> Dict[str, Path]:
+    """
+    Apply precedence rules: prefer fixed_* versions over originals.
+    
+    Returns a dict mapping base stem to the image path to use.
+    For each unique stem:
+    - If a fixed_* version exists, use it (most recent if multiple)
+    - Otherwise, use the original
+    """
+    stemToImages: Dict[str, List[Path]] = {}
+    
+    for img in allImages:
+        baseStem = extractBaseStem(img.name)
+        if baseStem not in stemToImages:
+            stemToImages[baseStem] = []
+        stemToImages[baseStem].append(img)
+    
+    result: Dict[str, Path] = {}
+    for baseStem, images in stemToImages.items():
+        # Separate fixed versions from originals
+        fixedVersions = [img for img in images if img.name.lower().startswith("fixed_")]
+        originals = [img for img in images if not img.name.lower().startswith("fixed_")]
+        
+        # Prefer fixed version (take the most recent if multiple)
+        if fixedVersions:
+            # Sort by path (later modifications will have higher numbers)
+            result[baseStem] = sorted(fixedVersions)[-1]
+        elif originals:
+            # Use the original
+            result[baseStem] = originals[0]
+    
+    return result
 
 
 class ComfyClient:
@@ -257,14 +314,20 @@ def main() -> int:
     downloadPathTemplate = str(getCfgValue(cfg, "comfyDownloadPathTemplate", "{runDir}/{bucket}/{stem}"))
 
     allImages = [p for p in inputDir.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
+    
+    # Apply precedence rules: prefer fixed_* versions over originals
+    stemToImage = applyPrecedenceRules(allImages)
+    imagesToProcess = list(stemToImage.values())
+    
     jobs: List[Tuple[Path, str]] = []
-    for img in sorted(allImages):
+    for img in sorted(imagesToProcess):
         bucket = classifyImage(img, rules)
         if bucket:
             jobs.append((img, bucket))
 
     logger.info("%s run dir: %s", prefix, runDir)
     logger.info("%s found images: %d", prefix, len(allImages))
+    logger.info("%s unique stems (after precedence): %d", prefix, len(imagesToProcess))
     logger.info("%s matched jobs: %d", prefix, len(jobs))
 
     if args.limit and args.limit > 0:

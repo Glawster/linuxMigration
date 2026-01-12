@@ -31,6 +31,7 @@ This report documents the examination of kohyaTools scripts for correctness agai
 - ✅ Output format: `fixed_{stem}_00001_.png` (ComfyUI appends numbering)
 
 #### Key Features
+- **Input Precedence Rules**: For each unique image stem, prefers processed (fixed_*) versions over originals, enabling iterative processing
 - **Bucket Classification**: Automatically classifies images by folder names and filename patterns
 - **Template System**: Flexible filename prefix and download path templates
 - **Progress Tracking**: Detailed logging with counts and status
@@ -101,6 +102,29 @@ STYLE_FROM_FILENAME_RE = re.compile(
 ```
 
 **Rationale**: The reverse mode needs to extract the style name from filenames produced by batchImg2ImgComfy.py, which now include the `fixed_` prefix and ComfyUI numbering.
+
+### Issue 4: Input Precedence Rules Not Implemented
+**Location**: batchImg2ImgComfy.py, lines 259-268
+
+**Problem**: The script processed all images found recursively, without considering that some images may have already been processed and saved with `fixed_*` prefix.
+
+**Fix**: Added precedence logic with two new functions:
+```python
+def extractBaseStem(filename: str) -> str:
+    """Extract base stem, removing fixed_ prefix and ComfyUI numbering"""
+    # fixed_photo-01_00001_.png -> photo-01
+
+def applyPrecedenceRules(allImages: List[Path]) -> Dict[str, Path]:
+    """Prefer fixed_* versions over originals for each unique stem"""
+```
+
+**Rationale**: Enables iterative processing by using already-processed versions instead of originals, preventing redundant processing and allowing refinement workflows.
+
+**Behavior**:
+- For each unique image stem (e.g., "photo-01"):
+  - If `fixed_photo-01_00001_.png` exists, use it
+  - Otherwise, use `photo-01.png`
+- If multiple fixed versions exist, uses the most recent (highest number)
 
 ## Script-by-Script Analysis
 
@@ -274,6 +298,7 @@ The following tests should be performed in a live environment:
 - ✅ Update workflow filenames to use _api.json convention
 - ✅ Fix output prefix to produce fixed_{stem} format
 - ✅ Update copyToComfyUI.py regex to handle new format
+- ✅ Implement input precedence rules for iterative processing
 
 ### Future Enhancements
 1. **Add Unit Tests**: Create pytest-based test suite for all modules
@@ -284,11 +309,12 @@ The following tests should be performed in a live environment:
 
 ## Conclusion
 
-All kohyaTools scripts have been examined and found to meet the stated requirements. Three issues were identified and fixed:
+All kohyaTools scripts have been examined and found to meet the stated requirements. Four issues were identified and fixed:
 
 1. Workflow filenames updated to use `_api.json` convention
 2. Output prefix corrected to produce `fixed_{stem}` format
 3. Reverse mode regex updated to handle ComfyUI output format
+4. Input precedence rules implemented to prefer processed versions over originals
 
 The codebase demonstrates high quality with consistent conventions, comprehensive error handling, and proper dry-run support throughout. All scripts are now correctly aligned with the ComfyUI batch img2img pipeline requirements.
 
@@ -296,8 +322,11 @@ The codebase demonstrates high quality with consistent conventions, comprehensiv
 
 ### Files Modified
 1. **kohyaTools/batchImg2ImgComfy.py**
+   - Lines 1-18: Updated docstring to document input precedence rules
+   - Lines 45-98: Added `extractBaseStem()` and `applyPrecedenceRules()` functions
    - Lines 218-220: Changed workflow defaults to use `_api.json` suffix
    - Line 256: Changed output prefix from `{bucket}/{stem}` to `fixed_{stem}`
+   - Lines 259-268: Implemented precedence logic to prefer processed versions
 
 2. **kohyaTools/copyToComfyUI.py**
    - Lines 87-91: Updated STYLE_FROM_FILENAME_RE regex to handle `fixed_` prefix and ComfyUI numbering
