@@ -251,24 +251,22 @@ STYLE_FROM_FILENAME_RE = re.compile(
 - ✅ Logging instead of print statements
 - ✅ Dry-run mode with no side effects
 
-## Testing
+## Validation
 
-### Logic Tests Performed
-All core logic has been validated:
-- ✅ safeStem function (filename sanitization)
-- ✅ renderTemplate function (template rendering)
-- ✅ STYLE_FROM_FILENAME_RE regex pattern
-- ✅ Workflow filename defaults (_api.json suffix)
-- ✅ Output prefix template (fixed_{stem} format)
+### Logic Validation Performed
+Core logic patterns have been reviewed and validated through code inspection:
+- ✅ safeStem function (filename sanitization with regex substitution)
+- ✅ renderTemplate function (Python str.format template rendering)
+- ✅ STYLE_FROM_FILENAME_RE regex pattern (tested with sample filenames)
+- ✅ Workflow filename defaults (verified _api.json suffix)
+- ✅ Output prefix template (verified fixed_{stem} format)
 
-### Test Results
-```
-✅ All safeStem tests passed (6/6)
-✅ All renderTemplate tests passed (2/2)
-✅ All filename regex tests passed (8/8)
-✅ All workflow default tests passed (3/3)
-✅ All prefix template tests passed (3/3)
-```
+### Manual Testing Recommendations
+The following tests should be performed in a live environment:
+1. **Workflow Loading**: Verify workflows load correctly with _api.json filenames
+2. **Output Prefix**: Confirm ComfyUI produces fixed_{stem}_00001_.png format
+3. **Reverse Mode**: Test copyToComfyUI.py --reverse with fixed_ prefix filenames
+4. **End-to-End**: Full pipeline from training images → ComfyUI → back to training
 
 ## Recommendations
 
@@ -312,5 +310,5 @@ The codebase demonstrates high quality with consistent conventions, comprehensiv
 
 ---
 **Examination Date**: 2026-01-12  
-**Examined By**: GitHub Copilot  
-**Status**: ✅ Complete - All Requirements Met
+**Status**: ✅ Complete - All Requirements Met  
+**Note**: This is a code examination and correctness review. Runtime testing should be performed in a live environment.
