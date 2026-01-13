@@ -241,18 +241,18 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
 
     parser.add_argument("--limit", type=int, default=0, help="process at most N images (0 = no limit)")
 
-    parser.add_argument("--comfyUrl", default=getCfgValue(cfg, "comfyUrl", "http://127.0.0.1:8188"))
-    parser.add_argument("--comfyInput", type=Path, default=Path(getCfgValue(cfg, "comfyInput", "./input")))
-    parser.add_argument("--comfyOutput", type=Path, default=Path(getCfgValue(cfg, "comfyOutput", "./output")))
-    parser.add_argument("--workflowsDir", type=Path, default=Path(getCfgValue(cfg, "comfyWorkflowsDir", "./workflows")))
-    parser.add_argument("--runsDir", type=Path, default=Path(getCfgValue(cfg, "comfyRunsDir", "./runs")))
+    parser.add_argument("--comfyurl", default=getCfgValue(cfg, "comfyUrl", "http://127.0.0.1:8188"))
+    parser.add_argument("--comfyin", type=Path, default=Path(getCfgValue(cfg, "comfyIn", "./input")))
+    parser.add_argument("--comfyout", type=Path, default=Path(getCfgValue(cfg, "comfyOut", "./output")))
+    parser.add_argument("--workflows", type=Path, default=Path(getCfgValue(cfg, "workflows", "./workflows")))
+    parser.add_argument("--runsdir", type=Path, default=Path(getCfgValue(cfg, "comfyRunsDir", "./runs")))
 
-    parser.add_argument("--timeoutSeconds", type=int, default=int(getCfgValue(cfg, "comfyTimeoutSeconds", 60)))
-    parser.add_argument("--pollSeconds", type=float, default=float(getCfgValue(cfg, "comfyPollSeconds", 1.0)))
-    parser.add_argument("--maxWaitSeconds", type=int, default=int(getCfgValue(cfg, "comfyMaxWaitSeconds", 1800)))
+    parser.add_argument("--timeoutseconds", type=int, default=int(getCfgValue(cfg, "comfyTimeoutSeconds", 60)))
+    parser.add_argument("--pollseconds", type=float, default=float(getCfgValue(cfg, "comfyPollSeconds", 1.0)))
+    parser.add_argument("--maxwaitseconds", type=int, default=int(getCfgValue(cfg, "comfyMaxWaitSeconds", 1800)))
 
-    parser.add_argument("--logLevel", default=str(getCfgValue(cfg, "comfyLogLevel", "INFO")))
-    parser.add_argument("--logConsole", action="store_true", default=bool(getCfgValue(cfg, "comfyLogConsole", True)))
+    parser.add_argument("--loglevel", default=str(getCfgValue(cfg, "comfyLogLevel", "INFO")))
+    parser.add_argument("--logconsole", action="store_true", default=bool(getCfgValue(cfg, "comfyLogConsole", True)))
 
     return parser.parse_args()
 
@@ -263,22 +263,22 @@ def main() -> int:
 
     prefix = "...[]" if args.dryRun else "..."
 
-    logger = getLogger("batchImg2ImgComfy", includeConsole=bool(args.logConsole))
+    logger = getLogger("batchImg2ImgComfy", includeConsole=bool(args.logconsole))
 
     runStamp = time.strftime("%Y%m%d_%H%M%S")
-    runDir = Path(args.runsDir).expanduser().resolve() / f"run_{runStamp}"
+    runDir = Path(args.runsdir).expanduser().resolve() / f"run_{runStamp}"
 
     updates = {
-        "comfyUrl": str(args.comfyUrl),
-        "comfyInput": str(Path(args.comfyInput).expanduser()),
-        "comfyOutput": str(Path(args.comfyOutput).expanduser()),
-        "comfyWorkflowsDir": str(Path(args.workflowsDir).expanduser()),
-        "comfyRunsDir": str(Path(args.runsDir).expanduser()),
-        "comfyTimeoutSeconds": int(args.timeoutSeconds),
-        "comfyPollSeconds": float(args.pollSeconds),
-        "comfyMaxWaitSeconds": int(args.maxWaitSeconds),
-        "comfyLogLevel": str(args.logLevel).upper(),
-        "comfyLogConsole": bool(args.logConsole),
+        "comfyUrl": str(args.comfyurl),
+        "comfyIn": str(Path(args.comfyin).expanduser()),
+        "comfyOut": str(Path(args.comfyout).expanduser()),
+        "workflows": str(Path(args.workflows).expanduser()),
+        "comfyRunsDir": str(Path(args.runsdir).expanduser()),
+        "comfyTimeoutSeconds": int(args.timeoutseconds),
+        "comfyPollSeconds": float(args.pollseconds),
+        "comfyMaxWaitSeconds": int(args.maxwaitseconds),
+        "comfyLogLevel": str(args.loglevel).upper(),
+        "comfyLogConsole": bool(args.logconsole),
     }
 
     configChanged = updateConfigFromArgs(cfg, updates)
@@ -287,9 +287,9 @@ def main() -> int:
     if configChanged:
         logger.info("%s updated config: %s", prefix, DEFAULT_CONFIG_PATH)
 
-    fullWf = Path(args.workflowsDir) / getCfgValue(cfg, "comfyFullbodyWorkflow", "fullbody_api.json")
-    halfWf = Path(args.workflowsDir) / getCfgValue(cfg, "comfyHalfbodyWorkflow", "halfbody_api.json")
-    portWf = Path(args.workflowsDir) / getCfgValue(cfg, "comfyPortraitWorkflow", "portrait_api.json")
+    fullWf = Path(args.workflows) / getCfgValue(cfg, "comfyFullbodyWorkflow", "fullbody_api.json")
+    halfWf = Path(args.workflows) / getCfgValue(cfg, "comfyHalfbodyWorkflow", "halfbody_api.json")
+    portWf = Path(args.workflows) / getCfgValue(cfg, "comfyPortraitWorkflow", "portrait_api.json")
 
     workflowPaths = {
         "fullbody": fullWf.resolve(),
@@ -302,7 +302,7 @@ def main() -> int:
             logger.error("Missing workflow file for %s: %s", name, p)
             return 2
 
-    inputDir = Path(args.comfyInput).expanduser().resolve()
+    inputDir = Path(args.comfyin).expanduser().resolve()
     if not inputDir.exists():
         logger.error("Input dir does not exist: %s", inputDir)
         return 2
@@ -367,7 +367,7 @@ def main() -> int:
         logger.info("%s done.", prefix)
         return 0
 
-    client = ComfyClient(args.comfyUrl, args.timeoutSeconds)
+    client = ComfyClient(args.comfyurl, args.timeoutseconds)
 
     for i, (imgPath, bucket) in enumerate(jobs, start=1):
         rel = imgPath.relative_to(inputDir).as_posix()
@@ -393,7 +393,7 @@ def main() -> int:
             promptId = client.submitPrompt(prompt)
             logger.info("%s submitted: %s", prefix, promptId)
 
-            histEntry = client.waitForOutputs(promptId, args.pollSeconds, args.maxWaitSeconds)
+            histEntry = client.waitForOutputs(promptId, args.pollseconds, args.maxwaitseconds)
             images = extractOutputImages(histEntry)
             if not images:
                 logger.info("%s completed (no outputs)", prefix)

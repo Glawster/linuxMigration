@@ -327,14 +327,14 @@ def backupThenCopyReplace(srcFixed: Path, destOriginal: Path, dryRun: bool) -> N
 
 def reverseFromFixedFolders(
     trainingRoot: Path,
-    comfyInput: Path,
-    comfyOutput: Optional[Path],
+    comfyIn: Path,
+    comfyOut: Optional[Path],
     dryRun: bool,
 ) -> None:
 
-    rootsToScan: list[Tuple[str, Path]] = [("input", comfyInput)]
-    if comfyOutput is not None:
-        rootsToScan.append(("output", comfyOutput))
+    rootsToScan: list[Tuple[str, Path]] = [("input", comfyIn)]
+    if comfyOut is not None:
+        rootsToScan.append(("output", comfyOut))
 
     fixedFolders: list[Tuple[str, Path]] = []
     for label, root in rootsToScan:
@@ -385,9 +385,9 @@ def main() -> None:
     global logger
 
     parser = argparse.ArgumentParser(description="Copy training images into ComfyUI buckets (logging only, no CSV report).")
-    parser.add_argument("--trainingRoot", help="Training root (overrides config)")
-    parser.add_argument("--comfyInput", help="ComfyUI input folder (overrides config)")
-    parser.add_argument("--comfyOutput", help="ComfyUI output folder (overrides config)")
+    parser.add_argument("--trainingroot", help="Training root (overrides config)")
+    parser.add_argument("--comfyin", help="ComfyUI input folder (overrides config)")
+    parser.add_argument("--comfyout", help="ComfyUI output folder (overrides config)")
     parser.add_argument(
         "--dry-run",
         dest="dryRun",
@@ -412,37 +412,37 @@ def main() -> None:
 
     # resolve config values
     trainingRootCfg = config.get("trainingRoot")
-    comfyInputCfg = config.get("comfyInput")
-    comfyOutputCfg = config.get("comfyOutput")
+    comfyInCfg = config.get("comfyIn")
+    comfyOutCfg = config.get("comfyOut")
     configSkipDirs = set(config.get("skipDirs", [])) if isinstance(config.get("skipDirs", []), list) else set()
 
     # track config changes for auto-save
     configUpdates: dict = {}
 
-    if args.trainingRoot:
-        configUpdates["trainingRoot"] = args.trainingRoot
+    if args.trainingroot:
+        configUpdates["trainingRoot"] = args.trainingroot
 
-    if args.comfyInput:
-        configUpdates["comfyInput"] = args.comfyInput
+    if args.comfyin:
+        configUpdates["comfyIn"] = args.comfyin
 
-    if args.comfyOutput:
-        configUpdates["comfyOutput"] = args.comfyOutput
+    if args.comfyout:
+        configUpdates["comfyOut"] = args.comfyout
 
     # validate required paths
-    trainingRootVal = args.trainingRoot or trainingRootCfg
-    comfyInputVal = args.comfyInput or comfyInputCfg
-    comfyOutputVal = args.comfyOutput or comfyOutputCfg
+    trainingRootVal = args.trainingroot or trainingRootCfg
+    comfyInVal = args.comfyin or comfyInCfg
+    comfyOutVal = args.comfyout or comfyOutCfg
 
     if not trainingRootVal:
-        logger.error("Training root not provided (use --trainingRoot or set trainingRoot in config)")
+        logger.error("Training root not provided (use --trainingroot or set trainingRoot in config)")
         raise SystemExit(2)
-    if not comfyInputVal:
-        logger.error("ComfyUI input folder not provided (use --comfyInput or set comfyInput in config)")
+    if not comfyInVal:
+        logger.error("ComfyUI input folder not provided (use --comfyin or set comfyIn in config)")
         raise SystemExit(2)
 
     trainingRoot = Path(str(trainingRootVal)).expanduser().resolve()
-    comfyInput = Path(str(comfyInputVal)).expanduser().resolve()
-    comfyOutput = Path(str(comfyOutputVal)).expanduser().resolve() if comfyOutputVal else None
+    comfyIn = Path(str(comfyInVal)).expanduser().resolve()
+    comfyOut = Path(str(comfyOutVal)).expanduser().resolve() if comfyOutVal else None
 
     if not trainingRoot.exists():
         logger.error("Training root does not exist")
@@ -456,16 +456,16 @@ def main() -> None:
         logger.info(f"{prefix} updated config: {DEFAULT_CONFIG_PATH}")
 
     logger.info(f"{prefix} training root: {trainingRoot}")
-    logger.info(f"{prefix} comfyui input: {comfyInput}")
-    if comfyOutput is not None:
-        logger.info(f"{prefix} comfyui output: {comfyOutput}")
+    logger.info(f"{prefix} comfyui input: {comfyIn}")
+    if comfyOut is not None:
+        logger.info(f"{prefix} comfyui output: {comfyOut}")
 
     # reverse mode: fixed -> trainingRoot (with backup)
     if args.reverse:
         reverseFromFixedFolders(
             trainingRoot=trainingRoot,
-            comfyInput=comfyInput,
-            comfyOutput=comfyOutput,
+            comfyIn=comfyIn,
+            comfyOut=comfyOut,
             dryRun=args.dryRun,
         )
         return

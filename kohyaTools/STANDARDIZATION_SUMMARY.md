@@ -6,13 +6,14 @@ This document summarizes the standardization of argument names and configuration
 ## Standardized Arguments
 
 ### Primary Arguments
-All scripts that interact with training data and ComfyUI now use these standardized argument names:
+All scripts that interact with training data and ComfyUI now use these standardized argument names (all lowercase):
 
 | Argument | Purpose | Used By |
 |----------|---------|---------|
-| `--trainingRoot` | Root directory containing training data/styles | trainKohya, createKohyaDirs, migrateKohyaRemoveDate, copyToComfyUI |
-| `--comfyInput` | ComfyUI input directory | batchImg2ImgComfy, copyToComfyUI |
-| `--comfyOutput` | ComfyUI output directory | batchImg2ImgComfy, copyToComfyUI |
+| `--trainingroot` | Root directory containing training data/styles | trainKohya, createKohyaDirs, migrateKohyaRemoveDate, copyToComfyUI |
+| `--comfyin` | ComfyUI input directory | batchImg2ImgComfy, copyToComfyUI |
+| `--comfyout` | ComfyUI output directory | batchImg2ImgComfy, copyToComfyUI |
+| `--workflows` | ComfyUI workflows directory | batchImg2ImgComfy |
 
 ### Configuration Keys
 All arguments are stored in `~/.config/kohya/kohyaConfig.json` using flat keys:
@@ -20,8 +21,9 @@ All arguments are stored in `~/.config/kohya/kohyaConfig.json` using flat keys:
 ```json
 {
   "trainingRoot": "/path/to/training/data",
-  "comfyInput": "/path/to/ComfyUI/input",
-  "comfyOutput": "/path/to/ComfyUI/output"
+  "comfyIn": "/path/to/ComfyUI/input",
+  "comfyOut": "/path/to/ComfyUI/output",
+  "workflows": "/path/to/ComfyUI/workflows"
 }
 ```
 
@@ -33,12 +35,14 @@ All arguments are stored in `~/.config/kohya/kohyaConfig.json` using flat keys:
 - Config key: `comfyInputDir`
 
 **After:**
-- Argument: `--comfyInput`
-- Config key: `comfyInput`
-- Added: `--comfyOutput` and `comfyOutput` config key
+- Argument: `--comfyin` (lowercase)
+- Argument: `--comfyout` (lowercase)
+- Argument: `--workflows` (lowercase, renamed from `--workflowsDir`)
+- Config keys: `comfyIn`, `comfyOut`, `workflows`
 
 **Impact:**
 - Consistent with copyToComfyUI.py naming
+- All arguments in lowercase for consistency
 - Both input and output paths now configurable
 - Config values automatically saved and reused
 
@@ -48,14 +52,15 @@ All arguments are stored in `~/.config/kohya/kohyaConfig.json` using flat keys:
 - Used helper function `getNestedDictValue()` to access nested keys
 
 **After:**
-- Config structure: Flat `comfyInput` and `comfyOutput`
+- Config structure: Flat `comfyIn` and `comfyOut` (lowercase keys)
+- Arguments: `--comfyin` and `--comfyout` (all lowercase)
 - Direct config access with `config.get()`
 - Simplified config update logic
 
 **Impact:**
 - Consistent with batchImg2ImgComfy.py config structure
+- All arguments in lowercase for consistency
 - Simpler config management
-- No breaking changes to argument names (already used `--comfyInput` and `--comfyOutput`)
 
 ### 3. Other Scripts
 The following scripts already used standardized `--trainingRoot`:
@@ -67,17 +72,18 @@ All these scripts properly save `trainingRoot` to the config file.
 
 ## Benefits
 
-1. **Consistency**: All scripts use the same argument names for the same purposes
+1. **Consistency**: All scripts use the same argument names (all lowercase) for the same purposes
 2. **Simplified Configuration**: Flat config structure is easier to understand and manage
 3. **Reduced Confusion**: Users can switch between scripts without learning different argument names
 4. **Config Reuse**: Set values once, used across all scripts
 5. **Better Integration**: Scripts can easily share configuration values
+6. **Lowercase Convention**: All arguments follow lowercase naming convention
 
 ## Migration Guide
 
 ### For Users with Existing Configs
 
-If you have an existing `~/.config/kohya/kohyaConfig.json` with nested structure:
+If you have an existing `~/.config/kohya/kohyaConfig.json` with old structure:
 
 **Old format:**
 ```json
@@ -92,28 +98,33 @@ If you have an existing `~/.config/kohya/kohyaConfig.json` with nested structure
 **New format:**
 ```json
 {
-  "comfyInput": "/home/user/ComfyUI/input",
-  "comfyOutput": "/home/user/ComfyUI/output"
+  "comfyIn": "/home/user/ComfyUI/input",
+  "comfyOut": "/home/user/ComfyUI/output",
+  "workflows": "/home/user/ComfyUI/workflows"
 }
 ```
 
 **Migration Steps:**
 1. Edit `~/.config/kohya/kohyaConfig.json`
-2. Move `comfyUI.inputDir` → `comfyInput`
-3. Move `comfyUI.outputDir` → `comfyOutput`
-4. Remove the now-empty `comfyUI` object
-5. Or simply delete the config file and let the scripts recreate it with new values
+2. Move `comfyUI.inputDir` → `comfyIn` (or `comfyInput` → `comfyIn`)
+3. Move `comfyUI.outputDir` → `comfyOut` (or `comfyOutput` → `comfyOut`)
+4. Rename `comfyWorkflowsDir` → `workflows`
+5. Remove the now-empty `comfyUI` object if present
+6. Or simply delete the config file and let the scripts recreate it with new values
 
 ### For Script Users
 
 **Old command:**
 ```bash
 python batchImg2ImgComfy.py --inputDir ~/ComfyUI/input
+# or
+python batchImg2ImgComfy.py --comfyInput ~/ComfyUI/input
 ```
 
 **New command:**
 ```bash
-python batchImg2ImgComfy.py --comfyInput ~/ComfyUI/input
+python batchImg2ImgComfy.py --comfyin ~/ComfyUI/input
+python copyToComfyUI.py --comfyin ~/ComfyUI/input --comfyout ~/ComfyUI/output
 ```
 
 The first time you run with the new argument names, they will be saved to the config file and become the default for future runs.
@@ -121,10 +132,10 @@ The first time you run with the new argument names, they will be saved to the co
 ## Verification
 
 All scripts have been syntax-checked and verified to:
-- ✅ Parse arguments correctly
+- ✅ Parse arguments correctly (all lowercase)
 - ✅ Load config values properly
 - ✅ Save config updates (except in --dry-run mode)
-- ✅ Use standardized argument names
+- ✅ Use standardized argument names (--comfyin, --comfyout, --workflows, --trainingroot)
 - ✅ Use flat config keys
 
 ## Related Documentation
