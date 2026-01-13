@@ -109,6 +109,7 @@ def updateConfigFromArgs(cfg: Dict[str, Any], updates: Dict[str, Any]) -> bool:
         if value is None:
             continue
         if cfg.get(key) != value:
+            logger.info(f"{prefix} config update: {key}: {cfg.get(key)!r} -> {value!r}")
             cfg[key] = value
             changed = True
     return changed
