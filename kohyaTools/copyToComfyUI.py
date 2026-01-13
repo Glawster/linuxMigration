@@ -24,10 +24,8 @@ Config (optional): ~/.config/kohya/kohyaConfig.json
 Expected keys (examples):
 {
   "trainingRoot": "/mnt/backup",
-  "comfyUI": {
-    "inputDir": "/home/andy/Source/ComfyUI/input",
-    "outputDir": "/home/andy/Source/ComfyUI/output"
-  },
+  "comfyInput": "/home/andy/Source/ComfyUI/input",
+  "comfyOutput": "/home/andy/Source/ComfyUI/output",
   "skipDirs": [".wastebasket", ".Trash", "@eaDir"],
   "lowRes": { "minShortSide": 768, "minPixels": 589824 },
   "framing": { "fullBodyMaxFaceRatio": 0.18, "halfBodyMaxFaceRatio": 0.35 }
@@ -329,14 +327,14 @@ def backupThenCopyReplace(srcFixed: Path, destOriginal: Path, dryRun: bool) -> N
 
 def reverseFromFixedFolders(
     trainingRoot: Path,
-    comfyInput: Path,
-    comfyOutput: Optional[Path],
+    comfyIn: Path,
+    comfyOut: Optional[Path],
     dryRun: bool,
 ) -> None:
 
-    rootsToScan: list[Tuple[str, Path]] = [("input", comfyInput)]
-    if comfyOutput is not None:
-        rootsToScan.append(("output", comfyOutput))
+    rootsToScan: list[Tuple[str, Path]] = [("input", comfyIn)]
+    if comfyOut is not None:
+        rootsToScan.append(("output", comfyOut))
 
     fixedFolders: list[Tuple[str, Path]] = []
     for label, root in rootsToScan:
@@ -387,9 +385,9 @@ def main() -> None:
     global logger
 
     parser = argparse.ArgumentParser(description="Copy training images into ComfyUI buckets (logging only, no CSV report).")
-    parser.add_argument("--trainingRoot", help="Training root (overrides config)")
-    parser.add_argument("--comfyInput", help="ComfyUI input folder (overrides config)")
-    parser.add_argument("--comfyOutput", help="ComfyUI output folder (overrides config)")
+    parser.add_argument("--training", help="Training root (overrides config)")
+    parser.add_argument("--comfyin", help="ComfyUI input folder (overrides config)")
+    parser.add_argument("--comfyout", help="ComfyUI output folder (overrides config)")
     parser.add_argument(
         "--dry-run",
         dest="dryRun",
@@ -414,53 +412,44 @@ def main() -> None:
 
     # resolve config values
     trainingRootCfg = config.get("trainingRoot")
-    comfyInputCfg = getNestedDictValue(config, ("comfyUI", "inputDir"))
-    comfyOutputCfg = getNestedDictValue(config, ("comfyUI", "outputDir"))
+    comfyInputCfg = config.get("comfyInput")
+    comfyOutputCfg = config.get("comfyOutput")
     configSkipDirs = set(config.get("skipDirs", [])) if isinstance(config.get("skipDirs", []), list) else set()
 
     # track config changes for auto-save
     configUpdates: dict = {}
-    nestedConfigChanged = False
 
-    if args.trainingRoot:
-        configUpdates["trainingRoot"] = args.trainingRoot
+    if args.training:
+        configUpdates["trainingRoot"] = args.training
 
-    if args.comfyInput:
-        if "comfyUI" not in config:
-            config["comfyUI"] = {}
-        if config["comfyUI"].get("inputDir") != args.comfyInput:
-            config["comfyUI"]["inputDir"] = args.comfyInput
-            nestedConfigChanged = True
+    if args.comfyin:
+        configUpdates["comfyInput"] = args.comfyin
 
-    if args.comfyOutput:
-        if "comfyUI" not in config:
-            config["comfyUI"] = {}
-        if config["comfyUI"].get("outputDir") != args.comfyOutput:
-            config["comfyUI"]["outputDir"] = args.comfyOutput
-            nestedConfigChanged = True
+    if args.comfyout:
+        configUpdates["comfyOutput"] = args.comfyout
 
     # validate required paths
-    trainingRootVal = args.trainingRoot or trainingRootCfg
-    comfyInputVal = args.comfyInput or comfyInputCfg
-    comfyOutputVal = args.comfyOutput or comfyOutputCfg
+    trainingRootVal = args.training or trainingRootCfg
+    comfyInVal = args.comfyin or comfyInputCfg
+    comfyOutVal = args.comfyout or comfyOutputCfg
 
     if not trainingRootVal:
-        logger.error("Training root not provided (use --trainingRoot or set trainingRoot in config)")
+        logger.error("Training root not provided (use --training or set trainingRoot in config)")
         raise SystemExit(2)
-    if not comfyInputVal:
-        logger.error("ComfyUI input folder not provided (use --comfyInput or set comfyUI.inputDir in config)")
+    if not comfyInVal:
+        logger.error("ComfyUI input folder not provided (use --comfyin or set comfyInput in config)")
         raise SystemExit(2)
 
     trainingRoot = Path(str(trainingRootVal)).expanduser().resolve()
-    comfyInput = Path(str(comfyInputVal)).expanduser().resolve()
-    comfyOutput = Path(str(comfyOutputVal)).expanduser().resolve() if comfyOutputVal else None
+    comfyInput = Path(str(comfyInVal)).expanduser().resolve()
+    comfyOutput = Path(str(comfyOutVal)).expanduser().resolve() if comfyOutVal else None
 
     if not trainingRoot.exists():
         logger.error("Training root does not exist")
         raise SystemExit(2)
 
     # update config if CLI args provided new values
-    configChanged = updateConfigFromArgs(config, configUpdates) or nestedConfigChanged
+    configChanged = updateConfigFromArgs(config, configUpdates)
     if configChanged and not args.dryRun:
         saveConfig(config)
     if configChanged:
@@ -475,8 +464,8 @@ def main() -> None:
     if args.reverse:
         reverseFromFixedFolders(
             trainingRoot=trainingRoot,
-            comfyInput=comfyInput,
-            comfyOutput=comfyOutput,
+            comfyIn=comfyInput,
+            comfyOut=comfyOutput,
             dryRun=args.dryRun,
         )
         return
@@ -503,8 +492,8 @@ def main() -> None:
     detector = loadDetector()
 
     # buckets (under ComfyUI input)
-    fullBodyDir = comfyInput / "full_body"
-    halfBodyDir = comfyInput / "half_body"
+    fullBodyDir = comfyInput / "fullbody"
+    halfBodyDir = comfyInput / "halfbody"
     portraitDir = comfyInput / "portrait"
     lowResDir = comfyInput / "lowres"
 

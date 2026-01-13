@@ -48,7 +48,7 @@ def parseArgs() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="one-off migration: remove date prefix from kohya 10_style filenames"
     )
-    parser.add_argument("--trainingRoot", type=Path, default=defaultTrainingRoot)
+    parser.add_argument("--training", type=Path, default=defaultTrainingRoot)
     parser.add_argument("--style", type=str, default=None)
     parser.add_argument("--captionExtension", type=str, default=defaultCaptionExtension)
     parser.add_argument("--dry-run", dest="dryRun", action="store_true")
@@ -160,11 +160,11 @@ def main() -> None:
     prefix = "...[]" if args.dryRun else "..."
     logger = getLogger("migrateKohyaRemoveDate", includeConsole=True)
 
-    trainingRoot = args.trainingRoot.expanduser().resolve()
+    trainingRoot = args.training.expanduser().resolve()
 
     # Persist config (optional, consistent with your tools)
     cfg = loadConfig()
-    updates = {"trainingRoot": str(args.trainingRoot), "captionExtension": str(args.captionExtension)}
+    updates = {"trainingRoot": str(args.training), "captionExtension": str(args.captionExtension)}
     configChanged = updateConfigFromArgs(cfg, updates=updates)
     if configChanged and not args.dryRun:
         saveConfig(cfg)
