@@ -44,12 +44,10 @@ from kohyaUtils import (
     resolveKohyaPaths,
     stripPNGMetadata,
     writeCaptionIfMissing,
+    setLogger
 )
 from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateConfigFromArgs
 from organiseMyProjects.logUtils import getLogger  # type: ignore
-
-logger = None  # type: ignore
-
 
 def parseArgs() -> argparse.Namespace:
     cfg = loadConfig()
@@ -363,6 +361,7 @@ def main() -> None:
 
     global logger
     logger = getLogger("createKohyaDirs", includeConsole=True)
+    setLogger(logger)
 
     trainingRoot = args.training.expanduser().resolve()
 

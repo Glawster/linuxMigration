@@ -20,11 +20,22 @@ import datetime
 import os
 import re
 import subprocess
+import logging
 
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
+logger: Optional[logging.Logger] = None
+
+def setLogger(externalLogger: logging.Logger) -> None:
+    """
+    Inject a logger from the calling script.
+
+    kohyaUtils does not create its own logger; it uses the caller's.
+    """
+    global logger
+    logger = externalLogger
 
 def _log(level: str, message: str) -> None:
     if logger is None:
@@ -36,16 +47,6 @@ def _log(level: str, message: str) -> None:
         logger.warning(message)
     else:
         logger.info(message)
-
-
-logger = None  # global logger, set by caller
-
-
-def setLogger(externalLogger) -> None:
-    """Set a global logger for kohyaUtils."""
-    global logger
-    logger = externalLogger
-
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".cr2", ".nef"}
 
@@ -107,12 +108,6 @@ def ensureDirs(paths: KohyaPaths, includeOriginals: bool = False) -> None:
 def isImageFile(filePath: Path) -> bool:
     """Check if a file is a supported image type."""
     return filePath.is_file() and filePath.suffix.lower() in IMAGE_EXTENSIONS
-
-
-def setLogger(externalLogger) -> None:
-    """Set a global logger for kohyaUtils."""
-    global logger
-    logger = externalLogger
 
 
 def listImageFiles(folderPath: Path, recursive: bool = False) -> List[Path]:
