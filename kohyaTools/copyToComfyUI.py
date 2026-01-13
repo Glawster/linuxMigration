@@ -49,20 +49,6 @@ from organiseMyProjects.logUtils import getLogger  # type: ignore
 
 
 # ============================================================
-# module logger (initialised in main)
-# ============================================================
-
-logger = None  # type: ignore
-prefix = ""  # type: ignore 
-
-# ============================================================
-# helpers
-# ============================================================
-
-# (no helpers)
-
-
-# ============================================================
 # constants
 # ============================================================
 
@@ -173,6 +159,10 @@ def loadDetector() -> cv2.CascadeClassifier:
         raise RuntimeError(f"could not load haar cascade: {cascadePath}")
     return detector
 
+def loadPeopleDetector() -> cv2.HOGDescriptor:
+    hog = cv2.HOGDescriptor()
+    hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+    return hog
 
 def detectLargestFace(
     imagePath: Path,
@@ -199,19 +189,71 @@ def detectLargestFace(
     x, y, w, h = max(faces, key=lambda r: int(r[2]) * int(r[3]))
     return (int(x), int(y), int(w), int(h), int(imgW), int(imgH))
 
-
-def classifyFraming(largestFace, cfg: FramingConfig) -> Tuple[str, float]:
+def detectLargestPerson(
+    imagePath: Path,
+    hog: cv2.HOGDescriptor,
+) -> Optional[Tuple[int, int, int, int, int, int]]:
     """
-    Returns (framing, faceRatio) where faceRatio = faceHeight / imageHeight
+    Returns (x, y, w, h, imgW, imgH) for the largest detected person bbox.
+    Uses OpenCV HOG people detector (fast, no external weights).
+    """
+    img = cv2.imread(str(imagePath))
+    if img is None:
+        return None
+
+    imgH, imgW = img.shape[:2]
+
+    # HOG works better with some reasonable size; don’t overthink it.
+    # (We are only using this to confirm "feet likely in frame".)
+    rects, _ = hog.detectMultiScale(img, winStride=(8, 8), padding=(8, 8), scale=1.05)
+
+    if rects is None or len(rects) == 0:
+        return None
+
+    x, y, w, h = max(rects, key=lambda r: int(r[2]) * int(r[3]))
+    return (int(x), int(y), int(w), int(h), int(imgW), int(imgH))
+
+
+def hasFeetInFrame(
+    personBBox: Tuple[int, int, int, int, int, int],
+    feetBottomThreshold: float = 0.95,
+) -> bool:
+    """
+    True if the bottom of the person bbox is close to the image bottom.
+    """
+    x, y, w, h, imgW, imgH = personBBox
+    bottom = y + h
+    return bottom >= int(imgH * feetBottomThreshold)
+
+def classifyFraming(
+    largestFace,
+    framingCfg: FramingConfig,
+    personBBox: Optional[Tuple[int, int, int, int, int, int]],
+) -> Tuple[str, float]:
+    """
+    Returns (framing, faceRatio)
+
+    Rules:
+      - full_body: face present AND feet visible
+      - half_body: face present AND feet NOT visible
+      - portrait: face dominates frame
     """
     _, _, _, faceH, _, imgH = largestFace
     ratio = faceH / float(imgH)
 
-    if ratio <= cfg.fullBodyMaxFaceRatio:
-        return ("full_body", ratio)
-    if ratio <= cfg.halfBodyMaxFaceRatio:
+    # portrait: face is large
+    if ratio > framingCfg.halfBodyMaxFaceRatio:
+        return ("portrait", ratio)
+
+    # candidate for full body by face size
+    if ratio <= framingCfg.fullBodyMaxFaceRatio:
+        if personBBox is not None and hasFeetInFrame(personBBox, feetBottomThreshold=0.95):
+            return ("full_body", ratio)
+        # face but no feet → half body
         return ("half_body", ratio)
-    return ("portrait", ratio)
+
+    # remaining face-containing images
+    return ("half_body", ratio)
 
 
 # ============================================================
@@ -382,7 +424,6 @@ def reverseFromFixedFolders(
 # ============================================================
 
 def main() -> None:
-    global logger
 
     parser = argparse.ArgumentParser(description="Copy training images into ComfyUI buckets (logging only, no CSV report).")
     parser.add_argument("--training", help="Training root (overrides config)")
@@ -401,6 +442,7 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    global logger
     logger = getLogger("copyToComfyUI", includeConsole=True)
 
     global prefix
@@ -490,6 +532,7 @@ def main() -> None:
 
     faceCfg = FaceDetectConfig()
     detector = loadDetector()
+    peopleDetector = loadPeopleDetector()
 
     # buckets (under ComfyUI input)
     fullBodyDir = comfyInput / "fullbody"
@@ -529,7 +572,9 @@ def main() -> None:
 
             # not low-res: if face then classify framing
             elif hasFace:
-                framing, faceRatio = classifyFraming(largestFace, framingCfg)
+                personBBox = detectLargestPerson(imagePath, peopleDetector)
+                framing, faceRatio = classifyFraming(largestFace, framingCfg, personBBox)
+
                 extra = f"[{w}x{h}] framing={framing} faceRatio={faceRatio:.3f}" if (w and h) else f"framing={framing} faceRatio={faceRatio:.3f}"
 
                 if framing == "full_body":
@@ -545,6 +590,11 @@ def main() -> None:
                     else:
                         # portrait detected but not requested
                         destDir = None
+                logger.info(
+                    f"...framing decision: {imagePath.name} "
+                    f"faceRatio={faceRatio:.3f} feet={'yes' if personBBox and hasFeetInFrame(personBBox) else 'no'} "
+                    f"-> {framing}"
+                )
 
             if destDir is None:
                 continue
