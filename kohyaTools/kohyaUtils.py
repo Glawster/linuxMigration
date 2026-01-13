@@ -21,6 +21,7 @@ import os
 import re
 import subprocess
 import logging
+import traceback
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -480,7 +481,6 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> Optional[datetime.d
         pass
     except Exception as e:
         # Any other error reading EXIF
-        import traceback
         tb_str = traceback.format_exc()
         _log("error", f"{prefix} exif-debug: Unexpected exception: {type(e).__name__}: {e}\n{tb_str}")
         pass
