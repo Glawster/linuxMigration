@@ -62,7 +62,7 @@ def parseArgs() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create or restore Kohya training folder structure (style/train).")
 
     parser.add_argument(
-        "--trainingRoot",
+        "--training",
         type=Path,
         default=defaultTrainingRoot,
         help=f"root folder containing style folders (default: {defaultTrainingRoot})",

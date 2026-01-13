@@ -419,8 +419,8 @@ def main() -> None:
     # track config changes for auto-save
     configUpdates: dict = {}
 
-    if args.trainingroot:
-        configUpdates["trainingRoot"] = args.trainingroot
+    if args.training:
+        configUpdates["trainingRoot"] = args.training
 
     if args.comfyin:
         configUpdates["comfyInput"] = args.comfyin
@@ -429,20 +429,20 @@ def main() -> None:
         configUpdates["comfyOutput"] = args.comfyout
 
     # validate required paths
-    trainingRootVal = args.trainingroot or trainingRootCfg
+    trainingRootVal = args.training or trainingRootCfg
     comfyInVal = args.comfyin or comfyInputCfg
     comfyOutVal = args.comfyout or comfyOutputCfg
 
     if not trainingRootVal:
-        logger.error("Training root not provided (use --trainingroot or set trainingRoot in config)")
+        logger.error("Training root not provided (use --training or set trainingRoot in config)")
         raise SystemExit(2)
     if not comfyInVal:
         logger.error("ComfyUI input folder not provided (use --comfyin or set comfyInput in config)")
         raise SystemExit(2)
 
     trainingRoot = Path(str(trainingRootVal)).expanduser().resolve()
-    comfyIn = Path(str(comfyInVal)).expanduser().resolve()
-    comfyOut = Path(str(comfyOutVal)).expanduser().resolve() if comfyOutVal else None
+    comfyInput = Path(str(comfyInVal)).expanduser().resolve()
+    comfyOutput = Path(str(comfyOutVal)).expanduser().resolve() if comfyOutVal else None
 
     if not trainingRoot.exists():
         logger.error("Training root does not exist")
@@ -456,16 +456,16 @@ def main() -> None:
         logger.info(f"{prefix} updated config: {DEFAULT_CONFIG_PATH}")
 
     logger.info(f"{prefix} training root: {trainingRoot}")
-    logger.info(f"{prefix} comfyui input: {comfyIn}")
-    if comfyOut is not None:
-        logger.info(f"{prefix} comfyui output: {comfyOut}")
+    logger.info(f"{prefix} comfyui input: {comfyInput}")
+    if comfyOutput is not None:
+        logger.info(f"{prefix} comfyui output: {comfyOutput}")
 
     # reverse mode: fixed -> trainingRoot (with backup)
     if args.reverse:
         reverseFromFixedFolders(
             trainingRoot=trainingRoot,
-            comfyIn=comfyIn,
-            comfyOut=comfyOut,
+            comfyIn=comfyInput,
+            comfyOut=comfyOutput,
             dryRun=args.dryRun,
         )
         return
@@ -492,8 +492,8 @@ def main() -> None:
     detector = loadDetector()
 
     # buckets (under ComfyUI input)
-    fullBodyDir = comfyInput / "full_body"
-    halfBodyDir = comfyInput / "half_body"
+    fullBodyDir = comfyInput / "fullbody"
+    halfBodyDir = comfyInput / "halfbody"
     portraitDir = comfyInput / "portrait"
     lowResDir = comfyInput / "lowres"
 

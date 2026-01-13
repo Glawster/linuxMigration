@@ -302,17 +302,17 @@ def main() -> int:
             logger.error("Missing workflow file for %s: %s", name, p)
             return 2
 
-    inputDir = Path(args.comfyin).expanduser().resolve()
-    if not inputDir.exists():
-        logger.error("Input dir does not exist: %s", inputDir)
+    comfyInput = Path(args.comfyin).expanduser().resolve()
+    if not comfyInput.exists():
+        logger.error("Input dir does not exist: %s", comfyInput)
         return 2
 
     # Output folder used to decide whether an image has already been processed.
     # If output already contains "fixed_<stem>*", we skip re-processing; delete the output to regenerate.
-    outputDir = Path(args.outputDir) if str(args.outputDir) not in ("", ".") else Path(getCfgValue(cfg, "comfyOutputDir", ""))
-    if str(outputDir) in ("", "."):
-        outputDir = inputDir.parent / "output"
-    outputDir = outputDir.expanduser().resolve()
+    comfyOutput = Path(args.outputDir) if str(args.outputDir) not in ("", ".") else Path(getCfgValue(cfg, "comfyOutputDir", ""))
+    if str(comfyOutput) in ("", "."):
+        comfyOutput = comfyInput.parent / "output"
+    comfyOutput = comfyOutput.expanduser().resolve()
 
     fixedPrefix = str(getCfgValue(cfg, "comfyFixedOutputPrefix", "fixed_"))
 
@@ -337,7 +337,7 @@ def main() -> int:
     filenamePrefixTemplate = str(getCfgValue(cfg, "comfyFilenamePrefixTemplate", "fixed_{stem}"))
     downloadPathTemplate = str(getCfgValue(cfg, "comfyDownloadPathTemplate", "{runDir}/{bucket}/{stem}"))
 
-    allImages = [p for p in inputDir.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
+    allImages = [p for p in comfyInput.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
     
     # Apply precedence rules: prefer fixed_* versions over originals
     stemToImage = applyPrecedenceRules(allImages)
@@ -346,8 +346,8 @@ def main() -> int:
     jobs: List[Tuple[Path, str]] = []
     for img in sorted(imagesToProcess):
         stemSafe = safeStem(img.stem)
-        if hasExistingOutput(outputDir=outputDir, fixedPrefix=fixedPrefix, stem=stemSafe):
-            relSkip = img.relative_to(inputDir).as_posix()
+        if hasExistingOutput(outputDir=comfyOutput, fixedPrefix=fixedPrefix, stem=stemSafe):
+            relSkip = img.relative_to(comfyInput).as_posix()
             logger.info("%s skip (output exists): %s", prefix, relSkip)
             continue
         bucket = classifyImage(img, rules)
@@ -370,7 +370,7 @@ def main() -> int:
     client = ComfyClient(args.comfyurl, args.timeoutseconds)
 
     for i, (imgPath, bucket) in enumerate(jobs, start=1):
-        rel = imgPath.relative_to(inputDir).as_posix()
+        rel = imgPath.relative_to(comfyInput).as_posix()
         stem = safeStem(imgPath.stem)
 
         wfPath = workflowPaths[bucket]
