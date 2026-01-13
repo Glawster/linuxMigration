@@ -146,7 +146,7 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="run kohya sd-scripts LoRA training")
     parser.add_argument("styleName", help="style/person name (used for folder + output name)")
 
-    parser.add_argument("--trainingRoot", type=str, default=getCfgValue(cfg, "trainingRoot", "/mnt/myVideo/Adult/tumblrForMovie"))
+    parser.add_argument("--training", type=str, default=getCfgValue(cfg, "trainingRoot", "/mnt/myVideo/Adult/tumblrForMovie"))
     parser.add_argument("--kohyaRoot", type=str, default=getCfgValue(cfg, "kohyaRoot", str(Path.home() / "Source" / "kohya_ss")))
     parser.add_argument("--pretrainedModel", type=str, default=getCfgValue(cfg, "pretrainedModel", "/mnt/models/v1-5-pruned-emaonly.safetensors"))
     parser.add_argument("--numCpuThreads", type=int, default=int(getCfgValue(cfg, "numCpuThreads", 8)))
@@ -169,7 +169,7 @@ def main() -> int:
     logger = getLogger("trainKohya", includeConsole=True)
 
     updates = {
-        "trainingRoot": str(args.trainingRoot),
+        "trainingRoot": str(args.training),
         "kohyaRoot": str(args.kohyaRoot),
         "pretrainedModel": str(args.pretrainedModel),
         "numCpuThreads": int(args.numCpuThreads),
@@ -182,7 +182,7 @@ def main() -> int:
         logger.info("%s updated config: %s", prefix, DEFAULT_CONFIG_PATH)
 
     styleName = args.styleName
-    trainingRoot = Path(args.trainingRoot).expanduser()
+    trainingRoot = Path(args.training).expanduser()
     kohyaRoot = Path(args.kohyaRoot).expanduser()
     pretrainedModel = Path(args.pretrainedModel).expanduser()
 

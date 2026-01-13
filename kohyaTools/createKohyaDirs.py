@@ -364,7 +364,7 @@ def main() -> None:
     global logger
     logger = getLogger("createKohyaDirs", includeConsole=True)
 
-    trainingRoot = args.trainingRoot.expanduser().resolve()
+    trainingRoot = args.training.expanduser().resolve()
 
     try:
         styleFolders = getStyleFolders(trainingRoot, args.style)
@@ -374,7 +374,7 @@ def main() -> None:
 
     cfg = loadConfig()
     updates = {
-        "trainingRoot": str(args.trainingRoot),
+        "trainingRoot": str(args.training),
         "captionTemplate": args.captionTemplate,
         "captionExtension": args.captionExtension,
         "includeOriginalsDir": bool(args.includeOriginalsDir),

@@ -385,7 +385,7 @@ def main() -> None:
     global logger
 
     parser = argparse.ArgumentParser(description="Copy training images into ComfyUI buckets (logging only, no CSV report).")
-    parser.add_argument("--trainingroot", help="Training root (overrides config)")
+    parser.add_argument("--training", help="Training root (overrides config)")
     parser.add_argument("--comfyin", help="ComfyUI input folder (overrides config)")
     parser.add_argument("--comfyout", help="ComfyUI output folder (overrides config)")
     parser.add_argument(
