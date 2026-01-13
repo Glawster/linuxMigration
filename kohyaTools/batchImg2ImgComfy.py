@@ -242,8 +242,8 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=0, help="process at most N images (0 = no limit)")
 
     parser.add_argument("--comfyUrl", default=getCfgValue(cfg, "comfyUrl", "http://127.0.0.1:8188"))
-    parser.add_argument("--inputDir", type=Path, default=Path(getCfgValue(cfg, "comfyInputDir", "./input")))
-    parser.add_argument("--outputDir", type=Path, default=Path(getCfgValue(cfg, "comfyOutputDir", "")), help="comfyui output folder (default: <inputDir>/../output)")
+    parser.add_argument("--comfyInput", type=Path, default=Path(getCfgValue(cfg, "comfyInput", "./input")))
+    parser.add_argument("--comfyOutput", type=Path, default=Path(getCfgValue(cfg, "comfyOutput", "./output")))
     parser.add_argument("--workflowsDir", type=Path, default=Path(getCfgValue(cfg, "comfyWorkflowsDir", "./workflows")))
     parser.add_argument("--runsDir", type=Path, default=Path(getCfgValue(cfg, "comfyRunsDir", "./runs")))
 
@@ -270,7 +270,8 @@ def main() -> int:
 
     updates = {
         "comfyUrl": str(args.comfyUrl),
-        "comfyInputDir": str(Path(args.inputDir).expanduser()),
+        "comfyInput": str(Path(args.comfyInput).expanduser()),
+        "comfyOutput": str(Path(args.comfyOutput).expanduser()),
         "comfyWorkflowsDir": str(Path(args.workflowsDir).expanduser()),
         "comfyRunsDir": str(Path(args.runsDir).expanduser()),
         "comfyTimeoutSeconds": int(args.timeoutSeconds),
@@ -301,7 +302,7 @@ def main() -> int:
             logger.error("Missing workflow file for %s: %s", name, p)
             return 2
 
-    inputDir = Path(args.inputDir).expanduser().resolve()
+    inputDir = Path(args.comfyInput).expanduser().resolve()
     if not inputDir.exists():
         logger.error("Input dir does not exist: %s", inputDir)
         return 2

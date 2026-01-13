@@ -309,14 +309,15 @@ The following tests should be performed in a live environment:
 
 ## Conclusion
 
-All kohyaTools scripts have been examined and found to meet the stated requirements. Four issues were identified and fixed:
+All kohyaTools scripts have been examined and found to meet the stated requirements. Five issues were identified and fixed:
 
 1. Workflow filenames updated to use `_api.json` convention
 2. Output prefix corrected to produce `fixed_{stem}` format
 3. Reverse mode regex updated to handle ComfyUI output format
 4. Input precedence rules implemented to prefer processed versions over originals
+5. Argument names standardized across all scripts (`--trainingRoot`, `--comfyInput`, `--comfyOutput`)
 
-The codebase demonstrates high quality with consistent conventions, comprehensive error handling, and proper dry-run support throughout. All scripts are now correctly aligned with the ComfyUI batch img2img pipeline requirements.
+The codebase demonstrates high quality with consistent conventions, comprehensive error handling, and proper dry-run support throughout. All scripts are now correctly aligned with the ComfyUI batch img2img pipeline requirements and use standardized configuration.
 
 ## Changes Summary
 
@@ -325,19 +326,60 @@ The codebase demonstrates high quality with consistent conventions, comprehensiv
    - Lines 1-18: Updated docstring to document input precedence rules
    - Lines 45-98: Added `extractBaseStem()` and `applyPrecedenceRules()` functions
    - Lines 218-220: Changed workflow defaults to use `_api.json` suffix
+   - Line 232: Renamed `--inputDir` to `--comfyInput`
+   - Line 233: Added `--comfyOutput` argument
    - Line 256: Changed output prefix from `{bucket}/{stem}` to `fixed_{stem}`
+   - Lines 257-267: Updated config keys from `comfyInputDir` to `comfyInput`, added `comfyOutput`
    - Lines 259-268: Implemented precedence logic to prefer processed versions
+   - Line 290: Updated reference from `args.inputDir` to `args.comfyInput`
 
 2. **kohyaTools/copyToComfyUI.py**
+   - Lines 3-35: Updated docstring to show flat config structure (not nested)
    - Lines 87-91: Updated STYLE_FROM_FILENAME_RE regex to handle `fixed_` prefix and ComfyUI numbering
+   - Lines 413-454: Changed from nested `comfyUI.inputDir/outputDir` to flat `comfyInput/comfyOutput` config keys
+   - Simplified config update logic (removed nested dictionary handling)
+
+3. **kohyaTools/EXAMINATION_REPORT.md**
+   - Added Issue 5 documenting argument name standardization
+   - Updated conclusion to reflect five issues fixed
+   - Updated changes summary
 
 ### Compatibility Notes
-- Existing config files will continue to work
+- Existing config files with nested `comfyUI.inputDir` structure will need migration to flat `comfyInput` keys
 - Custom workflow filenames can still be specified in config
-- The changes only affect default values
+- All scripts now use consistent argument names: `--trainingRoot`, `--comfyInput`, `--comfyOutput`
 - Dry-run mode allows testing without side effects
+
+### Issue 5: Inconsistent Argument Names Across Scripts
+**Location**: Multiple scripts
+
+**Problem**:
+- `batchImg2ImgComfy.py` used `--inputDir` while `copyToComfyUI.py` used `--comfyInput`
+- Config structure was inconsistent: nested `comfyUI.inputDir` vs flat keys
+- Made it difficult to use consistent config values across tools
+
+**Fix**:
+1. **batchImg2ImgComfy.py**:
+   - Changed `--inputDir` → `--comfyInput`
+   - Added `--comfyOutput` for consistency
+   - Changed config key `comfyInputDir` → `comfyInput`
+   - Added `comfyOutput` to config updates
+
+2. **copyToComfyUI.py**:
+   - Changed from nested `config["comfyUI"]["inputDir"]` to flat `config["comfyInput"]`
+   - Changed from nested `config["comfyUI"]["outputDir"]` to flat `config["comfyOutput"]`
+   - Simplified config update logic
+   - Updated docstring and error messages
+
+**Result**:
+- All scripts now use standardized argument names: `--trainingRoot`, `--comfyInput`, `--comfyOutput`
+- Config structure uses flat keys for easier management
+- All values are written to config file and used as defaults when not supplied
+
+**Rationale**: Standardizing argument names and config structure across all tools improves consistency, reduces user confusion, and makes it easier to switch between tools with the same configuration values.
 
 ---
 **Examination Date**: 2026-01-12  
-**Status**: ✅ Complete - All Requirements Met  
+**Last Updated**: 2026-01-12  
+**Status**: ✅ Complete - All Requirements Met (including standardization)  
 **Note**: This is a code examination and correctness review. Runtime testing should be performed in a live environment.
