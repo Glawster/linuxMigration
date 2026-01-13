@@ -412,8 +412,8 @@ def main() -> None:
 
     # resolve config values
     trainingRootCfg = config.get("trainingRoot")
-    comfyInCfg = config.get("comfyIn")
-    comfyOutCfg = config.get("comfyOut")
+    comfyInputCfg = config.get("comfyInput")
+    comfyOutputCfg = config.get("comfyOutput")
     configSkipDirs = set(config.get("skipDirs", [])) if isinstance(config.get("skipDirs", []), list) else set()
 
     # track config changes for auto-save
@@ -423,21 +423,21 @@ def main() -> None:
         configUpdates["trainingRoot"] = args.trainingroot
 
     if args.comfyin:
-        configUpdates["comfyIn"] = args.comfyin
+        configUpdates["comfyInput"] = args.comfyin
 
     if args.comfyout:
-        configUpdates["comfyOut"] = args.comfyout
+        configUpdates["comfyOutput"] = args.comfyout
 
     # validate required paths
     trainingRootVal = args.trainingroot or trainingRootCfg
-    comfyInVal = args.comfyin or comfyInCfg
-    comfyOutVal = args.comfyout or comfyOutCfg
+    comfyInVal = args.comfyin or comfyInputCfg
+    comfyOutVal = args.comfyout or comfyOutputCfg
 
     if not trainingRootVal:
         logger.error("Training root not provided (use --trainingroot or set trainingRoot in config)")
         raise SystemExit(2)
     if not comfyInVal:
-        logger.error("ComfyUI input folder not provided (use --comfyin or set comfyIn in config)")
+        logger.error("ComfyUI input folder not provided (use --comfyin or set comfyInput in config)")
         raise SystemExit(2)
 
     trainingRoot = Path(str(trainingRootVal)).expanduser().resolve()

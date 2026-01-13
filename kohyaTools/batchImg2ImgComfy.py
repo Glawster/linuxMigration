@@ -242,9 +242,9 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=0, help="process at most N images (0 = no limit)")
 
     parser.add_argument("--comfyurl", default=getCfgValue(cfg, "comfyUrl", "http://127.0.0.1:8188"))
-    parser.add_argument("--comfyin", type=Path, default=Path(getCfgValue(cfg, "comfyIn", "./input")))
-    parser.add_argument("--comfyout", type=Path, default=Path(getCfgValue(cfg, "comfyOut", "./output")))
-    parser.add_argument("--workflows", type=Path, default=Path(getCfgValue(cfg, "workflows", "./workflows")))
+    parser.add_argument("--comfyin", type=Path, default=Path(getCfgValue(cfg, "comfyInput", "./input")))
+    parser.add_argument("--comfyout", type=Path, default=Path(getCfgValue(cfg, "comfyOutput", "./output")))
+    parser.add_argument("--workflows", type=Path, default=Path(getCfgValue(cfg, "comfyWorkflowsDir", "./workflows")))
     parser.add_argument("--runsdir", type=Path, default=Path(getCfgValue(cfg, "comfyRunsDir", "./runs")))
 
     parser.add_argument("--timeoutseconds", type=int, default=int(getCfgValue(cfg, "comfyTimeoutSeconds", 60)))
@@ -270,9 +270,9 @@ def main() -> int:
 
     updates = {
         "comfyUrl": str(args.comfyurl),
-        "comfyIn": str(Path(args.comfyin).expanduser()),
-        "comfyOut": str(Path(args.comfyout).expanduser()),
-        "workflows": str(Path(args.workflows).expanduser()),
+        "comfyInput": str(Path(args.comfyin).expanduser()),
+        "comfyOutput": str(Path(args.comfyout).expanduser()),
+        "comfyWorkflowsDir": str(Path(args.workflows).expanduser()),
         "comfyRunsDir": str(Path(args.runsdir).expanduser()),
         "comfyTimeoutSeconds": int(args.timeoutseconds),
         "comfyPollSeconds": float(args.pollseconds),

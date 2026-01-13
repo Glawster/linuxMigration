@@ -16,14 +16,14 @@ All scripts that interact with training data and ComfyUI now use these standardi
 | `--workflows` | ComfyUI workflows directory | batchImg2ImgComfy |
 
 ### Configuration Keys
-All arguments are stored in `~/.config/kohya/kohyaConfig.json` using flat keys:
+All arguments are stored in `~/.config/kohya/kohyaConfig.json` using flat keys (config keys use camelCase, not shortened forms):
 
 ```json
 {
   "trainingRoot": "/path/to/training/data",
-  "comfyIn": "/path/to/ComfyUI/input",
-  "comfyOut": "/path/to/ComfyUI/output",
-  "workflows": "/path/to/ComfyUI/workflows"
+  "comfyInput": "/path/to/ComfyUI/input",
+  "comfyOutput": "/path/to/ComfyUI/output",
+  "comfyWorkflowsDir": "/path/to/ComfyUI/workflows"
 }
 ```
 
@@ -38,11 +38,12 @@ All arguments are stored in `~/.config/kohya/kohyaConfig.json` using flat keys:
 - Argument: `--comfyin` (lowercase)
 - Argument: `--comfyout` (lowercase)
 - Argument: `--workflows` (lowercase, renamed from `--workflowsDir`)
-- Config keys: `comfyIn`, `comfyOut`, `workflows`
+- Config keys: `comfyInput`, `comfyOutput`, `comfyWorkflowsDir` (unchanged camelCase)
 
 **Impact:**
 - Consistent with copyToComfyUI.py naming
-- All arguments in lowercase for consistency
+- All CLI arguments in lowercase for simpler user experience
+- Config keys remain in camelCase for internal consistency
 - Both input and output paths now configurable
 - Config values automatically saved and reused
 
@@ -52,14 +53,15 @@ All arguments are stored in `~/.config/kohya/kohyaConfig.json` using flat keys:
 - Used helper function `getNestedDictValue()` to access nested keys
 
 **After:**
-- Config structure: Flat `comfyIn` and `comfyOut` (lowercase keys)
+- Config structure: Flat `comfyInput` and `comfyOutput` (camelCase keys)
 - Arguments: `--comfyin` and `--comfyout` (all lowercase)
 - Direct config access with `config.get()`
 - Simplified config update logic
 
 **Impact:**
 - Consistent with batchImg2ImgComfy.py config structure
-- All arguments in lowercase for consistency
+- All CLI arguments in lowercase for simpler user experience
+- Config keys remain in camelCase for internal consistency
 - Simpler config management
 
 ### 3. Other Scripts
@@ -73,11 +75,12 @@ All these scripts properly save `trainingRoot` to the config file.
 ## Benefits
 
 1. **Consistency**: All scripts use the same argument names (all lowercase) for the same purposes
-2. **Simplified Configuration**: Flat config structure is easier to understand and manage
+2. **Simplified Configuration**: Flat config structure with camelCase keys is easier to understand and manage
 3. **Reduced Confusion**: Users can switch between scripts without learning different argument names
 4. **Config Reuse**: Set values once, used across all scripts
 5. **Better Integration**: Scripts can easily share configuration values
-6. **Lowercase Convention**: All arguments follow lowercase naming convention
+6. **User-Friendly CLI**: All CLI arguments follow lowercase naming convention for ease of use
+7. **Internal Consistency**: Config keys maintain camelCase for programmatic consistency
 
 ## Migration Guide
 
@@ -98,17 +101,17 @@ If you have an existing `~/.config/kohya/kohyaConfig.json` with old structure:
 **New format:**
 ```json
 {
-  "comfyIn": "/home/user/ComfyUI/input",
-  "comfyOut": "/home/user/ComfyUI/output",
-  "workflows": "/home/user/ComfyUI/workflows"
+  "comfyInput": "/home/user/ComfyUI/input",
+  "comfyOutput": "/home/user/ComfyUI/output",
+  "comfyWorkflowsDir": "/home/user/ComfyUI/workflows"
 }
 ```
 
 **Migration Steps:**
 1. Edit `~/.config/kohya/kohyaConfig.json`
-2. Move `comfyUI.inputDir` → `comfyIn` (or `comfyInput` → `comfyIn`)
-3. Move `comfyUI.outputDir` → `comfyOut` (or `comfyOutput` → `comfyOut`)
-4. Rename `comfyWorkflowsDir` → `workflows`
+2. Move `comfyUI.inputDir` → `comfyInput` (flat structure, camelCase)
+3. Move `comfyUI.outputDir` → `comfyOutput` (flat structure, camelCase)
+4. Keep `comfyWorkflowsDir` as is (already in correct format)
 5. Remove the now-empty `comfyUI` object if present
 6. Or simply delete the config file and let the scripts recreate it with new values
 
@@ -132,11 +135,11 @@ The first time you run with the new argument names, they will be saved to the co
 ## Verification
 
 All scripts have been syntax-checked and verified to:
-- ✅ Parse arguments correctly (all lowercase)
-- ✅ Load config values properly
+- ✅ Parse CLI arguments correctly (all lowercase for user simplicity)
+- ✅ Load config values properly (camelCase keys internally)
 - ✅ Save config updates (except in --dry-run mode)
 - ✅ Use standardized argument names (--comfyin, --comfyout, --workflows, --trainingroot)
-- ✅ Use flat config keys
+- ✅ Use flat config keys (comfyInput, comfyOutput, comfyWorkflowsDir)
 
 ## Related Documentation
 
