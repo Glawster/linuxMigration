@@ -4,6 +4,11 @@ batchImg2ImgComfy.py
 
 Batch-run ComfyUI img2img workflows for images found under ComfyUI input.
 
+Input Precedence Rules:
+- For each unique image stem, prefer processed (fixed_*) versions over originals
+- If fixed_photo-01_00001_.png exists, use it instead of photo-01.png
+- This allows iterative processing without re-processing from scratch
+
 Conventions:
 - uses ~/.config/kohya/kohyaConfig.json via kohyaConfig.py (no --configPath)
 - logging via organiseMyProjects.logUtils.getLogger
@@ -55,6 +60,58 @@ def classifyImage(path: Path, rules: List[BucketRules]) -> Optional[str]:
     return None
 
 
+def extractBaseStem(filename: str) -> str:
+    """
+    Extract the base stem from a filename, removing fixed_ prefix and ComfyUI numbering.
+    
+    Examples:
+        fixed_photo-01_00001_.png -> photo-01
+        photo-01.png -> photo-01
+        fixed_style-name-01_00002_.png -> style-name-01
+    """
+    stem = Path(filename).stem
+    # Remove fixed_ prefix if present
+    if stem.lower().startswith("fixed_"):
+        stem = stem[6:]
+    # Remove ComfyUI numbering pattern (_00001_)
+    stem = re.sub(r"_\d+_$", "", stem)
+    return stem
+
+
+def applyPrecedenceRules(allImages: List[Path]) -> Dict[str, Path]:
+    """
+    Apply precedence rules: prefer fixed_* versions over originals.
+    
+    Returns a dict mapping base stem to the image path to use.
+    For each unique stem:
+    - If a fixed_* version exists, use it (most recent if multiple)
+    - Otherwise, use the original
+    """
+    stemToImages: Dict[str, List[Path]] = {}
+    
+    for img in allImages:
+        baseStem = extractBaseStem(img.name)
+        if baseStem not in stemToImages:
+            stemToImages[baseStem] = []
+        stemToImages[baseStem].append(img)
+    
+    result: Dict[str, Path] = {}
+    for baseStem, images in stemToImages.items():
+        # Separate fixed versions from originals
+        fixedVersions = [img for img in images if img.name.lower().startswith("fixed_")]
+        originals = [img for img in images if not img.name.lower().startswith("fixed_")]
+        
+        # Prefer fixed version (take the most recent if multiple)
+        if fixedVersions:
+            # Sort by path (later modifications will have higher numbers)
+            result[baseStem] = sorted(fixedVersions)[-1]
+        elif originals:
+            # Use the original
+            result[baseStem] = originals[0]
+    
+    return result
+
+
 class ComfyClient:
     def __init__(self, baseUrl: str, timeoutSeconds: int):
         self.baseUrl = baseUrl.rstrip("/")
@@ -98,6 +155,19 @@ class ComfyClient:
             if time.time() - start > maxWaitSeconds:
                 raise TimeoutError(f"timed out waiting for prompt {promptId}")
             time.sleep(pollSeconds)
+
+def hasExistingOutput(outputDir: Path, fixedPrefix: str, stem: str) -> bool:
+    """Return True if ComfyUI output already contains fixedPrefix+stem.* (any suffix/counter)."""
+    if not outputDir.exists() or not outputDir.is_dir():
+        return False
+
+    prefix = f"{fixedPrefix}{stem}"
+    # ComfyUI typically writes directly into outputDir, but allow subfolders as well.
+    for p in outputDir.rglob("*"):
+        if p.is_file() and p.name.startswith(prefix):
+            return True
+    return False
+
 
 
 def loadApiPromptJson(path: Path) -> Dict[str, Any]:
@@ -171,17 +241,18 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
 
     parser.add_argument("--limit", type=int, default=0, help="process at most N images (0 = no limit)")
 
-    parser.add_argument("--comfyUrl", default=getCfgValue(cfg, "comfyUrl", "http://127.0.0.1:8188"))
-    parser.add_argument("--inputDir", type=Path, default=Path(getCfgValue(cfg, "comfyInputDir", "./input")))
-    parser.add_argument("--workflowsDir", type=Path, default=Path(getCfgValue(cfg, "comfyWorkflowsDir", "./workflows")))
-    parser.add_argument("--runsDir", type=Path, default=Path(getCfgValue(cfg, "comfyRunsDir", "./runs")))
+    parser.add_argument("--comfyurl", default=getCfgValue(cfg, "comfyUrl", "http://127.0.0.1:8188"))
+    parser.add_argument("--comfyin", type=Path, default=Path(getCfgValue(cfg, "comfyInput", "./input")))
+    parser.add_argument("--comfyout", type=Path, default=Path(getCfgValue(cfg, "comfyOutput", "./output")))
+    parser.add_argument("--workflows", type=Path, default=Path(getCfgValue(cfg, "comfyWorkflowsDir", "./workflows")))
+    parser.add_argument("--runsdir", type=Path, default=Path(getCfgValue(cfg, "comfyRunsDir", "./runs")))
 
-    parser.add_argument("--timeoutSeconds", type=int, default=int(getCfgValue(cfg, "comfyTimeoutSeconds", 60)))
-    parser.add_argument("--pollSeconds", type=float, default=float(getCfgValue(cfg, "comfyPollSeconds", 1.0)))
-    parser.add_argument("--maxWaitSeconds", type=int, default=int(getCfgValue(cfg, "comfyMaxWaitSeconds", 1800)))
+    parser.add_argument("--timeoutseconds", type=int, default=int(getCfgValue(cfg, "comfyTimeoutSeconds", 60)))
+    parser.add_argument("--pollseconds", type=float, default=float(getCfgValue(cfg, "comfyPollSeconds", 1.0)))
+    parser.add_argument("--maxwaitseconds", type=int, default=int(getCfgValue(cfg, "comfyMaxWaitSeconds", 1800)))
 
-    parser.add_argument("--logLevel", default=str(getCfgValue(cfg, "comfyLogLevel", "INFO")))
-    parser.add_argument("--logConsole", action="store_true", default=bool(getCfgValue(cfg, "comfyLogConsole", True)))
+    parser.add_argument("--loglevel", default=str(getCfgValue(cfg, "comfyLogLevel", "INFO")))
+    parser.add_argument("--logconsole", action="store_true", default=bool(getCfgValue(cfg, "comfyLogConsole", True)))
 
     return parser.parse_args()
 
@@ -192,21 +263,22 @@ def main() -> int:
 
     prefix = "...[]" if args.dryRun else "..."
 
-    logger = getLogger("batchImg2ImgComfy", includeConsole=bool(args.logConsole))
+    logger = getLogger("batchImg2ImgComfy", includeConsole=bool(args.logconsole))
 
     runStamp = time.strftime("%Y%m%d_%H%M%S")
-    runDir = Path(args.runsDir).expanduser().resolve() / f"run_{runStamp}"
+    runDir = Path(args.runsdir).expanduser().resolve() / f"run_{runStamp}"
 
     updates = {
-        "comfyUrl": str(args.comfyUrl),
-        "comfyInputDir": str(Path(args.inputDir).expanduser()),
-        "comfyWorkflowsDir": str(Path(args.workflowsDir).expanduser()),
-        "comfyRunsDir": str(Path(args.runsDir).expanduser()),
-        "comfyTimeoutSeconds": int(args.timeoutSeconds),
-        "comfyPollSeconds": float(args.pollSeconds),
-        "comfyMaxWaitSeconds": int(args.maxWaitSeconds),
-        "comfyLogLevel": str(args.logLevel).upper(),
-        "comfyLogConsole": bool(args.logConsole),
+        "comfyUrl": str(args.comfyurl),
+        "comfyInput": str(Path(args.comfyin).expanduser()),
+        "comfyOutput": str(Path(args.comfyout).expanduser()),
+        "comfyWorkflowsDir": str(Path(args.workflows).expanduser()),
+        "comfyRunsDir": str(Path(args.runsdir).expanduser()),
+        "comfyTimeoutSeconds": int(args.timeoutseconds),
+        "comfyPollSeconds": float(args.pollseconds),
+        "comfyMaxWaitSeconds": int(args.maxwaitseconds),
+        "comfyLogLevel": str(args.loglevel).upper(),
+        "comfyLogConsole": bool(args.logconsole),
     }
 
     configChanged = updateConfigFromArgs(cfg, updates)
@@ -215,9 +287,9 @@ def main() -> int:
     if configChanged:
         logger.info("%s updated config: %s", prefix, DEFAULT_CONFIG_PATH)
 
-    fullWf = Path(args.workflowsDir) / getCfgValue(cfg, "comfyFullbodyWorkflow", "fullbody.json")
-    halfWf = Path(args.workflowsDir) / getCfgValue(cfg, "comfyHalfbodyWorkflow", "halfbody.json")
-    portWf = Path(args.workflowsDir) / getCfgValue(cfg, "comfyPortraitWorkflow", "portrait.json")
+    fullWf = Path(args.workflows) / getCfgValue(cfg, "comfyFullbodyWorkflow", "fullbody_api.json")
+    halfWf = Path(args.workflows) / getCfgValue(cfg, "comfyHalfbodyWorkflow", "halfbody_api.json")
+    portWf = Path(args.workflows) / getCfgValue(cfg, "comfyPortraitWorkflow", "portrait_api.json")
 
     workflowPaths = {
         "fullbody": fullWf.resolve(),
@@ -230,10 +302,19 @@ def main() -> int:
             logger.error("Missing workflow file for %s: %s", name, p)
             return 2
 
-    inputDir = Path(args.inputDir).expanduser().resolve()
-    if not inputDir.exists():
-        logger.error("Input dir does not exist: %s", inputDir)
+    comfyInput = Path(args.comfyin).expanduser().resolve()
+    if not comfyInput.exists():
+        logger.error("Input dir does not exist: %s", comfyInput)
         return 2
+
+    # Output folder used to decide whether an image has already been processed.
+    # If output already contains "fixed_<stem>*", we skip re-processing; delete the output to regenerate.
+    comfyOutput = Path(args.outputDir) if str(args.outputDir) not in ("", ".") else Path(getCfgValue(cfg, "comfyOutputDir", ""))
+    if str(comfyOutput) in ("", "."):
+        comfyOutput = comfyInput.parent / "output"
+    comfyOutput = comfyOutput.expanduser().resolve()
+
+    fixedPrefix = str(getCfgValue(cfg, "comfyFixedOutputPrefix", "fixed_"))
 
     rules = [
         BucketRules(
@@ -253,18 +334,29 @@ def main() -> int:
         ),
     ]
 
-    filenamePrefixTemplate = str(getCfgValue(cfg, "comfyFilenamePrefixTemplate", "{bucket}/{stem}"))
+    filenamePrefixTemplate = str(getCfgValue(cfg, "comfyFilenamePrefixTemplate", "fixed_{stem}"))
     downloadPathTemplate = str(getCfgValue(cfg, "comfyDownloadPathTemplate", "{runDir}/{bucket}/{stem}"))
 
-    allImages = [p for p in inputDir.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
+    allImages = [p for p in comfyInput.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
+    
+    # Apply precedence rules: prefer fixed_* versions over originals
+    stemToImage = applyPrecedenceRules(allImages)
+    imagesToProcess = list(stemToImage.values())
+    
     jobs: List[Tuple[Path, str]] = []
-    for img in sorted(allImages):
+    for img in sorted(imagesToProcess):
+        stemSafe = safeStem(img.stem)
+        if hasExistingOutput(outputDir=comfyOutput, fixedPrefix=fixedPrefix, stem=stemSafe):
+            relSkip = img.relative_to(comfyInput).as_posix()
+            logger.info("%s skip (output exists): %s", prefix, relSkip)
+            continue
         bucket = classifyImage(img, rules)
         if bucket:
             jobs.append((img, bucket))
 
     logger.info("%s run dir: %s", prefix, runDir)
     logger.info("%s found images: %d", prefix, len(allImages))
+    logger.info("%s unique stems (after precedence): %d", prefix, len(imagesToProcess))
     logger.info("%s matched jobs: %d", prefix, len(jobs))
 
     if args.limit and args.limit > 0:
@@ -275,10 +367,10 @@ def main() -> int:
         logger.info("%s done.", prefix)
         return 0
 
-    client = ComfyClient(args.comfyUrl, args.timeoutSeconds)
+    client = ComfyClient(args.comfyurl, args.timeoutseconds)
 
     for i, (imgPath, bucket) in enumerate(jobs, start=1):
-        rel = imgPath.relative_to(inputDir).as_posix()
+        rel = imgPath.relative_to(comfyInput).as_posix()
         stem = safeStem(imgPath.stem)
 
         wfPath = workflowPaths[bucket]
@@ -292,7 +384,7 @@ def main() -> int:
         prefixValue = renderTemplate(filenamePrefixTemplate, bucket=bucket, stem=stem)
         _ = setSaveImagePrefix(prompt, prefixValue)
 
-        logger.info("%s[%d/%d] %s: %s", prefix, i, len(jobs), bucket, rel)
+        logger.info("%s [%d/%d] %s: %s", prefix, i, len(jobs), bucket, rel)
 
         if args.dryRun:
             continue
@@ -301,7 +393,7 @@ def main() -> int:
             promptId = client.submitPrompt(prompt)
             logger.info("%s submitted: %s", prefix, promptId)
 
-            histEntry = client.waitForOutputs(promptId, args.pollSeconds, args.maxWaitSeconds)
+            histEntry = client.waitForOutputs(promptId, args.pollseconds, args.maxwaitseconds)
             images = extractOutputImages(histEntry)
             if not images:
                 logger.info("%s completed (no outputs)", prefix)

@@ -24,10 +24,8 @@ Config (optional): ~/.config/kohya/kohyaConfig.json
 Expected keys (examples):
 {
   "trainingRoot": "/mnt/backup",
-  "comfyUI": {
-    "inputDir": "/home/andy/Source/ComfyUI/input",
-    "outputDir": "/home/andy/Source/ComfyUI/output"
-  },
+  "comfyInput": "/home/andy/Source/ComfyUI/input",
+  "comfyOutput": "/home/andy/Source/ComfyUI/output",
   "skipDirs": [".wastebasket", ".Trash", "@eaDir"],
   "lowRes": { "minShortSide": 768, "minPixels": 589824 },
   "framing": { "fullBodyMaxFaceRatio": 0.18, "halfBodyMaxFaceRatio": 0.35 }
@@ -51,20 +49,6 @@ from organiseMyProjects.logUtils import getLogger  # type: ignore
 
 
 # ============================================================
-# module logger (initialised in main)
-# ============================================================
-
-logger = None  # type: ignore
-prefix = ""  # type: ignore 
-
-# ============================================================
-# helpers
-# ============================================================
-
-# (no helpers)
-
-
-# ============================================================
 # constants
 # ============================================================
 
@@ -85,8 +69,9 @@ DEFAULT_MIN_SHORT_SIDE = 768
 DEFAULT_MIN_PIXELS = 768 * 768
 
 # filename pattern: 20221217-pretty-01.png  OR  2022-12-17-pretty-01.png  OR  ...-01a.png
+# Also supports ComfyUI fixed_ prefix: fixed_20221217-pretty-01_00001_.png
 STYLE_FROM_FILENAME_RE = re.compile(
-    r"^(?:\d{8}|\d{4}-\d{2}-\d{2})-(?P<style>.+?)-\d+(?:[a-z])?\.[^.]+$",
+    r"^(?:fixed_)?(?:\d{8}|\d{4}-\d{2}-\d{2})-(?P<style>.+?)-\d+(?:[a-z])?(?:_\d+_)?\.[^.]+$",
     re.IGNORECASE,
 )
 
@@ -174,6 +159,10 @@ def loadDetector() -> cv2.CascadeClassifier:
         raise RuntimeError(f"could not load haar cascade: {cascadePath}")
     return detector
 
+def loadPeopleDetector() -> cv2.HOGDescriptor:
+    hog = cv2.HOGDescriptor()
+    hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+    return hog
 
 def detectLargestFace(
     imagePath: Path,
@@ -200,19 +189,71 @@ def detectLargestFace(
     x, y, w, h = max(faces, key=lambda r: int(r[2]) * int(r[3]))
     return (int(x), int(y), int(w), int(h), int(imgW), int(imgH))
 
-
-def classifyFraming(largestFace, cfg: FramingConfig) -> Tuple[str, float]:
+def detectLargestPerson(
+    imagePath: Path,
+    hog: cv2.HOGDescriptor,
+) -> Optional[Tuple[int, int, int, int, int, int]]:
     """
-    Returns (framing, faceRatio) where faceRatio = faceHeight / imageHeight
+    Returns (x, y, w, h, imgW, imgH) for the largest detected person bbox.
+    Uses OpenCV HOG people detector (fast, no external weights).
+    """
+    img = cv2.imread(str(imagePath))
+    if img is None:
+        return None
+
+    imgH, imgW = img.shape[:2]
+
+    # HOG works better with some reasonable size; don’t overthink it.
+    # (We are only using this to confirm "feet likely in frame".)
+    rects, _ = hog.detectMultiScale(img, winStride=(8, 8), padding=(8, 8), scale=1.05)
+
+    if rects is None or len(rects) == 0:
+        return None
+
+    x, y, w, h = max(rects, key=lambda r: int(r[2]) * int(r[3]))
+    return (int(x), int(y), int(w), int(h), int(imgW), int(imgH))
+
+
+def hasFeetInFrame(
+    personBBox: Tuple[int, int, int, int, int, int],
+    feetBottomThreshold: float = 0.95,
+) -> bool:
+    """
+    True if the bottom of the person bbox is close to the image bottom.
+    """
+    x, y, w, h, imgW, imgH = personBBox
+    bottom = y + h
+    return bottom >= int(imgH * feetBottomThreshold)
+
+def classifyFraming(
+    largestFace,
+    framingCfg: FramingConfig,
+    personBBox: Optional[Tuple[int, int, int, int, int, int]],
+) -> Tuple[str, float]:
+    """
+    Returns (framing, faceRatio)
+
+    Rules:
+      - full_body: face present AND feet visible
+      - half_body: face present AND feet NOT visible
+      - portrait: face dominates frame
     """
     _, _, _, faceH, _, imgH = largestFace
     ratio = faceH / float(imgH)
 
-    if ratio <= cfg.fullBodyMaxFaceRatio:
-        return ("full_body", ratio)
-    if ratio <= cfg.halfBodyMaxFaceRatio:
+    # portrait: face is large
+    if ratio > framingCfg.halfBodyMaxFaceRatio:
+        return ("portrait", ratio)
+
+    # candidate for full body by face size
+    if ratio <= framingCfg.fullBodyMaxFaceRatio:
+        if personBBox is not None and hasFeetInFrame(personBBox, feetBottomThreshold=0.95):
+            return ("full_body", ratio)
+        # face but no feet → half body
         return ("half_body", ratio)
-    return ("portrait", ratio)
+
+    # remaining face-containing images
+    return ("half_body", ratio)
 
 
 # ============================================================
@@ -328,14 +369,14 @@ def backupThenCopyReplace(srcFixed: Path, destOriginal: Path, dryRun: bool) -> N
 
 def reverseFromFixedFolders(
     trainingRoot: Path,
-    comfyInput: Path,
-    comfyOutput: Optional[Path],
+    comfyIn: Path,
+    comfyOut: Optional[Path],
     dryRun: bool,
 ) -> None:
 
-    rootsToScan: list[Tuple[str, Path]] = [("input", comfyInput)]
-    if comfyOutput is not None:
-        rootsToScan.append(("output", comfyOutput))
+    rootsToScan: list[Tuple[str, Path]] = [("input", comfyIn)]
+    if comfyOut is not None:
+        rootsToScan.append(("output", comfyOut))
 
     fixedFolders: list[Tuple[str, Path]] = []
     for label, root in rootsToScan:
@@ -383,12 +424,11 @@ def reverseFromFixedFolders(
 # ============================================================
 
 def main() -> None:
-    global logger
 
     parser = argparse.ArgumentParser(description="Copy training images into ComfyUI buckets (logging only, no CSV report).")
-    parser.add_argument("--source", help="Training root (overrides config)")
-    parser.add_argument("--dest", help="ComfyUI input folder (overrides config)")
-    parser.add_argument("--output", help="ComfyUI output folder (overrides config)")
+    parser.add_argument("--training", help="Training root (overrides config)")
+    parser.add_argument("--comfyin", help="ComfyUI input folder (overrides config)")
+    parser.add_argument("--comfyout", help="ComfyUI output folder (overrides config)")
     parser.add_argument(
         "--dry-run",
         dest="dryRun",
@@ -402,6 +442,7 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    global logger
     logger = getLogger("copyToComfyUI", includeConsole=True)
 
     global prefix
@@ -413,43 +454,37 @@ def main() -> None:
 
     # resolve config values
     trainingRootCfg = config.get("trainingRoot")
-    comfyInputCfg = getNestedDictValue(config, ("comfyUI", "inputDir"))
-    comfyOutputCfg = getNestedDictValue(config, ("comfyUI", "outputDir"))
+    comfyInputCfg = config.get("comfyInput")
+    comfyOutputCfg = config.get("comfyOutput")
     configSkipDirs = set(config.get("skipDirs", [])) if isinstance(config.get("skipDirs", []), list) else set()
 
     # track config changes for auto-save
     configUpdates: dict = {}
 
-    if args.source:
-        configUpdates["trainingRoot"] = args.source
+    if args.training:
+        configUpdates["trainingRoot"] = args.training
 
-    if args.dest:
-        if "comfyUI" not in config:
-            config["comfyUI"] = {}
-        if config["comfyUI"].get("inputDir") != args.dest:
-            config["comfyUI"]["inputDir"] = args.dest
+    if args.comfyin:
+        configUpdates["comfyInput"] = args.comfyin
 
-    if args.output:
-        if "comfyUI" not in config:
-            config["comfyUI"] = {}
-        if config["comfyUI"].get("outputDir") != args.output:
-            config["comfyUI"]["outputDir"] = args.output
+    if args.comfyout:
+        configUpdates["comfyOutput"] = args.comfyout
 
     # validate required paths
-    trainingRootVal = args.source or trainingRootCfg
-    comfyInputVal = args.dest or comfyInputCfg
-    comfyOutputVal = args.output or comfyOutputCfg
+    trainingRootVal = args.training or trainingRootCfg
+    comfyInVal = args.comfyin or comfyInputCfg
+    comfyOutVal = args.comfyout or comfyOutputCfg
 
     if not trainingRootVal:
-        logger.error("Training root not provided (use --source or set trainingRoot in config)")
+        logger.error("Training root not provided (use --training or set trainingRoot in config)")
         raise SystemExit(2)
-    if not comfyInputVal:
-        logger.error("ComfyUI input folder not provided (use --dest or set comfyUI.inputDir in config)")
+    if not comfyInVal:
+        logger.error("ComfyUI input folder not provided (use --comfyin or set comfyInput in config)")
         raise SystemExit(2)
 
     trainingRoot = Path(str(trainingRootVal)).expanduser().resolve()
-    comfyInput = Path(str(comfyInputVal)).expanduser().resolve()
-    comfyOutput = Path(str(comfyOutputVal)).expanduser().resolve() if comfyOutputVal else None
+    comfyInput = Path(str(comfyInVal)).expanduser().resolve()
+    comfyOutput = Path(str(comfyOutVal)).expanduser().resolve() if comfyOutVal else None
 
     if not trainingRoot.exists():
         logger.error("Training root does not exist")
@@ -471,8 +506,8 @@ def main() -> None:
     if args.reverse:
         reverseFromFixedFolders(
             trainingRoot=trainingRoot,
-            comfyInput=comfyInput,
-            comfyOutput=comfyOutput,
+            comfyIn=comfyInput,
+            comfyOut=comfyOutput,
             dryRun=args.dryRun,
         )
         return
@@ -497,10 +532,11 @@ def main() -> None:
 
     faceCfg = FaceDetectConfig()
     detector = loadDetector()
+    peopleDetector = loadPeopleDetector()
 
     # buckets (under ComfyUI input)
-    fullBodyDir = comfyInput / "full_body"
-    halfBodyDir = comfyInput / "half_body"
+    fullBodyDir = comfyInput / "fullbody"
+    halfBodyDir = comfyInput / "halfbody"
     portraitDir = comfyInput / "portrait"
     lowResDir = comfyInput / "lowres"
 
@@ -536,7 +572,9 @@ def main() -> None:
 
             # not low-res: if face then classify framing
             elif hasFace:
-                framing, faceRatio = classifyFraming(largestFace, framingCfg)
+                personBBox = detectLargestPerson(imagePath, peopleDetector)
+                framing, faceRatio = classifyFraming(largestFace, framingCfg, personBBox)
+
                 extra = f"[{w}x{h}] framing={framing} faceRatio={faceRatio:.3f}" if (w and h) else f"framing={framing} faceRatio={faceRatio:.3f}"
 
                 if framing == "full_body":
@@ -552,6 +590,11 @@ def main() -> None:
                     else:
                         # portrait detected but not requested
                         destDir = None
+                logger.info(
+                    f"...framing decision: {imagePath.name} "
+                    f"faceRatio={faceRatio:.3f} feet={'yes' if personBBox and hasFeetInFrame(personBBox) else 'no'} "
+                    f"-> {framing}"
+                )
 
             if destDir is None:
                 continue

@@ -20,11 +20,23 @@ import datetime
 import os
 import re
 import subprocess
+import logging
+import traceback
 
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
+logger: Optional[logging.Logger] = None
+
+def setLogger(externalLogger: logging.Logger) -> None:
+    """
+    Inject a logger from the calling script.
+
+    kohyaUtils does not create its own logger; it uses the caller's.
+    """
+    global logger
+    logger = externalLogger
 
 def _log(level: str, message: str) -> None:
     if logger is None:
@@ -36,16 +48,6 @@ def _log(level: str, message: str) -> None:
         logger.warning(message)
     else:
         logger.info(message)
-
-
-logger = None  # global logger, set by caller
-
-
-def setLogger(externalLogger) -> None:
-    """Set a global logger for kohyaUtils."""
-    global logger
-    logger = externalLogger
-
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".cr2", ".nef"}
 
@@ -106,16 +108,7 @@ def ensureDirs(paths: KohyaPaths, includeOriginals: bool = False) -> None:
 
 def isImageFile(filePath: Path) -> bool:
     """Check if a file is a supported image type."""
-    return filePath.is_file() and filePath.suffix.lower() in logger = None  # global logger, set by caller
-
-
-def setLogger(externalLogger) -> None:
-    """Set a global logger for kohyaUtils."""
-    global logger
-    logger = externalLogger
-
-
-IMAGE_EXTENSIONS
+    return filePath.is_file() and filePath.suffix.lower() in IMAGE_EXTENSIONS
 
 
 def listImageFiles(folderPath: Path, recursive: bool = False) -> List[Path]:
@@ -384,63 +377,63 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> Optional[datetime.d
     """
     try:
         from PIL import Image, ExifTags
-        print(f"{prefix} exif-debug: PIL imported successfully")
+        _log("info", f"{prefix} exif-debug: PIL imported successfully")
         
         with Image.open(imagePath) as img:
-            print(f"{prefix} exif-debug: Image opened: {imagePath.name}")
+            _log("info", f"{prefix} exif-debug: Image opened: {imagePath.name}")
             
             # Use modern getexif() if available (Pillow 6.0+), fallback to _getexif()
             exif = None
             try:
                 exif = img.getexif()
-                print(f"{prefix} exif-debug: getexif() succeeded, exif data: {bool(exif)}")
+                _log("info", f"{prefix} exif-debug: getexif() succeeded, exif data: {bool(exif)}")
             except AttributeError as e:
-                print(f"{prefix} exif-debug: getexif() not available: {e}")
+                _log("info", f"{prefix} exif-debug: getexif() not available: {e}")
                 # Try legacy _getexif()
                 try:
                     exif = img._getexif()  # type: ignore
-                    print(f"{prefix} exif-debug: _getexif() succeeded, exif data: {bool(exif)}")
+                    _log("info", f"{prefix} exif-debug: _getexif() succeeded, exif data: {bool(exif)}")
                 except AttributeError as e2:
-                    print(f"{prefix} exif-debug: _getexif() failed: {e2}")
+                    _log("info", f"{prefix} exif-debug: _getexif() failed: {e2}")
                     pass
             
             if not exif:
-                print(f"{prefix} exif-debug: No EXIF data found in image")
+                _log("info", f"{prefix} exif-debug: No EXIF data found in image")
                 return None
             
-            print(f"{prefix} exif-debug: EXIF data type: {type(exif)}")
-            print(f"{prefix} exif-debug: EXIF keys count: {len(exif) if hasattr(exif, '__len__') else 'N/A'}")
+            _log("info", f"{prefix} exif-debug: EXIF data type: {type(exif)}")
+            _log("info", f"{prefix} exif-debug: EXIF keys count: {len(exif) if hasattr(exif, '__len__') else 'N/A'}")
             
             # Show all EXIF tags for debugging
             if hasattr(exif, 'keys'):
                 all_tags = list(exif.keys())
-                print(f"{prefix} exif-debug: All EXIF tag IDs: {all_tags}")
+                _log("info", f"{prefix} exif-debug: All EXIF tag IDs: {all_tags}")
                 # Also show the tag names if we can look them up
                 tag_names = []
                 for tag_id in all_tags[:20]:  # Limit to first 20 for readability
                     tag_name = ExifTags.TAGS.get(tag_id, f"Unknown-{tag_id}")
                     tag_names.append(f"{tag_id}={tag_name}")
-                print(f"{prefix} exif-debug: EXIF tag names: {tag_names}")
+                _log("info", f"{prefix} exif-debug: EXIF tag names: {tag_names}")
             
             # Get DateTimeOriginal tag value
             dateStr = None
             
             # For modern getexif() - it returns a dict-like object
             if hasattr(exif, 'get'):
-                print(f"{prefix} exif-debug: EXIF has 'get' method")
+                _log("info", f"{prefix} exif-debug: EXIF has 'get' method")
                 
                 # Try using ExifTags.Base enum if available (Pillow 9.0+)
                 try:
                     from PIL.ExifTags import Base
                     dateStr = exif.get(Base.DateTimeOriginal)
-                    print(f"{prefix} exif-debug: Base.DateTimeOriginal lookup: {dateStr}")
+                    _log("info", f"{prefix} exif-debug: Base.DateTimeOriginal lookup: {dateStr}")
                 except (ImportError, AttributeError) as e:
-                    print(f"{prefix} exif-debug: Base enum not available: {e}")
+                    _log("info", f"{prefix} exif-debug: Base enum not available: {e}")
                     pass
                 
                 # If that didn't work, try the numeric tag ID (36867 is DateTimeOriginal)
                 if not dateStr:
-                    print(f"{prefix} exif-debug: Trying numeric tag ID lookup...")
+                    _log("info", f"{prefix} exif-debug: Trying numeric tag ID lookup...")
                     # Find the tag ID for DateTimeOriginal
                     datetime_original_tag = None
                     for k, v in ExifTags.TAGS.items():
@@ -448,52 +441,51 @@ def extractExifDate(imagePath: Path, prefix: str = "...") -> Optional[datetime.d
                             datetime_original_tag = k
                             break
                     
-                    print(f"{prefix} exif-debug: DateTimeOriginal tag ID: {datetime_original_tag}")
+                    _log("info", f"{prefix} exif-debug: DateTimeOriginal tag ID: {datetime_original_tag}")
                     
                     if datetime_original_tag:
                         if datetime_original_tag in exif:
                             dateStr = exif[datetime_original_tag]
-                            print(f"{prefix} exif-debug: Found DateTimeOriginal via tag ID: {dateStr}")
+                            _log("info", f"{prefix} exif-debug: Found DateTimeOriginal via tag ID: {dateStr}")
                         else:
-                            print(f"{prefix} exif-debug: Tag {datetime_original_tag} not in EXIF data")
-                            print(f"{prefix} exif-debug: Available EXIF tags: {list(exif.keys())[:10]}...")
+                            _log("info", f"{prefix} exif-debug: Tag {datetime_original_tag} not in EXIF data")
+                            _log("info", f"{prefix} exif-debug: Available EXIF tags: {list(exif.keys())[:10]}...")
             else:
-                print(f"{prefix} exif-debug: EXIF doesn't have 'get' method")
+                _log("info", f"{prefix} exif-debug: EXIF doesn't have 'get' method")
             
             if dateStr:
-                print(f"{prefix} exif-debug: Raw date string: {dateStr}")
+                _log("info", f"{prefix} exif-debug: Raw date string: {dateStr}")
                 # "YYYY:MM:DD HH:MM:SS" -> "YYYY-MM-DD HH:MM:SS"
                 dateStr = str(dateStr).replace(":", "-", 2)
-                print(f"{prefix} exif-debug: Converted date string: {dateStr}")
+                _log("info", f"{prefix} exif-debug: Converted date string: {dateStr}")
                 try:
                     result = datetime.datetime.fromisoformat(dateStr)
-                    print(f"{prefix} exif-debug: Parsed with fromisoformat: {result}")
+                    _log("info", f"{prefix} exif-debug: Parsed with fromisoformat: {result}")
                     return result
                 except ValueError as e:
-                    print(f"{prefix} exif-debug: fromisoformat failed: {e}")
+                    _log("info", f"{prefix} exif-debug: fromisoformat failed: {e}")
                     # Fallback to strptime if fromisoformat fails
                     try:
                         result = datetime.datetime.strptime(dateStr, "%Y-%m-%d %H:%M:%S")
-                        print(f"{prefix} exif-debug: Parsed with strptime: {result}")
+                        _log("info", f"{prefix} exif-debug: Parsed with strptime: {result}")
                         return result
                     except ValueError as e2:
-                        print(f"{prefix} exif-debug: strptime also failed: {e2}")
+                        _log("info", f"{prefix} exif-debug: strptime also failed: {e2}")
                         pass
             else:
-                print(f"{prefix} exif-debug: No DateTimeOriginal found in EXIF")
+                _log("info", f"{prefix} exif-debug: No DateTimeOriginal found in EXIF")
                 
     except ImportError as e:
         # PIL/Pillow not available
-        print(f"{prefix} exif-debug: PIL import failed: {e}")
+        _log("info", f"{prefix} exif-debug: PIL import failed: {e}")
         pass
     except Exception as e:
         # Any other error reading EXIF
-        print(f"{prefix} exif-debug: Unexpected exception: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
+        tb_str = traceback.format_exc()
+        _log("error", f"{prefix} exif-debug: Unexpected exception: {type(e).__name__}: {e}\n{tb_str}")
         pass
     
-    print(f"{prefix} exif-debug: Returning None")
+    _log("info", f"{prefix} exif-debug: Returning None")
     return None
 
 
@@ -701,7 +693,7 @@ def getImageDate(imagePath: Path, updateExif: bool = False, prefix: str = "...")
         try:
             exifDate = extractExifDate(imagePath, prefix=prefix)
             if exifDate:
-                print(f"{prefix} date: {imagePath.name} -> {exifDate.strftime('%Y-%m-%d')} [EXIF DateTimeOriginal]")
+                _log("info", f"{prefix} date: {imagePath.name} -> {exifDate.strftime('%Y-%m-%d')} [EXIF DateTimeOriginal]")
                 return exifDate
         except (OSError, ValueError, ImportError):
             pass
@@ -710,12 +702,12 @@ def getImageDate(imagePath: Path, updateExif: bool = False, prefix: str = "...")
     try:
         filenameDate = parseFilenameDate(imagePath.name)
         if filenameDate:
-            print(f"{prefix} date: {imagePath.name} -> {filenameDate.strftime('%Y-%m-%d')} [filename pattern]")
+            _log("info", f"{prefix} date: {imagePath.name} -> {filenameDate.strftime('%Y-%m-%d')} [filename pattern]")
             # If requested, try to update EXIF with filename date
             if updateExif:
                 try:
                     if updateExifDate(imagePath, filenameDate):
-                        print(f"{prefix} exif: {imagePath.name} <- {filenameDate.strftime('%Y-%m-%d')} [JPEG EXIF updated]")
+                        _log("info", f"{prefix} exif: {imagePath.name} <- {filenameDate.strftime('%Y-%m-%d')} [JPEG EXIF updated]")
                 except (OSError, ValueError, ImportError):
                     pass  # Continue even if EXIF update fails
             return filenameDate
@@ -725,12 +717,12 @@ def getImageDate(imagePath: Path, updateExif: bool = False, prefix: str = "...")
     # Fall back to file modification time
     try:
         mtime = datetime.datetime.fromtimestamp(imagePath.stat().st_mtime)
-        print(f"{prefix} date: {imagePath.name} -> {mtime.strftime('%Y-%m-%d')} [file modification time]")
+        _log("info", f"{prefix} date: {imagePath.name} -> {mtime.strftime('%Y-%m-%d')} [file modification time]")
         return mtime
     except (OSError, ValueError):
         # If file doesn't exist or stat fails, use current time as last resort
         now = datetime.datetime.now()
-        print(f"{prefix} date: {imagePath.name} -> {now.strftime('%Y-%m-%d')} [current time - fallback]")
+        _log("info", f"{prefix} date: {imagePath.name} -> {now.strftime('%Y-%m-%d')} [current time - fallback]")
         return now
 
 def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str = "...") -> List[Tuple[Path, datetime.datetime]]:
@@ -768,7 +760,7 @@ def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str =
             except (OSError, ValueError, ImportError):
                 # If any error occurs, use current time as fallback
                 now = datetime.datetime.now()
-                print(f"{prefix} date: {img.name} -> {now.strftime('%Y-%m-%d')} [error fallback]")
+                _log("info", f"{prefix} date: {img.name} -> {now.strftime('%Y-%m-%d')} [error fallback]")
                 imageWithDates.append((img, now))
 
         else:
@@ -778,7 +770,7 @@ def sortImagesByDate(images: List[Path], updateExif: bool = False, prefix: str =
                 imageWithDates.append((img, date))
             except (OSError, ValueError):
                 now = datetime.datetime.now()
-                print(f"{prefix} date: {img.name} -> {now.strftime('%Y-%m-%d')} [error fallback]")
+                _log("info", f"{prefix} date: {img.name} -> {now.strftime('%Y-%m-%d')} [error fallback]")
                 imageWithDates.append((img, now))
     
     imageWithDates.sort(key=lambda x: x[1])
