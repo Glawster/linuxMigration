@@ -44,9 +44,9 @@ from kohyaUtils import (
     resolveKohyaPaths,
     stripPNGMetadata,
     writeCaptionIfMissing,
-    setLogger
+    setLogger as setLoggerUtils
 )
-from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateConfigFromArgs
+from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateConfigFromArgs, setLogger as setLoggerConfig
 from organiseMyProjects.logUtils import getLogger  # type: ignore
 
 def parseArgs() -> argparse.Namespace:
@@ -217,7 +217,7 @@ def moveFile(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> None:
     srcPath.rename(destPath)
 
 
-def checkAndFixStyleFolder(styleDir: Path, captionExtension: str, dryRun: bool, prefix: str) -> None:
+def checkAndFixStyleFolder(styleDir: Path, captionExtension: str, captionTemplate: str, dryRun: bool, prefix: str) -> None:
     styleName = styleDir.name
     paths = resolveKohyaPaths(styleName=styleName, trainingRoot=styleDir.parent)
 
@@ -234,26 +234,47 @@ def checkAndFixStyleFolder(styleDir: Path, captionExtension: str, dryRun: bool, 
 
     renamedImages = 0
     renamedCaptions = 0
+    imageMapping = {}  # Track original -> renamed paths for caption creation
 
     for imagePath in images:
         stripPNGMetadata(imagePath=imagePath, dryRun=dryRun, prefix=prefix)
 
-        if isCorrectKohyaStem(imagePath.stem, styleName=styleName):
-            continue
+        finalImagePath = imagePath  # Track final path (renamed or original)
+        
+        if not isCorrectKohyaStem(imagePath.stem, styleName=styleName):
+            index = nextAvailableIndex(usedIndices)
+            targetStem = buildTargetStem(styleName=styleName, index=index)
+            destImagePath = (paths.trainDir / targetStem).with_suffix(imagePath.suffix.lower())
 
-        index = nextAvailableIndex(usedIndices)
-        targetStem = buildTargetStem(styleName=styleName, index=index)
-        destImagePath = (paths.trainDir / targetStem).with_suffix(imagePath.suffix.lower())
+            srcCaptionPath = getCaptionPath(imagePath, captionExtension=captionExtension)
+            destCaptionPath = getCaptionPath(destImagePath, captionExtension=captionExtension)
 
-        srcCaptionPath = getCaptionPath(imagePath, captionExtension=captionExtension)
-        destCaptionPath = getCaptionPath(destImagePath, captionExtension=captionExtension)
+            if renameFileSafe(imagePath, destImagePath, dryRun=dryRun, prefix=prefix):
+                renamedImages += 1
+                finalImagePath = destImagePath  # Update to new path
 
-        if renameFileSafe(imagePath, destImagePath, dryRun=dryRun, prefix=prefix):
-            renamedImages += 1
+            if srcCaptionPath.exists() and not destCaptionPath.exists():
+                if renameFileSafe(srcCaptionPath, destCaptionPath, dryRun=dryRun, prefix=prefix):
+                    renamedCaptions += 1
+        
+        imageMapping[imagePath] = finalImagePath
 
-        if srcCaptionPath.exists() and not destCaptionPath.exists():
-            if renameFileSafe(srcCaptionPath, destCaptionPath, dryRun=dryRun, prefix=prefix):
-                renamedCaptions += 1
+    # Create missing caption files for images without captions
+    defaultCaption = buildDefaultCaption(styleName=styleName, template=captionTemplate)
+    createdCaptions = 0
+    
+    for originalPath, finalPath in imageMapping.items():
+        captionPath = getCaptionPath(finalPath, captionExtension=captionExtension)
+        if not captionPath.exists():
+            created = writeCaptionIfMissing(
+                imagePath=finalPath,
+                captionText=defaultCaption,
+                captionExtension=captionExtension,
+                dryRun=dryRun,
+            )
+            if created:
+                createdCaptions += 1
+                print(f"{prefix} caption: {captionPath.name}")
 
     if captions:
         imageStems = {p.stem for p in paths.trainDir.iterdir() if isImageFile(p)}
@@ -264,8 +285,8 @@ def checkAndFixStyleFolder(styleDir: Path, captionExtension: str, dryRun: bool, 
         if orphans:
             print(f"{prefix} check: orphan captions in {paths.trainDir.name}: {len(orphans)} (e.g. {orphans[0]})")
 
-    if renamedImages or renamedCaptions:
-        print(f"{prefix} check: renamed images: {renamedImages}, captions: {renamedCaptions} in {styleName}")
+    if renamedImages or renamedCaptions or createdCaptions:
+        print(f"{prefix} check: renamed images: {renamedImages}, captions: {renamedCaptions}, created captions: {createdCaptions} in {styleName}")
 
 
 def processStyleFolder(
@@ -361,7 +382,8 @@ def main() -> None:
 
     global logger
     logger = getLogger("createKohyaDirs", includeConsole=True)
-    setLogger(logger)
+    setLoggerUtils(logger)
+    setLoggerConfig(logger)
 
     trainingRoot = args.training.expanduser().resolve()
 
@@ -395,7 +417,7 @@ def main() -> None:
     if args.check:
         print(f"{prefix} checking existing kohya structure in: {trainingRoot}")
         for styleDir in styleFolders:
-            checkAndFixStyleFolder(styleDir, args.captionExtension, args.dryRun, prefix)
+            checkAndFixStyleFolder(styleDir, args.captionExtension, args.captionTemplate, args.dryRun, prefix)
         return
 
     print(f"{prefix} scanning: {trainingRoot}")
