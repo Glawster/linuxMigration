@@ -263,18 +263,17 @@ def checkAndFixStyleFolder(styleDir: Path, captionExtension: str, captionTemplat
     defaultCaption = buildDefaultCaption(styleName=styleName, template=captionTemplate)
     createdCaptions = 0
     
-    for originalPath, finalPath in imageMapping.items():
-        captionPath = getCaptionPath(finalPath, captionExtension=captionExtension)
-        if not captionPath.exists():
-            created = writeCaptionIfMissing(
-                imagePath=finalPath,
-                captionText=defaultCaption,
-                captionExtension=captionExtension,
-                dryRun=dryRun,
-            )
-            if created:
-                createdCaptions += 1
-                print(f"{prefix} caption: {captionPath.name}")
+    for finalPath in imageMapping.values():
+        created = writeCaptionIfMissing(
+            imagePath=finalPath,
+            captionText=defaultCaption,
+            captionExtension=captionExtension,
+            dryRun=dryRun,
+        )
+        if created:
+            createdCaptions += 1
+            captionPath = getCaptionPath(finalPath, captionExtension=captionExtension)
+            print(f"{prefix} caption: {captionPath.name}")
 
     if captions:
         imageStems = {p.stem for p in paths.trainDir.iterdir() if isImageFile(p)}
