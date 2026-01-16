@@ -49,6 +49,9 @@ from kohyaUtils import (
 from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateConfigFromArgs, setLogger as setLoggerConfig
 from organiseMyProjects.logUtils import getLogger  # type: ignore
 
+# Module-level logger (initialized in main)
+logger = None
+
 def parseArgs() -> argparse.Namespace:
     cfg = loadConfig()
 
@@ -160,7 +163,7 @@ def renameFileSafe(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> 
         print(f"ERROR: Destination exists, cannot rename: {srcPath.name} -> {destPath.name}")
         return False
 
-    print(f"{prefix} rename: {srcPath.name} -> {destPath.name}")
+    logger.info(f"{prefix} rename: {srcPath.name} -> {destPath.name}")
     if dryRun:
         return True
 
@@ -209,7 +212,7 @@ def nextAvailableIndex(usedIndices: Set[int], startAt: int = 1) -> int:
 
 
 def moveFile(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> None:
-    print(f"{prefix} move: {srcPath.name} -> {destPath}")
+    logger.info(f"{prefix} move: {srcPath.name} -> {destPath}")
     if dryRun:
         return
 
@@ -222,7 +225,7 @@ def checkAndFixStyleFolder(styleDir: Path, captionExtension: str, captionTemplat
     paths = resolveKohyaPaths(styleName=styleName, trainingRoot=styleDir.parent)
 
     if not paths.trainDir.exists():
-        print(f"{prefix} check: missing train dir, skipping: {paths.trainDir}")
+        logger.info(f"{prefix} check: missing train dir, skipping: {paths.trainDir}")
         return
 
     images = [p for p in sorted(paths.trainDir.iterdir()) if isImageFile(p)]
@@ -273,7 +276,7 @@ def checkAndFixStyleFolder(styleDir: Path, captionExtension: str, captionTemplat
         if created:
             createdCaptions += 1
             captionPath = getCaptionPath(finalPath, captionExtension=captionExtension)
-            print(f"{prefix} caption: {captionPath.name}")
+            logger.info(f"{prefix} caption: {captionPath.name}")
 
     if captions:
         imageStems = {p.stem for p in paths.trainDir.iterdir() if isImageFile(p)}
@@ -282,10 +285,10 @@ def checkAndFixStyleFolder(styleDir: Path, captionExtension: str, captionTemplat
             if capPath.stem not in imageStems:
                 orphans.append(capName)
         if orphans:
-            print(f"{prefix} check: orphan captions in {paths.trainDir.name}: {len(orphans)} (e.g. {orphans[0]})")
+            logger.info(f"{prefix} check: orphan captions in {paths.trainDir.name}: {len(orphans)} (e.g. {orphans[0]})")
 
     if renamedImages or renamedCaptions or createdCaptions:
-        print(f"{prefix} check: renamed images: {renamedImages}, captions: {renamedCaptions}, created captions: {createdCaptions} in {styleName}")
+        logger.info(f"{prefix} check: renamed images: {renamedImages}, captions: {renamedCaptions}, created captions: {createdCaptions} in {styleName}")
 
 
 def processStyleFolder(
@@ -314,7 +317,7 @@ def processStyleFolder(
         destImagePath = (paths.trainDir / targetStem).with_suffix(imagePath.suffix.lower())
 
         if destImagePath.exists():
-            print(f"{prefix} skip: {destImagePath.name}")
+            logger.info(f"{prefix} skip: {destImagePath.name}")
             continue
 
         try:
@@ -342,7 +345,7 @@ def processStyleFolder(
                 dryRun=dryRun,
             )
             if created:
-                print(f"{prefix} caption: {destCaptionPath.name}")
+                logger.info(f"{prefix} caption: {destCaptionPath.name}")
 
 
 def undoStyleFolder(styleDir: Path, dryRun: bool, prefix: str) -> None:
@@ -358,7 +361,7 @@ def undoStyleFolder(styleDir: Path, dryRun: bool, prefix: str) -> None:
 
         destPath = styleDir / entry.name
         if destPath.exists():
-            print(f"{prefix} skip: {destPath.name}")
+            logger.info(f"{prefix} skip: {destPath.name}")
             continue
 
         try:
@@ -408,18 +411,18 @@ def main() -> None:
         logger.info(f"{prefix} updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
 
     if args.undo:
-        print(f"{prefix} undoing train structure in: {trainingRoot}")
+        logger.info(f"{prefix} undoing train structure in: {trainingRoot}")
         for styleDir in styleFolders:
             undoStyleFolder(styleDir=styleDir, dryRun=args.dryRun, prefix=prefix)
         return
 
     if args.check:
-        print(f"{prefix} checking existing kohya structure in: {trainingRoot}")
+        logger.info(f"{prefix} checking existing kohya structure in: {trainingRoot}")
         for styleDir in styleFolders:
             checkAndFixStyleFolder(styleDir, args.captionExtension, args.captionTemplate, args.dryRun, prefix)
         return
 
-    print(f"{prefix} scanning: {trainingRoot}")
+    logger.info(f"{prefix} scanning: {trainingRoot}")
 
     for styleDir in styleFolders:
         processStyleFolder(
