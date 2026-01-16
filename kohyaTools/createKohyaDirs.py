@@ -49,9 +49,6 @@ from kohyaUtils import (
 from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateConfigFromArgs, setLogger as setLoggerConfig
 from organiseMyProjects.logUtils import getLogger  # type: ignore
 
-# Module-level logger (initialized in main)
-logger = None
-
 def parseArgs() -> argparse.Namespace:
     cfg = loadConfig()
 
@@ -160,7 +157,7 @@ def renameFileSafe(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> 
         return False
 
     if destPath.exists():
-        print(f"ERROR: Destination exists, cannot rename: {srcPath.name} -> {destPath.name}")
+        logger.error(f"ERROR: Destination exists, cannot rename: {srcPath.name} -> {destPath.name}")
         return False
 
     logger.info(f"{prefix} rename: {srcPath.name} -> {destPath.name}")
@@ -323,7 +320,7 @@ def processStyleFolder(
         try:
             moveFile(imagePath, destImagePath, dryRun=dryRun, prefix=prefix)
         except OSError as e:
-            print(f"ERROR: Failed to move {imagePath.name}: {e}")
+            logger.error(f"ERROR: Failed to move {imagePath.name}: {e}")
             continue
 
         srcCaptionPath = getCaptionPath(imagePath, captionExtension=captionExtension)
@@ -336,7 +333,7 @@ def processStyleFolder(
             try:
                 moveFile(srcCaptionPath, destCaptionPath, dryRun=dryRun, prefix=prefix)
             except OSError as e:
-                print(f"ERROR: Failed to move caption {srcCaptionPath.name}: {e}")
+                logger.error(f"ERROR: Failed to move caption {srcCaptionPath.name}: {e}")
         else:
             created = writeCaptionIfMissing(
                 imagePath=destImagePath,
@@ -367,7 +364,7 @@ def undoStyleFolder(styleDir: Path, dryRun: bool, prefix: str) -> None:
         try:
             moveFile(entry, destPath, dryRun=dryRun, prefix=prefix)
         except OSError as e:
-            print(f"ERROR: Failed to move {entry.name}: {e}")
+            logger.error(f"ERROR: Failed to move {entry.name}: {e}")
             continue
 
     if not dryRun:
@@ -392,7 +389,7 @@ def main() -> None:
     try:
         styleFolders = getStyleFolders(trainingRoot, args.style)
     except Exception as e:
-        print(f"ERROR: {e}")
+        logger.error(f"ERROR: {e}")
         sys.exit(1)
 
     cfg = loadConfig()
