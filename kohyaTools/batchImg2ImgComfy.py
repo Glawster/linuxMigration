@@ -309,7 +309,7 @@ def main() -> int:
 
     # Output folder used to decide whether an image has already been processed.
     # If output already contains "fixed_<stem>*", we skip re-processing; delete the output to regenerate.
-    comfyOutput = Path(args.outputDir) if str(args.outputDir) not in ("", ".") else Path(getCfgValue(cfg, "comfyOutputDir", ""))
+    comfyOutput = Path(args.comfyout) if str(args.comfyout) not in ("", ".") else Path(getCfgValue(cfg, "comfyOutputDir", ""))
     if str(comfyOutput) in ("", "."):
         comfyOutput = comfyInput.parent / "output"
     comfyOutput = comfyOutput.expanduser().resolve()
