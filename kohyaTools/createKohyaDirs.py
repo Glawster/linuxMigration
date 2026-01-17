@@ -273,7 +273,7 @@ def checkAndFixStyleFolder(styleDir: Path, captionExtension: str, captionTemplat
         if created:
             createdCaptions += 1
             captionPath = getCaptionPath(finalPath, captionExtension=captionExtension)
-            logger.info(f"{prefix} caption: {captionPath.name}")
+            logger.info(f"{prefix} added caption: {captionPath.name}")
 
     if captions:
         imageStems = {p.stem for p in paths.trainDir.iterdir() if isImageFile(p)}
@@ -282,10 +282,10 @@ def checkAndFixStyleFolder(styleDir: Path, captionExtension: str, captionTemplat
             if capPath.stem not in imageStems:
                 orphans.append(capName)
         if orphans:
-            logger.info(f"{prefix} check: orphan captions in {paths.trainDir.name}: {len(orphans)} (e.g. {orphans[0]})")
+            logger.info(f"{prefix} found orphan captions in {paths.trainDir.name}: {len(orphans)} (e.g. {orphans[0]})")
 
     if renamedImages or renamedCaptions or createdCaptions:
-        logger.info(f"{prefix} check: renamed images: {renamedImages}, captions: {renamedCaptions}, created captions: {createdCaptions} in {styleName}")
+        logger.info(f"{prefix} renamed images: {renamedImages}, captions: {renamedCaptions}, created captions: {createdCaptions} in {styleName}")
 
 
 def processStyleFolder(
