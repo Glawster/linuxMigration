@@ -13,9 +13,9 @@ Forward mode (default):
 - log what happened (no CSV report)
 
 Reverse mode (--reverse):
-- scan ALL folders under ComfyUI inputDir and (optionally) outputDir
-- ONLY act on directories whose name starts with "fixed"
-- for each image in fixed* folders, infer kohya style from filename and copy back to:
+- scan ComfyUI inputDir for subdirectories whose name starts with "fixed"
+- scan ComfyUI outputDir (if provided) for files whose name starts with "fixed_" (flat folder)
+- for each image found, infer kohya style from filename and copy back to:
     trainingRoot/<style>/10_<style>/<filename>
 - BEFORE overwrite, backup existing original by renaming it with suffix "__orig"
 - overwrite mode is always on; --dry-run shows operations without executing
@@ -374,45 +374,65 @@ def reverseFromFixedFolders(
     dryRun: bool,
 ) -> None:
 
-    rootsToScan: list[Tuple[str, Path]] = [("input", comfyIn)]
-    if comfyOut is not None:
-        rootsToScan.append(("output", comfyOut))
-
-    fixedFolders: list[Tuple[str, Path]] = []
-    for label, root in rootsToScan:
-        if root.exists():
-            for f in iterFixedFolders(root):
-                fixedFolders.append((label, f))
-
-    if not fixedFolders:
-        logger.info(f"{prefix} no fixed folders found under input/output")
-        return
-
     scanned = 0
     replaced = 0
     errors = 0
 
-    for label, fixedFolder in fixedFolders:
-        logger.info(f"{prefix} fixed folder ({label}): {fixedFolder}")
+    # Process input folder: look for fixed_* subdirectories
+    if comfyIn.exists():
+        fixedFolders = list(iterFixedFolders(comfyIn))
+        if fixedFolders:
+            logger.info(f"{prefix} found {len(fixedFolders)} fixed folder(s) under input")
+            for fixedFolder in fixedFolders:
+                logger.info(f"{prefix} fixed folder (input): {fixedFolder}")
 
-        for fixedImg in iterImagesAny(fixedFolder):
-            scanned += 1
+                for fixedImg in iterImagesAny(fixedFolder):
+                    scanned += 1
 
-            style = styleFromFilename(fixedImg)
-            if not style:
-                errors += 1
-                logger.error(f"Cannot determine style from filename: {fixedImg.name}")
-                continue
+                    style = styleFromFilename(fixedImg)
+                    if not style:
+                        errors += 1
+                        logger.error(f"Cannot determine style from filename: {fixedImg.name}")
+                        continue
 
-            destDir = trainingRoot / style / f"10_{style}"
-            destOriginal = destDir / fixedImg.name
+                    destDir = trainingRoot / style / f"10_{style}"
+                    destOriginal = destDir / fixedImg.name
 
-            try:
-                backupThenCopyReplace(fixedImg, destOriginal, dryRun)
-                replaced += 1
-            except Exception as ex:
-                errors += 1
-                logger.error(f"Failed to replace {destOriginal.name}: {ex}")
+                    try:
+                        backupThenCopyReplace(fixedImg, destOriginal, dryRun)
+                        replaced += 1
+                    except Exception as ex:
+                        errors += 1
+                        logger.error(f"Failed to replace {destOriginal.name}: {ex}")
+
+    # Process output folder: treat as flat folder, look for fixed_* files directly
+    if comfyOut is not None and comfyOut.exists():
+        fixedFiles = [p for p in comfyOut.iterdir() if p.is_file() and p.name.lower().startswith("fixed_") and p.suffix.lower() in IMAGE_EXTS]
+        
+        if fixedFiles:
+            logger.info(f"{prefix} found {len(fixedFiles)} fixed file(s) in output folder")
+            
+            for fixedImg in fixedFiles:
+                scanned += 1
+
+                style = styleFromFilename(fixedImg)
+                if not style:
+                    errors += 1
+                    logger.error(f"Cannot determine style from filename: {fixedImg.name}")
+                    continue
+
+                destDir = trainingRoot / style / f"10_{style}"
+                destOriginal = destDir / fixedImg.name
+
+                try:
+                    backupThenCopyReplace(fixedImg, destOriginal, dryRun)
+                    replaced += 1
+                except Exception as ex:
+                    errors += 1
+                    logger.error(f"Failed to replace {destOriginal.name}: {ex}")
+
+    if scanned == 0:
+        logger.info(f"{prefix} no fixed folders or files found under input/output")
 
     logger.info(f"{prefix} reversing scanned: {scanned}")
     logger.info(f"{prefix} reversing replaced: {replaced}")
