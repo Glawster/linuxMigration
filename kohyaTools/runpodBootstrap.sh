@@ -149,6 +149,7 @@ ENABLE_COMFYUI=1\n\
 ENABLE_KOHYA=0\n\
 RUN_REMOTE=1\n\
 DRY_RUN=0\n\
+DRY_PREFIX=\"...[]\"\n\
 \n\
 usage() {\n\
   echo \"usage: $0 [--kohya] [--no-comfyui] [--no-run] [--dry-run]\";\n\
@@ -166,7 +167,7 @@ while [[ $# -gt 0 ]]; do\n\
 done\n\
 \n\
 log(){ echo -e \"\\n==> $*\\n\"; }\n\
-run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"...[] $*\"; else \"$@\"; fi }\n\
+run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"\$DRY_PREFIX $*\"; else \"$@\"; fi }\n\
 \n\
 log \"checking gpu\"\n\
 if command -v nvidia-smi >/dev/null 2>&1; then run nvidia-smi || true; else echo \"WARNING: nvidia-smi not found\"; fi\n\
@@ -196,7 +197,7 @@ fi\n\
 \n\
 # activate conda\n\
 if [[ \"\$DRY_RUN\" == \"1\" ]]; then\n\
-  echo \"...[] source \$CONDA_DIR/etc/profile.d/conda.sh\"\n\
+  echo \"\$DRY_PREFIX source \$CONDA_DIR/etc/profile.d/conda.sh\"\n\
 else\n\
   # shellcheck disable=SC1090\n\
   source \"\$CONDA_DIR/etc/profile.d/conda.sh\"\n\
@@ -204,8 +205,8 @@ fi\n\
 \n\
 # create env if missing\n\
 if [[ \"\$DRY_RUN\" == \"1\" ]]; then\n\
-  echo \"...[] conda create -n \$ENV_NAME python=3.10 -y\"\n\
-  echo \"...[] conda activate \$ENV_NAME\"\n\
+  echo \"\$DRY_PREFIX conda create -n \$ENV_NAME python=3.10 -y\"\n\
+  echo \"\$DRY_PREFIX conda activate \$ENV_NAME\"\n\
 else\n\
   if ! conda env list | awk \"{print \\$1}\" | grep -qx \"\$ENV_NAME\"; then\n\
     run conda create -n \"\$ENV_NAME\" python=3.10 -y\n\
@@ -267,6 +268,7 @@ REMOTE_COMFY_SETUP_SCRIPT=$'#!/usr/bin/env bash\n\
 \n\
 set -euo pipefail\n\
 DRY_RUN=0\n\
+DRY_PREFIX=\"...[]\"\n\
 if [[ ${1:-} == \"--dry-run\" ]]; then DRY_RUN=1; shift; fi\n\
 \n\
 COMFY_DIR=\"${COMFY_DIR:-/workspace/ComfyUI}\"\n\
@@ -275,7 +277,7 @@ ENV_NAME=\"${ENV_NAME:-runpod}\"\n\
 TORCH_CUDA_INDEX_URL=\"${TORCH_CUDA_INDEX_URL:-https://download.pytorch.org/whl/cu121}\"\n\
 \n\
 log(){ echo -e \"\\n==> $*\\n\"; }\n\
-run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"...[] $*\"; else \"$@\"; fi }\n\
+run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"\$DRY_PREFIX $*\"; else \"$@\"; fi }\n\
 \n\
 log \"cloning/updating comfyui\"\n\
 if [[ ! -d \"$COMFY_DIR/.git\" ]]; then\n\
@@ -286,8 +288,8 @@ fi\n\
 \n\
 log \"activating conda environment\"\n\
 if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
-  echo \"...[] source $CONDA_DIR/etc/profile.d/conda.sh\"\n\
-  echo \"...[] conda activate $ENV_NAME\"\n\
+  echo \"\$DRY_PREFIX source $CONDA_DIR/etc/profile.d/conda.sh\"\n\
+  echo \"\$DRY_PREFIX conda activate $ENV_NAME\"\n\
 else\n\
   # shellcheck disable=SC1090\n\
   source \"$CONDA_DIR/etc/profile.d/conda.sh\"\n\
@@ -296,9 +298,9 @@ fi\n\
 \n\
 log \"installing ComfyUI dependencies\"\n\
 if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
-  echo \"...[] pip install --upgrade pip wheel\"\n\
-  echo \"...[] pip install torch torchvision torchaudio --index-url $TORCH_CUDA_INDEX_URL\"\n\
-  echo \"...[] pip install -r $COMFY_DIR/requirements.txt\"\n\
+  echo \"\$DRY_PREFIX pip install --upgrade pip wheel\"\n\
+  echo \"\$DRY_PREFIX pip install torch torchvision torchaudio --index-url $TORCH_CUDA_INDEX_URL\"\n\
+  echo \"\$DRY_PREFIX pip install -r $COMFY_DIR/requirements.txt\"\n\
 else\n\
   python -m pip install --upgrade pip wheel\n\
   pip install torch torchvision torchaudio --index-url \"$TORCH_CUDA_INDEX_URL\"\n\
@@ -310,7 +312,7 @@ log \"installing ComfyUI-Manager dependencies\"\n\
 MANAGER_DIR=\"$COMFY_DIR/custom_nodes/ComfyUI-Manager\"\n\
 if [[ -f \"$MANAGER_DIR/requirements.txt\" ]]; then\n\
   if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
-    echo \"...[] pip install -r $MANAGER_DIR/requirements.txt\"\n\
+    echo \"\$DRY_PREFIX pip install -r $MANAGER_DIR/requirements.txt\"\n\
   else\n\
     pip install -r \"$MANAGER_DIR/requirements.txt\"\n\
   fi\n\
@@ -326,6 +328,7 @@ REMOTE_COMFY_START_SCRIPT=$'#!/usr/bin/env bash\n\
 \n\
 set -euo pipefail\n\
 DRY_RUN=0\n\
+DRY_PREFIX=\"...[]\"\n\
 if [[ ${1:-} == \"--dry-run\" ]]; then DRY_RUN=1; shift; fi\n\
 \n\
 PORT=\"${1:-8188}\"\n\
@@ -333,10 +336,10 @@ COMFY_DIR=\"${COMFY_DIR:-/workspace/ComfyUI}\"\n\
 CONDA_DIR=\"${CONDA_DIR:-/workspace/miniconda3}\"\n\
 ENV_NAME=\"${ENV_NAME:-runpod}\"\n\
 \n\
-run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"...[] $*\"; else \"$@\"; fi }\n\
+run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"\$DRY_PREFIX $*\"; else \"$@\"; fi }\n\
 \n\
 if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
-  echo \"...[] would start comfyui in tmux on port $PORT\"\n\
+  echo \"\$DRY_PREFIX would start comfyui in tmux on port $PORT\"\n\
   exit 0\n\
 fi\n\
 \n\
@@ -366,6 +369,7 @@ REMOTE_KOHYA_SETUP_SCRIPT=$'#!/usr/bin/env bash\n\
 \n\
 set -euo pipefail\n\
 DRY_RUN=0\n\
+DRY_PREFIX=\"...[]\"\n\
 if [[ ${1:-} == \"--dry-run\" ]]; then DRY_RUN=1; shift; fi\n\
 \n\
 KOHYA_DIR=\"${KOHYA_DIR:-/workspace/kohya_ss}\"\n\
@@ -373,7 +377,7 @@ CONDA_DIR=\"${CONDA_DIR:-/workspace/miniconda3}\"\n\
 ENV_NAME=\"${ENV_NAME:-runpod}\"\n\
 \n\
 log(){ echo -e \"\\n==> $*\\n\"; }\n\
-run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"...[] $*\"; else \"$@\"; fi }\n\
+run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"\$DRY_PREFIX $*\"; else \"$@\"; fi }\n\
 \n\
 log \"cloning/updating kohya_ss\"\n\
 if [[ ! -d \"$KOHYA_DIR/.git\" ]]; then\n\
@@ -384,8 +388,8 @@ fi\n\
 \n\
 log \"activating conda environment\"\n\
 if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
-  echo \"...[] source $CONDA_DIR/etc/profile.d/conda.sh\"\n\
-  echo \"...[] conda activate $ENV_NAME\"\n\
+  echo \"\$DRY_PREFIX source $CONDA_DIR/etc/profile.d/conda.sh\"\n\
+  echo \"\$DRY_PREFIX conda activate $ENV_NAME\"\n\
 else\n\
   # shellcheck disable=SC1090\n\
   source \"$CONDA_DIR/etc/profile.d/conda.sh\"\n\
@@ -395,7 +399,7 @@ fi\n\
 log \"installing kohya_ss dependencies\"\n\
 if [[ -f \"$KOHYA_DIR/requirements.txt\" ]]; then\n\
   if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
-    echo \"...[] pip install -r $KOHYA_DIR/requirements.txt\"\n\
+    echo \"\$DRY_PREFIX pip install -r $KOHYA_DIR/requirements.txt\"\n\
   else\n\
     pip install -r \"$KOHYA_DIR/requirements.txt\"\n\
   fi\n\
@@ -412,7 +416,7 @@ write_remote_file() {
   local content="$2"
 
   if [[ "$DRY_RUN" == "1" ]]; then
-    echo "...[] would write remote file: ${remote_path}"
+    echo "${DRY_PREFIX} would write remote file: ${remote_path}"
     cat <<CMD
 ssh ${SSH_OPTS[*]} ${TARGET} 'cat > ${remote_path} <<'"'"'EOF'"'"'
 ${content}
@@ -450,8 +454,8 @@ if [[ "$DRY_RUN" == "1" ]]; then REMOTE_ARGS+=(--dry-run); fi
 
 if [[ "$RUN_REMOTE" == "1" ]]; then
   if [[ "$DRY_RUN" == "1" ]]; then
-    echo "...[] would run on remote:"
-    echo "...[] ssh ${SSH_OPTS[*]} ${TARGET} 'bash /workspace/runpodSetup.sh ${REMOTE_ARGS[*]}'"
+    echo "${DRY_PREFIX} would run on remote:"
+    echo "${DRY_PREFIX} ssh ${SSH_OPTS[*]} ${TARGET} 'bash /workspace/runpodSetup.sh ${REMOTE_ARGS[*]}'"
     exit 0
   fi
 
