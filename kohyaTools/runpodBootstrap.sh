@@ -38,7 +38,7 @@ ENABLE_COMFYUI=1
 ENABLE_KOHYA=0
 RUN_REMOTE=1
 DRY_RUN="${DRY_RUN:-0}"
-DRY_PREFIX="[]"
+DRY_PREFIX="...[]"
 
 TARGET=""
 SSH_PORT="22"
@@ -114,6 +114,7 @@ ssh_cmd() {
     echo "${DRY_PREFIX} ssh ${SSH_OPTS[*]} ${TARGET} <remote-command>"
     return 0
   fi
+  # shellcheck disable=SC2029
   ssh "${SSH_OPTS[@]}" "$TARGET" "$@"
 }
 
@@ -121,8 +122,12 @@ ssh_cmd() {
 # Connectivity check (safe even in dry-run)
 # ---------------------------
 echo "checking ssh connectivity..."
-echo "${SSH_OPTS[@]}" "$TARGET" "echo connected && uname -a" >/dev/null
-echo "connected..."
+if ssh "${SSH_OPTS[@]}" "$TARGET" "echo connected && uname -a" >/dev/null 2>&1; then
+  echo "connected..."
+else
+  echo "ERROR: could not connect to ${TARGET}:${SSH_PORT}"
+  exit 1
+fi
 echo
 
 # ---------------------------
@@ -161,7 +166,7 @@ while [[ $# -gt 0 ]]; do\n\
 done\n\
 \n\
 log(){ echo -e \"\\n==> $*\\n\"; }\n\
-run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"[] $*\"; else \"$@\"; fi }\n\
+run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"...[] $*\"; else \"$@\"; fi }\n\
 \n\
 log \"checking gpu\"\n\
 if command -v nvidia-smi >/dev/null 2>&1; then run nvidia-smi || true; else echo \"WARNING: nvidia-smi not found\"; fi\n\
@@ -174,34 +179,34 @@ else\n\
   echo \"WARNING: apt-get not found. Assuming base image has tools.\"\n\
 fi\n\
 \n\
-# ---------------------------
-# ComfyUI
-# ---------------------------
-
-log "installing ComfyUI-Manager (custom node)"
-
-COMFY_DIR="/workspace/ComfyUI"
-MANAGER_DIR="${COMFY_DIR}/custom_nodes/ComfyUI-Manager"
-
-if [[ ! -d "${MANAGER_DIR}/.git" ]]; then
-  run git clone https://github.com/ltdrdata/ComfyUI-Manager.git "${MANAGER_DIR}"
-else
-  run bash -lc "cd \"${MANAGER_DIR}\" && git pull --ff-only || true"
-fi
-
-# Install manager python deps if present
-if [[ -f "${MANAGER_DIR}/requirements.txt" ]]; then
-  if [[ "$DRY_RUN" == "1" ]]; then
-    echo "[] python -m pip install --upgrade pip"
-    echo "[] pip install -r ${MANAGER_DIR}/requirements.txt"
-  else
-    # venv already activated above
-    python -m pip install --upgrade pip
-    pip install -r "${MANAGER_DIR}/requirements.txt"
-  fi
-fi
+# ---------------------------\n\
+# ComfyUI\n\
+# ---------------------------\n\
 \n\
-if [[ "$ENABLE_COMFYUI" == "1" ]]; then
+log \"installing ComfyUI-Manager (custom node)\"\n\
+\n\
+COMFY_DIR=\"/workspace/ComfyUI\"\n\
+MANAGER_DIR=\"\${COMFY_DIR}/custom_nodes/ComfyUI-Manager\"\n\
+\n\
+if [[ ! -d \"\${MANAGER_DIR}/.git\" ]]; then\n\
+  run git clone https://github.com/ltdrdata/ComfyUI-Manager.git \"\${MANAGER_DIR}\"\n\
+else\n\
+  run bash -lc \"cd \\\"\${MANAGER_DIR}\\\" && git pull --ff-only || true\"\n\
+fi\n\
+\n\
+# Install manager python deps if present\n\
+if [[ -f \"\${MANAGER_DIR}/requirements.txt\" ]]; then\n\
+  if [[ \"\$DRY_RUN\" == \"1\" ]]; then\n\
+    echo \"...[] python -m pip install --upgrade pip\"\n\
+    echo \"...[] pip install -r \${MANAGER_DIR}/requirements.txt\"\n\
+  else\n\
+    # venv already activated above\n\
+    python -m pip install --upgrade pip\n\
+    pip install -r \"\${MANAGER_DIR}/requirements.txt\"\n\
+  fi\n\
+fi\n\
+\n\
+if [[ \"$ENABLE_COMFYUI\" == \"1\" ]]; then
   log "setting up comfyui"
 
   COMFY_ARGS=()
@@ -245,7 +250,7 @@ COMFY_VENV_DIR=\"${COMFY_VENV_DIR:-/workspace/venvs/comfyui}\"\n\
 TORCH_CUDA_INDEX_URL=\"${TORCH_CUDA_INDEX_URL:-https://download.pytorch.org/whl/cu121}\"\n\
 \n\
 log(){ echo -e \"\\n==> $*\\n\"; }\n\
-run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"[] $*\"; else \"$@\"; fi }\n\
+run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"...[] $*\"; else \"$@\"; fi }\n\
 \n\
 log \"cloning/updating comfyui\"\n\
 run mkdir -p \"$(dirname \"$COMFY_VENV_DIR\")\"\n\
@@ -261,7 +266,7 @@ run python3 -m venv \"$COMFY_VENV_DIR\"\n\
 \n\
 log \"installing deps\"\n\
 if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
-  echo \"[] source $COMFY_VENV_DIR/bin/activate && pip install ...\"\n\
+  echo \"...[] source $COMFY_VENV_DIR/bin/activate && pip install ...\"\n\
 else\n\
   # shellcheck disable=SC1090\n\
   source \"$COMFY_VENV_DIR/bin/activate\"\n\
@@ -287,10 +292,10 @@ PORT=\"${1:-8188}\"\n\
 COMFY_DIR=\"${COMFY_DIR:-/workspace/ComfyUI}\"\n\
 COMFY_VENV_DIR=\"${COMFY_VENV_DIR:-/workspace/venvs/comfyui}\"\n\
 \n\
-run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"[] $*\"; else \"$@\"; fi }\n\
+run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"...[] $*\"; else \"$@\"; fi }\n\
 \n\
 if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
-  echo \"[] would start comfyui in tmux on port $PORT\"\n\
+  echo \"...[] would start comfyui in tmux on port $PORT\"\n\
   exit 0\n\
 fi\n\
 \n\
@@ -322,7 +327,7 @@ set -euo pipefail\n\
 DRY_RUN=0\n\
 if [[ ${1:-} == \"--dry-run\" ]]; then DRY_RUN=1; shift; fi\n\
 \n\
-run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"[] $*\"; else \"$@\"; fi }\n\
+run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"...[] $*\"; else \"$@\"; fi }\n\
 echo \"kohya setup script placeholder...\"\n\
 echo \"(replace REMOTE_KOHYA_SETUP_SCRIPT content with your real kohya installer)\"\n\
 '
@@ -335,7 +340,7 @@ write_remote_file() {
   local content="$2"
 
   if [[ "$DRY_RUN" == "1" ]]; then
-    echo "[] would write remote file: ${remote_path}"
+    echo "...[] would write remote file: ${remote_path}"
     cat <<CMD
 ssh ${SSH_OPTS[*]} ${TARGET} 'cat > ${remote_path} <<'"'"'EOF'"'"'
 ${content}
@@ -346,6 +351,7 @@ CMD
   fi
 
   # Use a single SSH session to write the file via heredoc
+  # shellcheck disable=SC2029
   ssh "${SSH_OPTS[@]}" "$TARGET" "cat > ${remote_path} <<'EOF'
 ${content}
 EOF
@@ -372,12 +378,13 @@ if [[ "$DRY_RUN" == "1" ]]; then REMOTE_ARGS+=(--dry-run); fi
 
 if [[ "$RUN_REMOTE" == "1" ]]; then
   if [[ "$DRY_RUN" == "1" ]]; then
-    echo "[] would run on remote:"
-    echo "[] ssh ${SSH_OPTS[*]} ${TARGET} 'bash /workspace/runpodSetup.sh ${REMOTE_ARGS[*]}'"
+    echo "...[] would run on remote:"
+    echo "...[] ssh ${SSH_OPTS[*]} ${TARGET} 'bash /workspace/runpodSetup.sh ${REMOTE_ARGS[*]}'"
     exit 0
   fi
 
   echo "running remote setup:"
+  # shellcheck disable=SC2029
   ssh "${SSH_OPTS[@]}" "$TARGET" "bash /workspace/runpodSetup.sh ${REMOTE_ARGS[*]}"
 else
   echo "remote scripts written. to run manually:"
