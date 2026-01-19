@@ -52,6 +52,7 @@ from kohyaConfig import (  # type: ignore
     getCfgValue,
     loadConfig,
     saveConfig,
+    setLogger,
     updateConfigFromArgs,
 )
 from organiseMyProjects.logUtils import getLogger  # type: ignore
@@ -349,6 +350,7 @@ def main() -> int:
 
     prefix = "...[]" if args.dryRun else "..."
     logger = getLogger("img2ImgComfy", includeConsole=bool(args.logconsole))
+    setLogger(logger)
 
     try:
         mode, baseUrl = resolveMode(args, cfg)
