@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# runpodFromSsh.sh
+# runpodFromSSH.sh
 #
 # Takes the RunPod ssh command and calls runpodBootstrap.sh with defaults:
 #   comfyui on, run on, kohya off
 #
 # Usage:
-#   ./runpodFromSsh.sh [options] ssh user@host -p PORT -i KEY
+#   ./runpodFromSSH.sh [options] ssh user@host -p PORT -i KEY
 #
 # Options:
 #   --kohya        enable kohya too
@@ -15,7 +15,7 @@
 #   -h, --help     help
 #
 # Example:
-#   ./runpodFromSsh.sh --dry-run ssh root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
+#   ./runpodFromSSH.sh --dry-run ssh root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
 
 set -euo pipefail
 
