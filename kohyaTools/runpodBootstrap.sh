@@ -596,7 +596,7 @@ fi
 REMOTE_BASE="/workspace/ComfyUI/models"
 REMOTE_CHECKPOINT="${REMOTE_BASE}/checkpoints"
 REMOTE_LORA="${REMOTE_BASE}/loras"
-REMOTE_BBOX="${REMOTE_BASE}/bbox"
+REMOTE_BBOX="${REMOTE_BASE}/ultralytics/bbox"
 
 run() {
   if [[ "$DRY_RUN" == "1" ]]; then
