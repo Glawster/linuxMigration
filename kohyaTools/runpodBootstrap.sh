@@ -215,6 +215,16 @@ else\n\
   source \"\$CONDA_DIR/etc/profile.d/conda.sh\"\n\
 fi\n\
 \n\
+# accept conda ToS for anaconda channels\n\
+log \"accepting conda terms of service\"\n\
+if [[ \"\$DRY_RUN\" == \"1\" ]]; then\n\
+  echo \"\$DRY_PREFIX conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main\"\n\
+  echo \"\$DRY_PREFIX conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r\"\n\
+else\n\
+  run conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main 2>/dev/null || true\n\
+  run conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 2>/dev/null || true\n\
+fi\n\
+\n\
 # create env if missing\n\
 if [[ \"\$DRY_RUN\" == \"1\" ]]; then\n\
   echo \"\$DRY_PREFIX conda create -n \$ENV_NAME python=3.10 -y\"\n\
