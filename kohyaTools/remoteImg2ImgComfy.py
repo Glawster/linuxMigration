@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """
-batchImg2ImgComfy.py
+remoteImg2ImgComfy.py
 
-Batch-run ComfyUI img2img workflows for images found under ComfyUI input.
+Run ComfyUI img2img workflows on a *remote* ComfyUI (e.g. RunPod proxy),
+while keeping all files local.
 
-Input Precedence Rules:
-- For each unique image stem, prefer processed (fixed_*) versions over originals
-- If fixed_photo-01_00001_.png exists, use it instead of photo-01.png
-- This allows iterative processing without re-processing from scratch
+Flow per image:
+- upload local image -> remote ComfyUI /input (optionally under a subfolder)
+- POST /prompt with workflow (LoadImage points to uploaded file)
+- poll /history/{prompt_id}
+- download outputs via /view
+- save outputs to local runs dir (and optionally mirror into local "comfyOutput")
 
 Conventions:
 - uses ~/.config/kohya/kohyaConfig.json via kohyaConfig.py (no --configPath)
 - logging via organiseMyProjects.logUtils.getLogger
-- --dry-run: no side effects (no network calls, no file writes), but logs the same messages
+- --dry-run: no side effects (no network calls, no file writes), but logs same messages
 - prefix:
     prefix = "...[]" if args.dryRun else "..."
 """
@@ -58,116 +61,6 @@ def classifyImage(path: Path, rules: List[BucketRules]) -> Optional[str]:
             if re.search(rx, fileLower):
                 return rule.name
     return None
-
-
-def extractBaseStem(filename: str) -> str:
-    """
-    Extract the base stem from a filename, removing fixed_ prefix and ComfyUI numbering.
-    
-    Examples:
-        fixed_photo-01_00001_.png -> photo-01
-        photo-01.png -> photo-01
-        fixed_style-name-01_00002_.png -> style-name-01
-    """
-    stem = Path(filename).stem
-    # Remove fixed_ prefix if present
-    if stem.lower().startswith("fixed_"):
-        stem = stem[6:]
-    # Remove ComfyUI numbering pattern (_00001_)
-    stem = re.sub(r"_\d+_$", "", stem)
-    return stem
-
-
-def applyPrecedenceRules(allImages: List[Path]) -> Dict[str, Path]:
-    """
-    Apply precedence rules: prefer fixed_* versions over originals.
-    
-    Returns a dict mapping base stem to the image path to use.
-    For each unique stem:
-    - If a fixed_* version exists, use it (most recent if multiple)
-    - Otherwise, use the original
-    """
-    stemToImages: Dict[str, List[Path]] = {}
-    
-    for img in allImages:
-        baseStem = extractBaseStem(img.name)
-        if baseStem not in stemToImages:
-            stemToImages[baseStem] = []
-        stemToImages[baseStem].append(img)
-    
-    result: Dict[str, Path] = {}
-    for baseStem, images in stemToImages.items():
-        # Separate fixed versions from originals
-        fixedVersions = [img for img in images if img.name.lower().startswith("fixed_")]
-        originals = [img for img in images if not img.name.lower().startswith("fixed_")]
-        
-        # Prefer fixed version (take the most recent if multiple)
-        if fixedVersions:
-            # Sort by path (later modifications will have higher numbers)
-            result[baseStem] = sorted(fixedVersions)[-1]
-        elif originals:
-            # Use the original
-            result[baseStem] = originals[0]
-    
-    return result
-
-
-class ComfyClient:
-    def __init__(self, baseUrl: str, timeoutSeconds: int):
-        self.baseUrl = baseUrl.rstrip("/")
-        self.timeoutSeconds = timeoutSeconds
-        self.session = requests.Session()
-
-    def submitPrompt(self, prompt: Dict[str, Any]) -> str:
-        url = f"{self.baseUrl}/prompt"
-        resp = self.session.post(url, json={"prompt": prompt}, timeout=self.timeoutSeconds)
-        resp.raise_for_status()
-        data = resp.json()
-        promptId = data.get("prompt_id")
-        if not promptId:
-            raise RuntimeError(f"no prompt_id returned: {data}")
-        return promptId
-
-    def getHistory(self, promptId: str) -> Dict[str, Any]:
-        url = f"{self.baseUrl}/history/{promptId}"
-        resp = self.session.get(url, timeout=self.timeoutSeconds)
-        resp.raise_for_status()
-        return resp.json()
-
-    def downloadView(self, filename: str, subfolder: str, fileType: str) -> bytes:
-        url = f"{self.baseUrl}/view"
-        resp = self.session.get(
-            url,
-            params={"filename": filename, "subfolder": subfolder, "type": fileType},
-            timeout=self.timeoutSeconds,
-        )
-        resp.raise_for_status()
-        return resp.content
-
-    def waitForOutputs(self, promptId: str, pollSeconds: float, maxWaitSeconds: int) -> Dict[str, Any]:
-        start = time.time()
-        while True:
-            hist = self.getHistory(promptId)
-            if promptId in hist:
-                entry = hist[promptId]
-                if isinstance(entry, dict) and entry.get("outputs"):
-                    return entry
-            if time.time() - start > maxWaitSeconds:
-                raise TimeoutError(f"timed out waiting for prompt {promptId}")
-            time.sleep(pollSeconds)
-
-def hasExistingOutput(outputDir: Path, fixedPrefix: str, stem: str) -> bool:
-    """Return True if ComfyUI output already contains fixedPrefix+stem.* (any suffix/counter)."""
-    if not outputDir.exists() or not outputDir.is_dir():
-        return False
-
-    prefix = f"{fixedPrefix}{stem}"
-    # ComfyUI typically writes directly into outputDir, but allow subfolders as well.
-    for p in outputDir.rglob("*"):
-        if p.is_file() and p.name.startswith(prefix):
-            return True
-    return False
-
 
 
 def loadApiPromptJson(path: Path) -> Dict[str, Any]:
@@ -228,29 +121,108 @@ def renderTemplate(template: str, **kwargs: str) -> str:
     return template.format(**kwargs)
 
 
+class ComfyClient:
+    def __init__(self, baseUrl: str, timeoutSeconds: int):
+        self.baseUrl = baseUrl.rstrip("/")
+        self.timeoutSeconds = timeoutSeconds
+        self.session = requests.Session()
+
+    def uploadImage(self, localPath: Path, remoteName: str, subfolder: str, overwrite: bool) -> str:
+        """
+        Upload an image to the remote ComfyUI input directory via /upload/image.
+
+        Returns the image name/path you should set into LoadImage:
+          - if subfolder empty -> remoteName
+          - else -> f"{subfolder}/{remoteName}"
+        """
+        url = f"{self.baseUrl}/upload/image"
+
+        # ComfyUI expects multipart/form-data with field name "image"
+        # Common optional fields: subfolder, overwrite
+        data = {
+            "subfolder": subfolder or "",
+            "overwrite": "true" if overwrite else "false",
+        }
+
+        mime = "image/png"
+        if localPath.suffix.lower() in (".jpg", ".jpeg"):
+            mime = "image/jpeg"
+        elif localPath.suffix.lower() == ".webp":
+            mime = "image/webp"
+
+        with localPath.open("rb") as f:
+            files = {"image": (remoteName, f, mime)}
+            resp = self.session.post(url, data=data, files=files, timeout=self.timeoutSeconds)
+        resp.raise_for_status()
+
+        # Most servers return JSON; we don't rely on exact schema, just success.
+        remoteRef = remoteName if not subfolder else f"{subfolder}/{remoteName}"
+        return remoteRef
+
+    def submitPrompt(self, prompt: Dict[str, Any]) -> str:
+        url = f"{self.baseUrl}/prompt"
+        resp = self.session.post(url, json={"prompt": prompt}, timeout=self.timeoutSeconds)
+        resp.raise_for_status()
+        data = resp.json()
+        promptId = data.get("prompt_id")
+        if not promptId:
+            raise RuntimeError(f"no prompt_id returned: {data}")
+        return promptId
+
+    def getHistory(self, promptId: str) -> Dict[str, Any]:
+        url = f"{self.baseUrl}/history/{promptId}"
+        resp = self.session.get(url, timeout=self.timeoutSeconds)
+        resp.raise_for_status()
+        return resp.json()
+
+    def downloadView(self, filename: str, subfolder: str, fileType: str) -> bytes:
+        url = f"{self.baseUrl}/view"
+        resp = self.session.get(
+            url,
+            params={"filename": filename, "subfolder": subfolder, "type": fileType},
+            timeout=self.timeoutSeconds,
+        )
+        resp.raise_for_status()
+        return resp.content
+
+    def waitForOutputs(self, promptId: str, pollSeconds: float, maxWaitSeconds: int) -> Dict[str, Any]:
+        start = time.time()
+        while True:
+            hist = self.getHistory(promptId)
+            if promptId in hist:
+                entry = hist[promptId]
+                if isinstance(entry, dict) and entry.get("outputs"):
+                    return entry
+            if time.time() - start > maxWaitSeconds:
+                raise TimeoutError(f"timed out waiting for prompt {promptId}")
+            time.sleep(pollSeconds)
+
+
 def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Batch-run ComfyUI img2img workflows (kohyaConfig.json).")
+    parser = argparse.ArgumentParser(description="Run img2img workflows on remote ComfyUI (RunPod) while keeping files local.")
 
-
-    parser.add_argument(
-        "--dry-run",
-        dest="dryRun",
-        action="store_true",
-        help="show what would be done without changing anything",
-    )
-
+    parser.add_argument("--dry-run", dest="dryRun", action="store_true", help="show what would be done without changing anything")
     parser.add_argument("--limit", type=int, default=0, help="process at most N images (0 = no limit)")
 
+    # Remote ComfyUI base URL: e.g. https://PODID-8188.proxy.runpod.net
     parser.add_argument("--comfyurl", default=getCfgValue(cfg, "comfyUrl", "http://127.0.0.1:8188"))
-    parser.add_argument("--comfyin", type=Path, default=Path(getCfgValue(cfg, "comfyInput", "./input")))
-    parser.add_argument("--comfyout", type=Path, default=Path(getCfgValue(cfg, "comfyOutput", "./output")))
+
+    # Local folders
+    parser.add_argument("--localin", type=Path, default=Path(getCfgValue(cfg, "comfyInput", "./input")))
+    parser.add_argument("--localout", type=Path, default=Path(getCfgValue(cfg, "comfyOutput", "./output")))
     parser.add_argument("--workflows", type=Path, default=Path(getCfgValue(cfg, "comfyWorkflowsDir", "./workflows")))
     parser.add_argument("--runsdir", type=Path, default=Path(getCfgValue(cfg, "comfyRunsDir", "./runs")))
 
-    parser.add_argument("--timeoutseconds", type=int, default=int(getCfgValue(cfg, "comfyTimeoutSeconds", 60)))
+    # Remote upload options
+    parser.add_argument("--remotesubfolder", default=str(getCfgValue(cfg, "comfyRemoteUploadSubfolder", "remoteImg2ImgComfy")))
+    parser.add_argument("--remoteoverwrite", action="store_true", default=bool(getCfgValue(cfg, "comfyRemoteUploadOverwrite", True)))
+
+    # Timing
+    parser.add_argument("--timeoutseconds", type=int, default=int(getCfgValue(cfg, "comfyTimeoutSeconds", 120)))
     parser.add_argument("--pollseconds", type=float, default=float(getCfgValue(cfg, "comfyPollSeconds", 1.0)))
     parser.add_argument("--maxwaitseconds", type=int, default=int(getCfgValue(cfg, "comfyMaxWaitSeconds", 1800)))
 
+    # Logging
     parser.add_argument("--loglevel", default=str(getCfgValue(cfg, "comfyLogLevel", "INFO")))
     parser.add_argument("--logconsole", action="store_true", default=bool(getCfgValue(cfg, "comfyLogConsole", True)))
 
@@ -262,31 +234,32 @@ def main() -> int:
     args = parseArgs(cfg)
 
     prefix = "...[]" if args.dryRun else "..."
-
-    logger = getLogger("batchImg2ImgComfy", includeConsole=bool(args.logconsole))
+    logger = getLogger("remoteImg2ImgComfy", includeConsole=bool(args.logconsole))
 
     runStamp = time.strftime("%Y%m%d_%H%M%S")
     runDir = Path(args.runsdir).expanduser().resolve() / f"run_{runStamp}"
 
     updates = {
         "comfyUrl": str(args.comfyurl),
-        "comfyInput": str(Path(args.comfyin).expanduser()),
-        "comfyOutput": str(Path(args.comfyout).expanduser()),
+        "comfyInput": str(Path(args.localin).expanduser()),
+        "comfyOutput": str(Path(args.localout).expanduser()),
         "comfyWorkflowsDir": str(Path(args.workflows).expanduser()),
         "comfyRunsDir": str(Path(args.runsdir).expanduser()),
+        "comfyRemoteUploadSubfolder": str(args.remotesubfolder),
+        "comfyRemoteUploadOverwrite": bool(args.remoteoverwrite),
         "comfyTimeoutSeconds": int(args.timeoutseconds),
         "comfyPollSeconds": float(args.pollseconds),
         "comfyMaxWaitSeconds": int(args.maxwaitseconds),
         "comfyLogLevel": str(args.loglevel).upper(),
         "comfyLogConsole": bool(args.logconsole),
     }
-
     configChanged = updateConfigFromArgs(cfg, updates)
     if configChanged and not args.dryRun:
         saveConfig(cfg)
     if configChanged:
         logger.info("%s updated config: %s", prefix, DEFAULT_CONFIG_PATH)
 
+    # Workflows
     fullWf = Path(args.workflows) / getCfgValue(cfg, "comfyFullbodyWorkflow", "fullbody_api.json")
     halfWf = Path(args.workflows) / getCfgValue(cfg, "comfyHalfbodyWorkflow", "halfbody_api.json")
     portWf = Path(args.workflows) / getCfgValue(cfg, "comfyPortraitWorkflow", "portrait_api.json")
@@ -296,25 +269,22 @@ def main() -> int:
         "halfbody": halfWf.resolve(),
         "portrait": portWf.resolve(),
     }
-
     for name, p in workflowPaths.items():
         if not p.exists():
             logger.error("Missing workflow file for %s: %s", name, p)
             return 2
 
-    comfyInput = Path(args.comfyin).expanduser().resolve()
-    if not comfyInput.exists():
-        logger.error("Input dir does not exist: %s", comfyInput)
+    localIn = Path(args.localin).expanduser().resolve()
+    if not localIn.exists():
+        logger.error("Input dir does not exist: %s", localIn)
         return 2
 
-    # Output folder used to decide whether an image has already been processed.
-    # If output already contains "fixed_<stem>*", we skip re-processing; delete the output to regenerate.
-    comfyOutput = Path(args.comfyout) if str(args.comfyout) not in ("", ".") else Path(getCfgValue(cfg, "comfyOutputDir", ""))
-    if str(comfyOutput) in ("", "."):
-        comfyOutput = comfyInput.parent / "output"
-    comfyOutput = comfyOutput.expanduser().resolve()
+    localOut = Path(args.localout).expanduser().resolve()
+    localOut.mkdir(parents=True, exist_ok=True)
 
     fixedPrefix = str(getCfgValue(cfg, "comfyFixedOutputPrefix", "fixed_"))
+    filenamePrefixTemplate = str(getCfgValue(cfg, "comfyFilenamePrefixTemplate", "fixed_{stem}"))
+    downloadPathTemplate = str(getCfgValue(cfg, "comfyDownloadPathTemplate", "{runDir}/{bucket}/{stem}"))
 
     rules = [
         BucketRules(
@@ -334,29 +304,16 @@ def main() -> int:
         ),
     ]
 
-    filenamePrefixTemplate = str(getCfgValue(cfg, "comfyFilenamePrefixTemplate", "fixed_{stem}"))
-    downloadPathTemplate = str(getCfgValue(cfg, "comfyDownloadPathTemplate", "{runDir}/{bucket}/{stem}"))
+    allImages = [p for p in localIn.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
 
-    allImages = [p for p in comfyInput.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
-    
-    # Apply precedence rules: prefer fixed_* versions over originals
-    stemToImage = applyPrecedenceRules(allImages)
-    imagesToProcess = list(stemToImage.values())
-    
     jobs: List[Tuple[Path, str]] = []
-    for img in sorted(imagesToProcess):
-        stemSafe = safeStem(img.stem)
-        if hasExistingOutput(outputDir=comfyOutput, fixedPrefix=fixedPrefix, stem=stemSafe):
-            relSkip = img.relative_to(comfyInput).as_posix()
-            logger.info("%s skip (output exists): %s", prefix, relSkip)
-            continue
+    for img in sorted(allImages):
         bucket = classifyImage(img, rules)
         if bucket:
             jobs.append((img, bucket))
 
     logger.info("%s run dir: %s", prefix, runDir)
     logger.info("%s found images: %d", prefix, len(allImages))
-    logger.info("%s unique stems (after precedence): %d", prefix, len(imagesToProcess))
     logger.info("%s matched jobs: %d", prefix, len(jobs))
 
     if args.limit and args.limit > 0:
@@ -369,49 +326,73 @@ def main() -> int:
 
     client = ComfyClient(args.comfyurl, args.timeoutseconds)
 
+    # Make remote uploads unique per run to avoid collisions
+    remoteSubfolder = f"{args.remotesubfolder}/{runStamp}"
+
     for i, (imgPath, bucket) in enumerate(jobs, start=1):
-        rel = imgPath.relative_to(comfyInput).as_posix()
-        stem = safeStem(imgPath.stem)
+        relLocal = imgPath.relative_to(localIn).as_posix()
+        stemSafe = safeStem(imgPath.stem)
 
         wfPath = workflowPaths[bucket]
         prompt = loadApiPromptJson(wfPath)
 
-        loadCount = setLoadImageInput(prompt, rel)
-        if loadCount == 0:
-            logger.error("No LoadImage node found in workflow: %s", wfPath)
-            continue
-
-        prefixValue = renderTemplate(filenamePrefixTemplate, bucket=bucket, stem=stem)
-        _ = setSaveImagePrefix(prompt, prefixValue)
-
-        logger.info("%s [%d/%d] %s: %s", prefix, i, len(jobs), bucket, rel)
+        # Upload
+        remoteName = f"{stemSafe}{imgPath.suffix.lower()}"
+        logger.info("%s [%d/%d] upload %s: %s", prefix, i, len(jobs), bucket, relLocal)
 
         if args.dryRun:
             continue
 
         try:
+            remoteRef = client.uploadImage(
+                localPath=imgPath,
+                remoteName=remoteName,
+                subfolder=remoteSubfolder,
+                overwrite=bool(args.remoteoverwrite),
+            )
+
+            # Point workflow LoadImage to the uploaded path
+            loadCount = setLoadImageInput(prompt, remoteRef)
+            if loadCount == 0:
+                logger.error("No LoadImage node found in workflow: %s", wfPath)
+                continue
+
+            prefixValue = renderTemplate(filenamePrefixTemplate, bucket=bucket, stem=stemSafe)
+            _ = setSaveImagePrefix(prompt, prefixValue)
+
+            logger.info("%s [%d/%d] run %s: %s", prefix, i, len(jobs), bucket, relLocal)
+
             promptId = client.submitPrompt(prompt)
             logger.info("%s submitted: %s", prefix, promptId)
 
             histEntry = client.waitForOutputs(promptId, args.pollseconds, args.maxwaitseconds)
             images = extractOutputImages(histEntry)
             if not images:
-                logger.info("%s completed (no outputs)", prefix)
+                logger.info("%s completed (no outputs): %s", prefix, relLocal)
                 continue
 
-            dlBase = Path(renderTemplate(downloadPathTemplate, runDir=str(runDir), bucket=bucket, stem=stem))
+            # Save outputs locally (runs dir + optionally also mirror to localOut)
+            dlBase = Path(renderTemplate(downloadPathTemplate, runDir=str(runDir), bucket=bucket, stem=stemSafe))
             dlBase.mkdir(parents=True, exist_ok=True)
 
             for n, meta in enumerate(images, start=1):
                 content = client.downloadView(meta["filename"], meta.get("subfolder", ""), meta.get("type", "output"))
                 ext = Path(meta["filename"]).suffix or ".png"
+
                 outFile = dlBase / f"out_{n:02d}{ext}"
                 outFile.write_bytes(content)
+
+                # Mirror: write a "fixed_" file into localOut for downstream scripts
+                # Keep ComfyUI-ish naming simple: fixed_<stem>_00001_.png, etc.
+                mirrorName = f"{fixedPrefix}{stemSafe}_{n:05d}_{ext}"
+                mirrorName = mirrorName.replace("__", "_")
+                mirrorPath = localOut / mirrorName
+                mirrorPath.write_bytes(content)
 
             logger.info("%s saved outputs: %s", prefix, dlBase)
 
         except Exception as e:
-            logger.error("Failed to process %s: %s", rel, e)
+            logger.error("Failed to process %s: %s", relLocal, e)
 
     logger.info("%s done.", prefix)
     return 0
