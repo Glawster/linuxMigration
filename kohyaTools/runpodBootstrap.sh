@@ -484,7 +484,7 @@ DRY_PREFIX="[]"
 MODEL_ROOT=""
 
 usage() {
-  sed -n '2,18p' "$0"
+  sed -n '2,14p' "$0"
   exit 0
 }
 
@@ -494,6 +494,8 @@ while [[ $# -gt 0 ]]; do
     -h|--help) usage ;;
     --dry-run) DRY_RUN=1; shift ;;
     --model-root)
+      # Validate that an argument is provided
+      # Path existence validation is deferred until later (line ~80)
       if [[ -z "${2:-}" || "$2" == -* ]]; then
         echo "ERROR: --model-root requires a PATH argument"
         exit 1
