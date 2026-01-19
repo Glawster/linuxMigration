@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """img2ImgComfy.py
 
-Merged runner for ComfyUI img2img workflows.
+Unified runner for ComfyUI img2img workflows using the fullbody workflow for all images.
 
 Modes:
 - Local mode:   use --comfyurl (e.g. http://127.0.0.1:8188)
@@ -10,12 +10,16 @@ Modes:
 Selection rules:
 - Provide exactly one of --comfyurl or --remoteurl.
 
+Workflow:
+- Uses only the fullbody workflow (comfyFullbodyWorkflow in config) for all images.
+- No classification needed - processes all images found.
+
 Local mode behaviour:
 - Looks for images under --comfyin (ComfyUI input folder).
 - For each unique image stem, prefers processed (fixed_*) images over originals.
 - Skips images that already have a fixed_* output in --comfyout.
 - Submits workflows with LoadImage pointing at the *relative* path under --comfyin.
-- Downloads outputs into --runsdir/run_<stamp>/... like before.
+- Downloads outputs into --runsdir/run_<stamp>/...
 
 Remote mode behaviour (RunPod etc.):
 - Keeps files local, uploads each image to remote ComfyUI /input via /upload/image.
@@ -38,9 +42,8 @@ import argparse
 import json
 import re
 import time
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -57,28 +60,8 @@ from organiseMyProjects.logUtils import getLogger  # type: ignore
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
-@dataclass(frozen=True)
-class BucketRules:
-    name: str
-    folderNames: Tuple[str, ...]
-    filenameRegexes: Tuple[str, ...]
-
-
 def safeStem(stem: str) -> str:
     return re.sub(r"[^a-zA-Z0-9._-]+", "_", stem).strip("_") or "image"
-
-
-def classifyImage(path: Path, rules: List[BucketRules]) -> Optional[str]:
-    lowerParts = [p.lower() for p in path.parts]
-    fileLower = path.name.lower()
-
-    for rule in rules:
-        if any(folder.lower() in lowerParts for folder in rule.folderNames):
-            return rule.name
-        for rx in rule.filenameRegexes:
-            if re.search(rx, fileLower):
-                return rule.name
-    return None
 
 
 def extractBaseStem(filename: str) -> str:
@@ -318,36 +301,10 @@ def resolveMode(args: argparse.Namespace, cfg: Dict[str, Any]) -> Tuple[str, str
     raise ValueError("one of --comfyurl or --remoteurl is required")
 
 
-def buildRules(cfg: Dict[str, Any]) -> List[BucketRules]:
-    return [
-        BucketRules(
-            "fullbody",
-            tuple(getCfgValue(cfg, "comfyFullbodyFolders", ["fullbody", "full-body", "full_body", "full"])),
-            tuple(getCfgValue(cfg, "comfyFullbodyRegexes", [r"\bfull\b", r"\bfullbody\b", r"\bfull-body\b", r"\bfb\b"])),
-        ),
-        BucketRules(
-            "halfbody",
-            tuple(getCfgValue(cfg, "comfyHalfbodyFolders", ["halfbody", "half-body", "half_body", "half"])),
-            tuple(getCfgValue(cfg, "comfyHalfbodyRegexes", [r"\bhalf\b", r"\bhalfbody\b", r"\bhalf-body\b", r"\bhb\b"])),
-        ),
-        BucketRules(
-            "portrait",
-            tuple(getCfgValue(cfg, "comfyPortraitFolders", ["portrait", "headshot", "face"])),
-            tuple(getCfgValue(cfg, "comfyPortraitRegexes", [r"\bportrait\b", r"\bheadshot\b", r"\bface\b", r"\bhs\b"])),
-        ),
-    ]
-
-
-def buildWorkflowPaths(cfg: Dict[str, Any], workflowsDir: Path) -> Dict[str, Path]:
+def getWorkflowPath(cfg: Dict[str, Any], workflowsDir: Path) -> Path:
+    """Get the fullbody workflow path (only workflow used)."""
     fullWf = workflowsDir / getCfgValue(cfg, "comfyFullbodyWorkflow", "fullbody_api.json")
-    halfWf = workflowsDir / getCfgValue(cfg, "comfyHalfbodyWorkflow", "halfbody_api.json")
-    portWf = workflowsDir / getCfgValue(cfg, "comfyPortraitWorkflow", "portrait_api.json")
-
-    return {
-        "fullbody": fullWf.resolve(),
-        "halfbody": halfWf.resolve(),
-        "portrait": portWf.resolve(),
-    }
+    return fullWf.resolve()
 
 
 def writeOutputs(
@@ -428,11 +385,10 @@ def main() -> int:
     logger.info("%s base url: %s", prefix, baseUrl)
 
     workflowsDir = Path(args.workflows).expanduser().resolve()
-    workflowPaths = buildWorkflowPaths(cfg, workflowsDir)
-    for name, p in workflowPaths.items():
-        if not p.exists():
-            logger.error("Missing workflow file for %s: %s", name, p)
-            return 2
+    workflowPath = getWorkflowPath(cfg, workflowsDir)
+    if not workflowPath.exists():
+        logger.error("Missing workflow file: %s", workflowPath)
+        return 2
 
     comfyInput = Path(args.comfyin).expanduser().resolve()
     if not comfyInput.exists():
@@ -444,9 +400,7 @@ def main() -> int:
 
     fixedPrefix = str(getCfgValue(cfg, "comfyFixedOutputPrefix", "fixed_"))
     filenamePrefixTemplate = str(getCfgValue(cfg, "comfyFilenamePrefixTemplate", "fixed_{stem}"))
-    downloadPathTemplate = str(getCfgValue(cfg, "comfyDownloadPathTemplate", "{runDir}/{bucket}/{stem}"))
-
-    rules = buildRules(cfg)
+    downloadPathTemplate = str(getCfgValue(cfg, "comfyDownloadPathTemplate", "{runDir}/{stem}"))
 
     allImages = [p for p in comfyInput.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
 
@@ -454,7 +408,7 @@ def main() -> int:
     stemToImage = applyPrecedenceRules(allImages)
     imagesToProcess = list(stemToImage.values())
 
-    jobs: List[Tuple[Path, str]] = []
+    jobs: List[Path] = []
     for img in sorted(imagesToProcess):
         stemSafe = safeStem(img.stem)
 
@@ -464,14 +418,12 @@ def main() -> int:
             logger.info("%s skip (output exists): %s", prefix, relSkip)
             continue
 
-        bucket = classifyImage(img, rules)
-        if bucket:
-            jobs.append((img, bucket))
+        jobs.append(img)
 
     logger.info("%s run dir: %s", prefix, runDir)
     logger.info("%s found images: %d", prefix, len(allImages))
     logger.info("%s unique stems (after precedence): %d", prefix, len(imagesToProcess))
-    logger.info("%s matched jobs: %d", prefix, len(jobs))
+    logger.info("%s jobs to process: %d", prefix, len(jobs))
 
     if args.limit and args.limit > 0:
         jobs = jobs[: args.limit]
@@ -486,19 +438,18 @@ def main() -> int:
     # For remote mode, make uploads unique per run
     remoteSubfolder = f"{args.remotesubfolder}/{runStamp}" if mode == "remote" else ""
 
-    for i, (imgPath, bucket) in enumerate(jobs, start=1):
+    for i, imgPath in enumerate(jobs, start=1):
         rel = imgPath.relative_to(comfyInput).as_posix()
         stemSafe = safeStem(imgPath.stem)
 
-        wfPath = workflowPaths[bucket]
-        prompt = loadApiPromptJson(wfPath)
+        prompt = loadApiPromptJson(workflowPath)
 
         # Prepare LoadImage reference
         if mode == "local":
             loadRef = rel
         else:
             remoteName = f"{stemSafe}{imgPath.suffix.lower()}"
-            logger.info("%s [%d/%d] upload %s: %s", prefix, i, len(jobs), bucket, rel)
+            logger.info("%s [%d/%d] upload: %s", prefix, i, len(jobs), rel)
             if args.dryRun:
                 loadRef = f"{remoteSubfolder}/{remoteName}" if remoteSubfolder else remoteName
             else:
@@ -515,13 +466,13 @@ def main() -> int:
 
         loadCount = setLoadImageInput(prompt, loadRef)
         if loadCount == 0:
-            logger.error("No LoadImage node found in workflow: %s", wfPath)
+            logger.error("No LoadImage node found in workflow: %s", workflowPath)
             continue
 
-        prefixValue = renderTemplate(filenamePrefixTemplate, bucket=bucket, stem=stemSafe)
+        prefixValue = renderTemplate(filenamePrefixTemplate, stem=stemSafe)
         _ = setSaveImagePrefix(prompt, prefixValue)
 
-        logger.info("%s [%d/%d] %s: %s", prefix, i, len(jobs), bucket, rel)
+        logger.info("%s [%d/%d] processing: %s", prefix, i, len(jobs), rel)
 
         if args.dryRun:
             continue
@@ -532,7 +483,7 @@ def main() -> int:
 
             histEntry = client.waitForOutputs(promptId, args.pollseconds, args.maxwaitseconds)
 
-            dlBase = Path(renderTemplate(downloadPathTemplate, runDir=str(runDir), bucket=bucket, stem=stemSafe))
+            dlBase = Path(renderTemplate(downloadPathTemplate, runDir=str(runDir), stem=stemSafe))
 
             mirrorDir = comfyOutput if mode == "remote" else None
             nOut = writeOutputs(
