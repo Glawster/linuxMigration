@@ -201,42 +201,42 @@ CONDA_DIR=\"/workspace/miniconda3\"\n\
 ENV_NAME=\"runpod\"\n\
 \n\
 # install miniconda if missing\n\
-if [[ ! -x \"\$CONDA_DIR/bin/conda\" ]]; then\n\
+if [[ ! -x \"$CONDA_DIR/bin/conda\" ]]; then\n\
   run wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /workspace/miniconda.sh\n\
-  run bash /workspace/miniconda.sh -b -p \"\$CONDA_DIR\"\n\
+  run bash /workspace/miniconda.sh -b -p \"$CONDA_DIR\"\n\
   run rm -f /workspace/miniconda.sh\n\
 fi\n\
 \n\
 # activate conda\n\
-if [[ \"\$DRY_RUN\" == \"1\" ]]; then\n\
-  echo \"\$DRY_PREFIX source \$CONDA_DIR/etc/profile.d/conda.sh\"\n\
+if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
+  echo \"$DRY_PREFIX source $CONDA_DIR/etc/profile.d/conda.sh\"\n\
 else\n\
   # shellcheck disable=SC1090\n\
-  source \"\$CONDA_DIR/etc/profile.d/conda.sh\"\n\
+  source \"$CONDA_DIR/etc/profile.d/conda.sh\"\n\
 fi\n\
 \n\
 # accept conda ToS for anaconda channels\n\
 log \"accepting conda terms of service\"\n\
-if [[ \"\$DRY_RUN\" == \"1\" ]]; then\n\
-  echo \"\$DRY_PREFIX conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main\"\n\
-  echo \"\$DRY_PREFIX conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r\"\n\
+if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
+  echo \"$DRY_PREFIX conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main\"\n\
+  echo \"$DRY_PREFIX conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r\"\n\
 else\n\
   conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main 2>/dev/null || true\n\
   conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 2>/dev/null || true\n\
 fi\n\
 \n\
 # create env if missing\n\
-if [[ \"\$DRY_RUN\" == \"1\" ]]; then\n\
-  echo \"\$DRY_PREFIX conda create -n \$ENV_NAME python=3.10 -y\"\n\
-  echo \"\$DRY_PREFIX conda activate \$ENV_NAME\"\n\
+if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
+  echo \"$DRY_PREFIX conda create -n $ENV_NAME python=3.10 -y\"\n\
+  echo \"$DRY_PREFIX conda activate $ENV_NAME\"\n\
 else\n\
-  if ! conda env list | awk \"{print \\$1}\" | grep -qx \"\$ENV_NAME\"; then\n\
-    run conda create -n \"\$ENV_NAME\" python=3.10 -y\n\
+  if ! conda env list | awk \"{print \\$1}\" | grep -qx \"$ENV_NAME\"; then\n\
+    run conda create -n \"$ENV_NAME\" python=3.10 -y\n\
   fi\n\
-  conda activate \"\$ENV_NAME\"\n\
+  conda activate \"$ENV_NAME\"\n\
 fi\n\
 \n\
-log \"conda environment ready: \$ENV_NAME\"\n\
+log \"conda environment ready: $ENV_NAME\"\n\
 \n\
 # ---------------------------\n\
 # ComfyUI\n\
@@ -245,12 +245,12 @@ log \"conda environment ready: \$ENV_NAME\"\n\
 log \"installing ComfyUI-Manager (custom node)\"\n\
 \n\
 COMFY_DIR=\"/workspace/ComfyUI\"\n\
-MANAGER_DIR=\"\${COMFY_DIR}/custom_nodes/ComfyUI-Manager\"\n\
+MANAGER_DIR=\"${COMFY_DIR}/custom_nodes/ComfyUI-Manager\"\n\
 \n\
-if [[ ! -d \"\${MANAGER_DIR}/.git\" ]]; then\n\
-  run git clone https://github.com/ltdrdata/ComfyUI-Manager.git \"\${MANAGER_DIR}\"\n\
+if [[ ! -d \"${MANAGER_DIR}/.git\" ]]; then\n\
+  run git clone https://github.com/ltdrdata/ComfyUI-Manager.git \"${MANAGER_DIR}\"\n\
 else\n\
-  run bash -lc \"cd \\\"\${MANAGER_DIR}\\\" && git pull --ff-only || true\"\n\
+  run bash -lc \"cd \\\"${MANAGER_DIR}\\\" && git pull --ff-only || true\"\n\
 fi\n\
 \n\
 if [[ \"$ENABLE_COMFYUI\" == \"1\" ]]; then
