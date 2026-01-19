@@ -484,7 +484,7 @@ DRY_PREFIX="[]"
 MODEL_ROOT=""
 
 usage() {
-  sed -n '2,20p' "$0"
+  sed -n '2,18p' "$0"
   exit 0
 }
 
@@ -493,7 +493,14 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage ;;
     --dry-run) DRY_RUN=1; shift ;;
-    --model-root) MODEL_ROOT="$2"; shift 2 ;;
+    --model-root)
+      if [[ -z "${2:-}" || "$2" == -* ]]; then
+        echo "ERROR: --model-root requires a PATH argument"
+        exit 1
+      fi
+      MODEL_ROOT="$2"
+      shift 2
+      ;;
     ssh) shift; break ;;
     *)
       echo "ERROR: unexpected option: $1"
