@@ -643,7 +643,7 @@ rsyncOne() {
   local src="$1"
   local dst="$2"
 
-  run rsync -avP --partial --inplace \
+  run rsync -avP --partial --inplace --no-perms --no-owner --no-group \
     -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}" \
     "$src" "$TARGET:$dst/"
 }
