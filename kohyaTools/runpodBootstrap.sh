@@ -29,6 +29,16 @@
 # Dry run (validate command / connectivity):
 #   ./runpodBootstrap.sh --dry-run root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
 
+# use this rsync command (port number and ip address adjusted as needed)... 
+#
+# rsync -avP --partial --inplace --ignore-existing \
+#   -e "ssh -p 40190 -i ~/.ssh/id_ed25519" \
+#   models/ root@213.192.2.88:/workspace/ComfyUI/models/
+
+# starting comfui...
+#   tmux kill-session -t comfyui 2>/dev/null || true
+#   bash /workspace/startComfyUI.sh --conda-dir /workspace/miniconda3 --env-name runpod --port 8188
+
 set -euo pipefail
 
 # ---------------------------
@@ -39,6 +49,7 @@ ENABLE_KOHYA=0
 RUN_REMOTE=1
 DRY_RUN="${DRY_RUN:-0}"
 DRY_PREFIX="[]"
+MODEL_ROOT=""
 
 TARGET=""
 SSH_PORT="22"
@@ -64,6 +75,7 @@ while [[ $# -gt 0 ]]; do
     --run) RUN_REMOTE=1; shift ;;
     --no-run) RUN_REMOTE=0; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --model-root) MODEL_ROOT="$2"; shift 2 ;;
     -p) SSH_PORT="$2"; shift 2 ;;
     -i) SSH_IDENTITY="$2"; shift 2 ;;
     -h|--help) usage ;;
@@ -354,10 +366,196 @@ chmod +x ${remote_path}
   echo "wrote ${remote_path}"
 }
 
+writeLocalUploadModelsScript() {
+  local outPath="./uploadModels.sh"
+
+  cat > "$outPath" <<'EOF'
+#!/usr/bin/env bash
+# uploadModels.sh (local)
+#
+# Upload minimal models required by fullbody_api.json
+#
+# Usage:
+#   ./uploadModels.sh [--dry-run] [--model-root PATH] ssh user@host -p PORT -i KEY
+#
+# Defaults:
+#   model-root = $HOME/Source/ComfyUI/models
+#
+# Example:
+#   ./uploadModels.sh ssh root@213.192.2.88 -p 40190 -i ~/.ssh/id_ed25519
+#   ./uploadModels.sh --model-root /mnt/myVideo/models ssh root@...
+
+set -euo pipefail
+
+DRY_RUN=0
+DRY_PREFIX="[]"
+
+if [[ "${1:-}" == "--dry-run" ]]; then
+  DRY_RUN=1
+  shift
+fi
+
+if [[ "${1:-}" != "ssh" ]]; then
+  echo "ERROR: expected ssh command"
+  exit 1
+fi
+shift
+
+TARGET=""
+SSH_PORT="22"
+SSH_IDENTITY=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -p) SSH_PORT="$2"; shift 2 ;;
+    -i) SSH_IDENTITY="$2"; shift 2 ;;
+    *)
+      if [[ -z "$TARGET" ]]; then
+        TARGET="$1"
+        shift
+      else
+        echo "ERROR: unexpected arg: $1"
+        exit 1
+      fi
+      ;;
+  esac
+done
+
+if [[ -z "$TARGET" ]]; then
+  echo "ERROR: missing user@host"
+  exit 1
+fi
+
+SSH_OPTS=(-p "$SSH_PORT" -o StrictHostKeyChecking=accept-new)
+if [[ -n "$SSH_IDENTITY" ]]; then
+  SSH_OPTS+=(-i "$SSH_IDENTITY")
+fi
+
+echo "target   : ${TARGET}:${SSH_PORT}"
+echo "identity : ${SSH_IDENTITY:-<default>}"
+echo "dry run  : ${DRY_RUN}"
+echo
+
+# ============================================================
+# REQUIRED FILES (from fullbody_api.json)
+# ============================================================
+CHECKPOINT="v1-5-pruned-emaonly.safetensors"
+LORA="kathy_person_r16_512_bs2.safetensors"
+YOLO="face_yolov8n.pt"
+
+# ============================================================
+# LOCAL MODEL ROOT
+#
+# Priority:
+#   1) --model-root PATH
+#   2) $HOME/Source/ComfyUI/models (default)
+# ============================================================
+
+if [[ -z "$MODEL_ROOT" ]]; then
+  MODEL_ROOT="$HOME/Source/ComfyUI/models"
+fi
+
+if [[ ! -d "$MODEL_ROOT" ]]; then
+  echo "ERROR: local models folder not found: $MODEL_ROOT"
+  echo "       supply --model-root /path/to/models"
+  exit 1
+fi
+
+# ============================================================
+# REMOTE TARGET PATHS (fixed)
+# ============================================================
+
+REMOTE_BASE="/workspace/ComfyUI/models"
+REMOTE_CHECKPOINT="${REMOTE_BASE}/checkpoints"
+REMOTE_LORA="${REMOTE_BASE}/loras"
+REMOTE_BBOX="${REMOTE_BASE}/bbox"
+
+run() {
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "${DRY_PREFIX} $*"
+  else
+    "$@"
+  fi
+}
+
+# Find a file in a preferred path first, then search under MODEL_ROOT.
+findLocalFile() {
+  local preferred="$1"
+  local filename="$2"
+
+  if [[ -f "$preferred" ]]; then
+    echo "$preferred"
+    return 0
+  fi
+
+  # fallback search (stop at first match)
+  local found
+  found="$(find "$MODEL_ROOT" -type f -name "$filename" -print -quit 2>/dev/null || true)"
+  if [[ -n "$found" && -f "$found" ]]; then
+    echo "$found"
+    return 0
+  fi
+
+  return 1
+}
+
+# Preferred locations based on ComfyUI convention
+LOCAL_CHECKPOINT="$(findLocalFile "${MODEL_ROOT}/checkpoints/${CHECKPOINT}" "${CHECKPOINT}")" || {
+  echo "ERROR: could not find checkpoint: ${CHECKPOINT}"
+  echo "       looked in: ${MODEL_ROOT}/checkpoints/"
+  exit 1
+}
+
+LOCAL_LORA="$(findLocalFile "${MODEL_ROOT}/loras/${LORA}" "${LORA}")" || {
+  echo "ERROR: could not find lora: ${LORA}"
+  echo "       looked in: ${MODEL_ROOT}/loras/"
+  exit 1
+}
+
+LOCAL_YOLO="$(findLocalFile "${MODEL_ROOT}/bbox/${YOLO}" "${YOLO}")" || {
+  echo "ERROR: could not find yolo model: ${YOLO}"
+  echo "       looked in: ${MODEL_ROOT}/bbox/"
+  exit 1
+}
+
+echo "local model root : ${MODEL_ROOT}"
+echo "checkpoint       : ${LOCAL_CHECKPOINT}"
+echo "lora             : ${LOCAL_LORA}"
+echo "bbox model       : ${LOCAL_YOLO}"
+echo
+
+# create remote dirs
+run ssh "${SSH_OPTS[@]}" "$TARGET" \
+  "mkdir -p '${REMOTE_CHECKPOINT}' '${REMOTE_LORA}' '${REMOTE_BBOX}'"
+
+rsyncOne() {
+  local src="$1"
+  local dst="$2"
+
+  run rsync -avP --partial --inplace \
+    -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}" \
+    "$src" "$TARGET:$dst/"
+}
+
+rsyncOne "$LOCAL_CHECKPOINT" "$REMOTE_CHECKPOINT"
+rsyncOne "$LOCAL_LORA" "$REMOTE_LORA"
+rsyncOne "$LOCAL_YOLO" "$REMOTE_BBOX"
+
+echo
+echo "done"
+EOF
+
+  chmod +x "$outPath"
+  echo "wrote ${outPath}"
+}
+
+
+
 write_remote_file "/workspace/runpodSetup.sh" "$REMOTE_SETUP_SCRIPT"
 write_remote_file "/workspace/runpodComfySetup.sh" "$REMOTE_COMFY_SETUP_SCRIPT"
 write_remote_file "/workspace/startComfyUI.sh" "$REMOTE_COMFY_START_SCRIPT"
 write_remote_file "/workspace/runpodKohyaSetup.sh" "$REMOTE_KOHYA_SETUP_SCRIPT"
+writeLocalUploadModelsScript
 
 echo
 
