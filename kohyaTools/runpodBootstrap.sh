@@ -495,7 +495,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN=1; shift ;;
     --model-root)
       # Validate that an argument is provided
-      # Path existence validation is deferred until later (line ~80)
+      # Path existence validation is performed later when MODEL_ROOT is used
       if [[ -z "${2:-}" || "$2" == -* ]]; then
         echo "ERROR: --model-root requires a PATH argument"
         exit 1
