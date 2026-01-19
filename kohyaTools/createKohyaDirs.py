@@ -44,9 +44,9 @@ from kohyaUtils import (
     resolveKohyaPaths,
     stripPNGMetadata,
     writeCaptionIfMissing,
-    setLogger
+    setLogger as setLoggerUtils
 )
-from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateConfigFromArgs
+from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateConfigFromArgs, setLogger as setLoggerConfig
 from organiseMyProjects.logUtils import getLogger  # type: ignore
 
 def parseArgs() -> argparse.Namespace:
@@ -157,10 +157,10 @@ def renameFileSafe(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> 
         return False
 
     if destPath.exists():
-        print(f"ERROR: Destination exists, cannot rename: {srcPath.name} -> {destPath.name}")
+        logger.error(f"ERROR: Destination exists, cannot rename: {srcPath.name} -> {destPath.name}")
         return False
 
-    print(f"{prefix} rename: {srcPath.name} -> {destPath.name}")
+    logger.info(f"{prefix} rename: {srcPath.name} -> {destPath.name}")
     if dryRun:
         return True
 
@@ -209,7 +209,7 @@ def nextAvailableIndex(usedIndices: Set[int], startAt: int = 1) -> int:
 
 
 def moveFile(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> None:
-    print(f"{prefix} move: {srcPath.name} -> {destPath}")
+    logger.info(f"{prefix} move: {srcPath.name} -> {destPath}")
     if dryRun:
         return
 
@@ -217,12 +217,12 @@ def moveFile(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> None:
     srcPath.rename(destPath)
 
 
-def checkAndFixStyleFolder(styleDir: Path, captionExtension: str, dryRun: bool, prefix: str) -> None:
+def checkAndFixStyleFolder(styleDir: Path, captionExtension: str, captionTemplate: str, dryRun: bool, prefix: str) -> None:
     styleName = styleDir.name
     paths = resolveKohyaPaths(styleName=styleName, trainingRoot=styleDir.parent)
 
     if not paths.trainDir.exists():
-        print(f"{prefix} check: missing train dir, skipping: {paths.trainDir}")
+        logger.info(f"{prefix} check: missing train dir, skipping: {paths.trainDir}")
         return
 
     images = [p for p in sorted(paths.trainDir.iterdir()) if isImageFile(p)]
@@ -234,26 +234,46 @@ def checkAndFixStyleFolder(styleDir: Path, captionExtension: str, dryRun: bool, 
 
     renamedImages = 0
     renamedCaptions = 0
+    imageMapping = {}  # Track original -> renamed paths for caption creation
 
     for imagePath in images:
         stripPNGMetadata(imagePath=imagePath, dryRun=dryRun, prefix=prefix)
 
-        if isCorrectKohyaStem(imagePath.stem, styleName=styleName):
-            continue
+        finalImagePath = imagePath  # Track final path (renamed or original)
+        
+        if not isCorrectKohyaStem(imagePath.stem, styleName=styleName):
+            index = nextAvailableIndex(usedIndices)
+            targetStem = buildTargetStem(styleName=styleName, index=index)
+            destImagePath = (paths.trainDir / targetStem).with_suffix(imagePath.suffix.lower())
 
-        index = nextAvailableIndex(usedIndices)
-        targetStem = buildTargetStem(styleName=styleName, index=index)
-        destImagePath = (paths.trainDir / targetStem).with_suffix(imagePath.suffix.lower())
+            srcCaptionPath = getCaptionPath(imagePath, captionExtension=captionExtension)
+            destCaptionPath = getCaptionPath(destImagePath, captionExtension=captionExtension)
 
-        srcCaptionPath = getCaptionPath(imagePath, captionExtension=captionExtension)
-        destCaptionPath = getCaptionPath(destImagePath, captionExtension=captionExtension)
+            if renameFileSafe(imagePath, destImagePath, dryRun=dryRun, prefix=prefix):
+                renamedImages += 1
+                finalImagePath = destImagePath  # Update to new path
 
-        if renameFileSafe(imagePath, destImagePath, dryRun=dryRun, prefix=prefix):
-            renamedImages += 1
+            if srcCaptionPath.exists() and not destCaptionPath.exists():
+                if renameFileSafe(srcCaptionPath, destCaptionPath, dryRun=dryRun, prefix=prefix):
+                    renamedCaptions += 1
+        
+        imageMapping[imagePath] = finalImagePath
 
-        if srcCaptionPath.exists() and not destCaptionPath.exists():
-            if renameFileSafe(srcCaptionPath, destCaptionPath, dryRun=dryRun, prefix=prefix):
-                renamedCaptions += 1
+    # Create missing caption files for images without captions
+    defaultCaption = buildDefaultCaption(styleName=styleName, template=captionTemplate)
+    createdCaptions = 0
+    
+    for finalPath in imageMapping.values():
+        created = writeCaptionIfMissing(
+            imagePath=finalPath,
+            captionText=defaultCaption,
+            captionExtension=captionExtension,
+            dryRun=dryRun,
+        )
+        if created:
+            createdCaptions += 1
+            captionPath = getCaptionPath(finalPath, captionExtension=captionExtension)
+            logger.info(f"{prefix} caption: {captionPath.name}")
 
     if captions:
         imageStems = {p.stem for p in paths.trainDir.iterdir() if isImageFile(p)}
@@ -262,10 +282,10 @@ def checkAndFixStyleFolder(styleDir: Path, captionExtension: str, dryRun: bool, 
             if capPath.stem not in imageStems:
                 orphans.append(capName)
         if orphans:
-            print(f"{prefix} check: orphan captions in {paths.trainDir.name}: {len(orphans)} (e.g. {orphans[0]})")
+            logger.info(f"{prefix} check: orphan captions in {paths.trainDir.name}: {len(orphans)} (e.g. {orphans[0]})")
 
-    if renamedImages or renamedCaptions:
-        print(f"{prefix} check: renamed images: {renamedImages}, captions: {renamedCaptions} in {styleName}")
+    if renamedImages or renamedCaptions or createdCaptions:
+        logger.info(f"{prefix} check: renamed images: {renamedImages}, captions: {renamedCaptions}, created captions: {createdCaptions} in {styleName}")
 
 
 def processStyleFolder(
@@ -294,13 +314,13 @@ def processStyleFolder(
         destImagePath = (paths.trainDir / targetStem).with_suffix(imagePath.suffix.lower())
 
         if destImagePath.exists():
-            print(f"{prefix} skip: {destImagePath.name}")
+            logger.info(f"{prefix} skip: {destImagePath.name}")
             continue
 
         try:
             moveFile(imagePath, destImagePath, dryRun=dryRun, prefix=prefix)
         except OSError as e:
-            print(f"ERROR: Failed to move {imagePath.name}: {e}")
+            logger.error(f"ERROR: Failed to move {imagePath.name}: {e}")
             continue
 
         srcCaptionPath = getCaptionPath(imagePath, captionExtension=captionExtension)
@@ -313,7 +333,7 @@ def processStyleFolder(
             try:
                 moveFile(srcCaptionPath, destCaptionPath, dryRun=dryRun, prefix=prefix)
             except OSError as e:
-                print(f"ERROR: Failed to move caption {srcCaptionPath.name}: {e}")
+                logger.error(f"ERROR: Failed to move caption {srcCaptionPath.name}: {e}")
         else:
             created = writeCaptionIfMissing(
                 imagePath=destImagePath,
@@ -322,7 +342,7 @@ def processStyleFolder(
                 dryRun=dryRun,
             )
             if created:
-                print(f"{prefix} caption: {destCaptionPath.name}")
+                logger.info(f"{prefix} caption: {destCaptionPath.name}")
 
 
 def undoStyleFolder(styleDir: Path, dryRun: bool, prefix: str) -> None:
@@ -338,13 +358,13 @@ def undoStyleFolder(styleDir: Path, dryRun: bool, prefix: str) -> None:
 
         destPath = styleDir / entry.name
         if destPath.exists():
-            print(f"{prefix} skip: {destPath.name}")
+            logger.info(f"{prefix} skip: {destPath.name}")
             continue
 
         try:
             moveFile(entry, destPath, dryRun=dryRun, prefix=prefix)
         except OSError as e:
-            print(f"ERROR: Failed to move {entry.name}: {e}")
+            logger.error(f"ERROR: Failed to move {entry.name}: {e}")
             continue
 
     if not dryRun:
@@ -361,14 +381,15 @@ def main() -> None:
 
     global logger
     logger = getLogger("createKohyaDirs", includeConsole=True)
-    setLogger(logger)
+    setLoggerUtils(logger)
+    setLoggerConfig(logger)
 
     trainingRoot = args.training.expanduser().resolve()
 
     try:
         styleFolders = getStyleFolders(trainingRoot, args.style)
     except Exception as e:
-        print(f"ERROR: {e}")
+        logger.error(f"ERROR: {e}")
         sys.exit(1)
 
     cfg = loadConfig()
@@ -387,18 +408,18 @@ def main() -> None:
         logger.info(f"{prefix} updated config: {Path.home() / '.config/kohya/kohyaConfig.json'}")
 
     if args.undo:
-        print(f"{prefix} undoing train structure in: {trainingRoot}")
+        logger.info(f"{prefix} undoing train structure in: {trainingRoot}")
         for styleDir in styleFolders:
             undoStyleFolder(styleDir=styleDir, dryRun=args.dryRun, prefix=prefix)
         return
 
     if args.check:
-        print(f"{prefix} checking existing kohya structure in: {trainingRoot}")
+        logger.info(f"{prefix} checking existing kohya structure in: {trainingRoot}")
         for styleDir in styleFolders:
-            checkAndFixStyleFolder(styleDir, args.captionExtension, args.dryRun, prefix)
+            checkAndFixStyleFolder(styleDir, args.captionExtension, args.captionTemplate, args.dryRun, prefix)
         return
 
-    print(f"{prefix} scanning: {trainingRoot}")
+    logger.info(f"{prefix} scanning: {trainingRoot}")
 
     for styleDir in styleFolders:
         processStyleFolder(
