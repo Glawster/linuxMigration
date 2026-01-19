@@ -481,17 +481,27 @@ set -euo pipefail
 
 DRY_RUN=0
 DRY_PREFIX="[]"
+MODEL_ROOT=""
 
-if [[ "${1:-}" == "--dry-run" ]]; then
-  DRY_RUN=1
-  shift
-fi
+usage() {
+  sed -n '2,20p' "$0"
+  exit 0
+}
 
-if [[ "${1:-}" != "ssh" ]]; then
-  echo "ERROR: expected ssh command"
-  exit 1
-fi
-shift
+# Parse options before ssh command
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    --model-root) MODEL_ROOT="$2"; shift 2 ;;
+    ssh) shift; break ;;
+    *)
+      echo "ERROR: unexpected option: $1"
+      echo "Run with --help for usage information"
+      exit 1
+      ;;
+  esac
+done
 
 TARGET=""
 SSH_PORT="22"
