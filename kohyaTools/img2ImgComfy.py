@@ -323,17 +323,17 @@ def buildRules(cfg: Dict[str, Any]) -> List[BucketRules]:
         BucketRules(
             "fullbody",
             tuple(getCfgValue(cfg, "comfyFullbodyFolders", ["fullbody", "full-body", "full_body", "full"])),
-            tuple(getCfgValue(cfg, "comfyFullbodyRegexes", [r"\\bfull\\b", r"\\bfullbody\\b", r"\\bfull-body\\b", r"\\bfb\\b"])),
+            tuple(getCfgValue(cfg, "comfyFullbodyRegexes", [r"\bfull\b", r"\bfullbody\b", r"\bfull-body\b", r"\bfb\b"])),
         ),
         BucketRules(
             "halfbody",
             tuple(getCfgValue(cfg, "comfyHalfbodyFolders", ["halfbody", "half-body", "half_body", "half"])),
-            tuple(getCfgValue(cfg, "comfyHalfbodyRegexes", [r"\\bhalf\\b", r"\\bhalfbody\\b", r"\\bhalf-body\\b", r"\\bhb\\b"])),
+            tuple(getCfgValue(cfg, "comfyHalfbodyRegexes", [r"\bhalf\b", r"\bhalfbody\b", r"\bhalf-body\b", r"\bhb\b"])),
         ),
         BucketRules(
             "portrait",
             tuple(getCfgValue(cfg, "comfyPortraitFolders", ["portrait", "headshot", "face"])),
-            tuple(getCfgValue(cfg, "comfyPortraitRegexes", [r"\\bportrait\\b", r"\\bheadshot\\b", r"\\bface\\b", r"\\bhs\\b"])),
+            tuple(getCfgValue(cfg, "comfyPortraitRegexes", [r"\bportrait\b", r"\bheadshot\b", r"\bface\b", r"\bhs\b"])),
         ),
     ]
 
