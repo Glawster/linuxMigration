@@ -340,6 +340,23 @@ if [[ -f \"$MANAGER_DIR/requirements.txt\" ]]; then\n\
   fi\n\
 fi\n\
 \n\
+log \"installing ComfyUI-Impact-Pack (custom node)\"\n\
+IMPACT_DIR=\"$COMFY_DIR/custom_nodes/ComfyUI-Impact-Pack\"\n\
+if [[ ! -d \"$IMPACT_DIR/.git\" ]]; then\n\
+  run git clone https://github.com/ltdrdata/ComfyUI-Impact-Pack.git \"$IMPACT_DIR\"\n\
+else\n\
+  run bash -lc \"cd \\\"$IMPACT_DIR\\\" && git pull --ff-only || true\"\n\
+fi\n\
+\n\
+log \"installing ComfyUI-Impact-Pack dependencies\"\n\
+if [[ -f \"$IMPACT_DIR/requirements.txt\" ]]; then\n\
+  if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
+    echo \"\$DRY_PREFIX pip install -r $IMPACT_DIR/requirements.txt\"\n\
+  else\n\
+    pip install -r \"$IMPACT_DIR/requirements.txt\"\n\
+  fi\n\
+fi\n\
+\n\
 log \"comfyui setup complete\"\n\
 '
 
