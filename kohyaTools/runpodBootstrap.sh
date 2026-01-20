@@ -21,6 +21,7 @@
 #   --run            run remote setup after writing (default)
 #   --no-run         only write scripts, don't execute
 #   --dry-run        do not modify remote; print ssh commands and do a connectivity check
+#   --write-upload-script  only write uploadModels.sh locally and exit
 #   -h, --help       help
 #
 # Example:
@@ -50,6 +51,7 @@ RUN_REMOTE=1
 DRY_RUN="${DRY_RUN:-0}"
 DRY_PREFIX="[]"
 MODEL_ROOT=""
+WRITE_UPLOAD_SCRIPT_ONLY=0
 
 TARGET=""
 SSH_PORT="22"
@@ -75,6 +77,7 @@ while [[ $# -gt 0 ]]; do
     --run) RUN_REMOTE=1; shift ;;
     --no-run) RUN_REMOTE=0; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --write-upload-script) WRITE_UPLOAD_SCRIPT_ONLY=1; shift ;;
     --model-root) MODEL_ROOT="$2"; shift 2 ;;
     -p) SSH_PORT="$2"; shift 2 ;;
     -i) SSH_IDENTITY="$2"; shift 2 ;;
@@ -92,22 +95,36 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$TARGET" ]]; then
-  echo "ERROR: missing user@host"
-  exit 1
+  if [[ "$WRITE_UPLOAD_SCRIPT_ONLY" == "1" ]]; then
+    # No target needed for --write-upload-script mode
+    # Jump to function definitions section
+    :
+  else
+    echo "ERROR: missing user@host"
+    exit 1
+  fi
 fi
 
-SSH_OPTS=(-p "$SSH_PORT" -o StrictHostKeyChecking=accept-new)
-if [[ -n "$SSH_IDENTITY" ]]; then
-  SSH_OPTS+=(-i "$SSH_IDENTITY")
-fi
+# Early exit if we're only writing the upload script
+if [[ "$WRITE_UPLOAD_SCRIPT_ONLY" == "1" ]]; then
+  # Skip SSH setup and connectivity checks
+  # Jump directly to the section after function definitions
+  # where writeLocalUploadModelsScript is called
+  :
+else
+  SSH_OPTS=(-p "$SSH_PORT" -o StrictHostKeyChecking=accept-new)
+  if [[ -n "$SSH_IDENTITY" ]]; then
+    SSH_OPTS+=(-i "$SSH_IDENTITY")
+  fi
 
-echo "target      : ${TARGET}:${SSH_PORT}"
-echo "identity    : ${SSH_IDENTITY:-<default>}"
-echo "comfyui     : ${ENABLE_COMFYUI}"
-echo "kohya       : ${ENABLE_KOHYA}"
-echo "run remote  : ${RUN_REMOTE}"
-echo "dry run     : ${DRY_RUN}"
-echo
+  echo "target      : ${TARGET}:${SSH_PORT}"
+  echo "identity    : ${SSH_IDENTITY:-<default>}"
+  echo "comfyui     : ${ENABLE_COMFYUI}"
+  echo "kohya       : ${ENABLE_KOHYA}"
+  echo "run remote  : ${RUN_REMOTE}"
+  echo "dry run     : ${DRY_RUN}"
+  echo
+fi
 
 # ---------------------------
 # Helper to run or print commands
@@ -133,14 +150,16 @@ ssh_cmd() {
 # ---------------------------
 # Connectivity check (safe even in dry-run)
 # ---------------------------
-echo "checking ssh connectivity..."
-if ssh "${SSH_OPTS[@]}" "$TARGET" "echo connected && uname -a" >/dev/null 2>&1; then
-  echo "connected..."
-else
-  echo "ERROR: could not connect to ${TARGET}:${SSH_PORT}"
-  exit 1
+if [[ "$WRITE_UPLOAD_SCRIPT_ONLY" != "1" ]]; then
+  echo "checking ssh connectivity..."
+  if ssh "${SSH_OPTS[@]}" "$TARGET" "echo connected && uname -a" >/dev/null 2>&1; then
+    echo "connected..."
+  else
+    echo "ERROR: could not connect to ${TARGET}:${SSH_PORT}"
+    exit 1
+  fi
+  echo
 fi
-echo
 
 # ---------------------------
 # Remote script contents
@@ -455,7 +474,7 @@ writeLocalUploadModelsScript() {
 #!/usr/bin/env bash
 # uploadModels.sh (local)
 #
-# Upload minimal models required by fullbody_api.json
+# Upload minimal models required by fullbody_api.json and workflow files
 #
 # Usage:
 #   ./uploadModels.sh [--dry-run] [--model-root PATH] ssh user@host -p PORT -i KEY
@@ -544,6 +563,41 @@ if [[ ! -d "$MODEL_ROOT" ]]; then
 fi
 
 # ============================================================
+# READ WORKFLOW CONFIG
+# ============================================================
+
+CONFIG_FILE="$HOME/.config/kohya/kohyaConfig.json"
+WORKFLOW_FILE=""
+WORKFLOW_DIR=""
+LOCAL_WORKFLOW=""
+
+if [[ -f "$CONFIG_FILE" ]]; then
+  echo "reading workflow config from: $CONFIG_FILE"
+  
+  # Read workflow file name and directory from config using python
+  if command -v python3 >/dev/null 2>&1; then
+    WORKFLOW_FILE=$(python3 -c "import json; cfg=json.load(open('$CONFIG_FILE')); print(cfg.get('comfyFullbodyWorkflow', ''))" 2>/dev/null || echo "")
+    WORKFLOW_DIR=$(python3 -c "import json; cfg=json.load(open('$CONFIG_FILE')); print(cfg.get('comfyWorkflowsDir', ''))" 2>/dev/null || echo "")
+    
+    if [[ -n "$WORKFLOW_FILE" && -n "$WORKFLOW_DIR" ]]; then
+      LOCAL_WORKFLOW="$WORKFLOW_DIR/$WORKFLOW_FILE"
+      if [[ -f "$LOCAL_WORKFLOW" ]]; then
+        echo "workflow file    : $LOCAL_WORKFLOW"
+      else
+        echo "WARNING: workflow file not found: $LOCAL_WORKFLOW"
+        LOCAL_WORKFLOW=""
+      fi
+    else
+      echo "INFO: workflow config not found in config file (comfyFullbodyWorkflow or comfyWorkflowsDir missing)"
+    fi
+  else
+    echo "WARNING: python3 not available, cannot read workflow config"
+  fi
+else
+  echo "INFO: config file not found: $CONFIG_FILE"
+fi
+
+# ============================================================
 # REMOTE TARGET PATHS (fixed)
 # ============================================================
 
@@ -551,6 +605,7 @@ REMOTE_BASE="/workspace/ComfyUI/models"
 REMOTE_CHECKPOINT="${REMOTE_BASE}/checkpoints"
 REMOTE_LORA="${REMOTE_BASE}/loras"
 REMOTE_BBOX="${REMOTE_BASE}/bbox"
+REMOTE_WORKFLOWS="/workspace/workflows"
 
 run() {
   if [[ "$DRY_RUN" == "1" ]]; then
@@ -600,6 +655,7 @@ LOCAL_YOLO="$(findLocalFile "${MODEL_ROOT}/bbox/${YOLO}" "${YOLO}")" || {
   exit 1
 }
 
+echo
 echo "local model root : ${MODEL_ROOT}"
 echo "checkpoint       : ${LOCAL_CHECKPOINT}"
 echo "lora             : ${LOCAL_LORA}"
@@ -608,7 +664,7 @@ echo
 
 # create remote dirs
 run ssh "${SSH_OPTS[@]}" "$TARGET" \
-  "mkdir -p '${REMOTE_CHECKPOINT}' '${REMOTE_LORA}' '${REMOTE_BBOX}'"
+  "mkdir -p '${REMOTE_CHECKPOINT}' '${REMOTE_LORA}' '${REMOTE_BBOX}' '${REMOTE_WORKFLOWS}'"
 
 rsyncOne() {
   local src="$1"
@@ -623,6 +679,13 @@ rsyncOne "$LOCAL_CHECKPOINT" "$REMOTE_CHECKPOINT"
 rsyncOne "$LOCAL_LORA" "$REMOTE_LORA"
 rsyncOne "$LOCAL_YOLO" "$REMOTE_BBOX"
 
+# Upload workflow file if found
+if [[ -n "$LOCAL_WORKFLOW" && -f "$LOCAL_WORKFLOW" ]]; then
+  echo
+  echo "uploading workflow file..."
+  rsyncOne "$LOCAL_WORKFLOW" "$REMOTE_WORKFLOWS"
+fi
+
 echo
 echo "done"
 EOF
@@ -632,6 +695,13 @@ EOF
 }
 
 
+# ---------------------------
+# Early exit if we're only writing the upload script
+# ---------------------------
+if [[ "$WRITE_UPLOAD_SCRIPT_ONLY" == "1" ]]; then
+  writeLocalUploadModelsScript
+  exit 0
+fi
 
 write_remote_file "/workspace/runpodSetup.sh" "$REMOTE_SETUP_SCRIPT"
 write_remote_file "/workspace/runpodComfySetup.sh" "$REMOTE_COMFY_SETUP_SCRIPT"
