@@ -15,7 +15,7 @@ source "$LIB_DIR/conda.sh"
 source "$LIB_DIR/workspace.sh"
 
 main() {
-  log "==> step: conda"
+  log "step: conda"
   
   # Check if already done and not forcing
   if isStepDone "CONDA" && [[ "${FORCE:-0}" != "1" ]]; then

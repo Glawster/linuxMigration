@@ -199,12 +199,20 @@ for step in "${STEPS_TO_RUN[@]}"; do
 done
 
 # Create bash aliases
-log "==> creating ~/.bash_aliases"
+log "creating ~/.bash_aliases"
 if [[ "$DRY_RUN" == "1" ]]; then
   echo "${DRY_PREFIX} echo 'alias d=\"ls -al\"' > ~/.bash_aliases"
 else
   echo 'alias d="ls -al"' > ~/.bash_aliases
 fi
 
-log "==> bootstrap complete"
-log "==> log file: $LOGFILE"
+# Generate uploadModels.sh script
+log "generating uploadModels.sh script"
+if [[ "$DRY_RUN" == "1" ]]; then
+  echo "${DRY_PREFIX} $RUNPOD_DIR/generateUploadScript.sh $RUNPOD_DIR/uploadModels.sh"
+else
+  "$RUNPOD_DIR/generateUploadScript.sh" "$RUNPOD_DIR/uploadModels.sh"
+fi
+
+log "bootstrap complete"
+log "log file: $LOGFILE"

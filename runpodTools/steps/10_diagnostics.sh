@@ -15,7 +15,7 @@ source "$LIB_DIR/diagnostics.sh"
 source "$LIB_DIR/workspace.sh"
 
 main() {
-  log "==> step: diagnostics"
+  log "step: diagnostics"
   
   # Check if already done and not forcing
   if isStepDone "DIAGNOSTICS" && [[ "${FORCE:-0}" != "1" ]]; then

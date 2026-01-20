@@ -17,7 +17,7 @@ source "$LIB_DIR/conda.sh"
 source "$LIB_DIR/workspace.sh"
 
 main() {
-  log "==> step: comfyui"
+  log "step: comfyui"
   
   # Check if already done and not forcing
   if isStepDone "COMFYUI" && [[ "${FORCE:-0}" != "1" ]]; then

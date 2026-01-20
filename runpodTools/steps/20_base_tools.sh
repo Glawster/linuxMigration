@@ -15,7 +15,7 @@ source "$LIB_DIR/apt.sh"
 source "$LIB_DIR/workspace.sh"
 
 main() {
-  log "==> step: base tools"
+  log "step: base tools"
   
   # Check if already done and not forcing
   if isStepDone "BASE_TOOLS" && [[ "${FORCE:-0}" != "1" ]]; then

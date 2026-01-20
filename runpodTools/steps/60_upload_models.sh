@@ -13,7 +13,7 @@ source "$LIB_DIR/common.sh"
 source "$LIB_DIR/workspace.sh"
 
 main() {
-  log "==> step: upload models"
+  log "step: upload models"
   
   log "...model upload instructions"
   
