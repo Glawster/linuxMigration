@@ -29,7 +29,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RUNPOD_DIR="$SCRIPT_DIR/runpodTools"
+RUNPOD_DIR="$SCRIPT_DIR"
 
 ENABLE_KOHYA=0
 ENABLE_COMFYUI=1
@@ -204,7 +204,7 @@ else
   else
     # Fallback if rsync not on local (unlikely)
     echo "...using tar+ssh (rsync not available locally)"
-    tar czf - -C "$(dirname "$RUNPOD_DIR")" runpodTools | \
+    tar czf - -C "$(dirname "$RUNPOD_DIR")" "$(basename "$RUNPOD_DIR")" | \
       ssh "${SSH_OPTS[@]}" "$TARGET" "cd /workspace && tar xzf -"
     echo "...tar transfer complete"
   fi
