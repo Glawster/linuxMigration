@@ -197,7 +197,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
 else
   # Use rsync (now installed on remote)
   if command -v rsync >/dev/null 2>&1; then
-    rsync -avz --delete \
+    rsync -avz --delete --no-owner --no-group \
       -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}" \
       "$RUNPOD_DIR/" "$TARGET:/workspace/runpodTools/"
     echo "...rsync complete"
