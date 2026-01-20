@@ -30,5 +30,5 @@ Thumbs.db
 # project stuff
 runs/
 kohyaTools/uploadModels.sh
-bin/runpodTools/logs/
-bin/runpodTools/state.env
+runpodTools/logs/
+runpodTools/state.env

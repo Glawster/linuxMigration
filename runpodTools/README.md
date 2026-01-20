@@ -2,59 +2,51 @@
 
 This directory contains a modular, idempotent bootstrap system for RunPod instances.
 
-**Note**: Run scripts from the `bin/` directory to maintain git repository context.
-
 ## Directory Structure
 
 ```
-bin/
-  runpodFromSSH.sh          # Wrapper to run from bin directory
-  runpodBootstrap.sh        # Wrapper to run from bin directory
-  runpod/
-    lib/                      # Reusable library functions
-      common.sh               # Logging, run, die, timestamp helpers
-      ssh.sh                  # SSH command builders, remote execution
-      apt.sh                  # APT package management
-      conda.sh                # Conda environment setup
-      git.sh                  # Git repository management (idempotent)
-      workspace.sh            # Common paths, state tracking
-      diagnostics.sh          # System diagnostics
-    steps/                    # Individual setup steps
-      10_diagnostics.sh       # System diagnostics
-      20_base_tools.sh        # Base system tools via apt
-      30_conda.sh             # Miniconda setup
-      40_comfyui.sh           # ComfyUI setup
-      50_kohya.sh             # Kohya SS setup
-      60_upload_models.sh     # Model upload instructions
-    logs/                     # Bootstrap logs (auto-created)
-    runpodBootstrap.sh        # Remote-side step runner
-    runpodFromSSH.sh          # Local-side orchestrator
-    startComfyUI.sh           # Start ComfyUI in tmux
-    generateUploadScript.sh   # Generate uploadModels.sh
+runpodTools/
+  lib/                      # Reusable library functions
+    common.sh               # Logging, run, die, timestamp helpers
+    ssh.sh                  # SSH command builders, remote execution
+    apt.sh                  # APT package management
+    conda.sh                # Conda environment setup
+    git.sh                  # Git repository management (idempotent)
+    workspace.sh            # Common paths, state tracking
+    diagnostics.sh          # System diagnostics
+  steps/                    # Individual setup steps
+    10_diagnostics.sh       # System diagnostics
+    20_base_tools.sh        # Base system tools via apt
+    30_conda.sh             # Miniconda setup
+    40_comfyui.sh           # ComfyUI setup
+    50_kohya.sh             # Kohya SS setup
+    60_upload_models.sh     # Model upload instructions
+  logs/                     # Bootstrap logs (auto-created)
+  runpodBootstrap.sh        # Remote-side step runner
+  runpodFromSSH.sh          # Local-side orchestrator
+  startComfyUI.sh           # Start ComfyUI in tmux
+  generateUploadScript.sh   # Generate uploadModels.sh
 ```
 
 ## Usage
 
-### Quick Start (from bin directory)
+### Quick Start
 
 ```bash
-# Change to bin directory
-cd bin
-
 # Basic setup with ComfyUI (default)
-./runpodFromSSH.sh ssh root@HOST -p PORT -i ~/.ssh/id_ed25519
+./runpodTools/runpodFromSSH.sh ssh root@HOST -p PORT -i ~/.ssh/id_ed25519
 
 # With Kohya
-./runpodFromSSH.sh --kohya ssh root@HOST -p PORT -i ~/.ssh/id_ed25519
+./runpodTools/runpodFromSSH.sh --kohya ssh root@HOST -p PORT -i ~/.ssh/id_ed25519
 
 # Dry run to see what would happen
-./runpodFromSSH.sh --dry-run ssh root@HOST -p PORT -i ~/.ssh/id_ed25519
+./runpodTools/runpodFromSSH.sh --dry-run ssh root@HOST -p PORT -i ~/.ssh/id_ed25519
 ```
 
 ### Advanced Usage
 
 ```bash
-# Change to bin directory first: cd bin
+
 # List available steps
 ./runpodFromSSH.sh --list ssh root@HOST -p PORT -i KEY
 
@@ -174,7 +166,7 @@ Delete to force rerun all steps, or use `--force` flag.
 2. Follow the template:
 
 ```bash
-#!/usr/bin/env bash
+#!/usr/env bash
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

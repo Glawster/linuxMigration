@@ -7,7 +7,7 @@ Successfully modularized the monolithic RunPod bootstrap scripts into a clean, m
 ## Structure Created
 
 ```
-bin/runpodTools/
+runpodTools/
 ├── lib/                          # Reusable library functions
 │   ├── common.sh                 # Logging, run, die, timestamp helpers
 │   ├── ssh.sh                    # SSH command builders, remote execution
@@ -152,13 +152,13 @@ Users can continue using old paths while migrating.
 
 Users can:
 1. Continue using old scripts (deprecated warnings)
-2. Switch to `bin/runpodTools/runpodFromSSH.sh`
+2. Switch to `runpodTools/runpodFromSSH.sh`
 3. Use new features (--list, --only, --skip, etc.)
 4. Gradually adopt new patterns
 
 ## Files Changed
 
-- Created: 19 new files in `bin/runpodTools/`
+- Created: 19 new files in `runpodTools/`
 - Modified: `.gitignore` to exclude logs and state file
 - Preserved: Old scripts renamed to `.old` for reference
 - Added: Backward compatibility wrappers

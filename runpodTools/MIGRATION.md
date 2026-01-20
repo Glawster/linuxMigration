@@ -15,12 +15,11 @@ kohyaTools/
 
 ### New Structure
 ```
-bin/
-  runpod/
-    lib/                 (reusable libraries)
-    steps/               (modular step scripts)
-    runpodBootstrap.sh   (step runner)
-    runpodFromSSH.sh     (local orchestrator)
+runpodTools/
+  lib/                 (reusable libraries)
+  steps/               (modular step scripts)
+  runpodBootstrap.sh   (step runner)
+  runpodFromSSH.sh     (local orchestrator)
 ```
 
 ## Quick Migration
@@ -34,7 +33,7 @@ bin/
 ### Now use:
 
 ```bash
-./bin/runpod/runpodFromSSH.sh ssh root@host -p 40023 -i ~/.ssh/key
+./runpodTools/runpodFromSSH.sh ssh root@host -p 40023 -i ~/.ssh/key
 ```
 
 ## New Features

@@ -21,7 +21,7 @@ kohyaTools/
 
 ### After (Modular)
 ```
-bin/runpod/
+runpodTools/
 ├── lib/                    # Reusable libraries
 │   ├── common.sh           (52 lines)
 │   ├── ssh.sh              (78 lines)
