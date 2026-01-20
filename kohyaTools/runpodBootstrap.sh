@@ -21,14 +21,14 @@
 #   --run            run remote setup after writing (default)
 #   --no-run         only write scripts, don't execute
 #   --dry-run        do not modify remote; print ssh commands and do a connectivity check
-#   --write-upload-script  only write uploadModels.sh locally and exit
+#   --upload             only write uploadModels.sh locally and exit
 #   -h, --help       help
 #
 # Example:
 #   ./runpodBootstrap.sh root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
 #
 # Generate uploadModels.sh script only:
-#   ./runpodBootstrap.sh --write-upload-script
+#   ./runpodBootstrap.sh --upload
 #
 # Dry run (validate command / connectivity):
 #   ./runpodBootstrap.sh --dry-run root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
@@ -80,7 +80,7 @@ while [[ $# -gt 0 ]]; do
     --run) RUN_REMOTE=1; shift ;;
     --no-run) RUN_REMOTE=0; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
-    --write-upload-script) WRITE_UPLOAD_SCRIPT_ONLY=1; shift ;;
+    --upload) WRITE_UPLOAD_SCRIPT_ONLY=1; shift ;;
     --model-root) MODEL_ROOT="$2"; shift 2 ;;
     -p) SSH_PORT="$2"; shift 2 ;;
     -i) SSH_IDENTITY="$2"; shift 2 ;;
@@ -99,7 +99,7 @@ done
 
 if [[ -z "$TARGET" ]]; then
   if [[ "$WRITE_UPLOAD_SCRIPT_ONLY" == "1" ]]; then
-    # No target needed for --write-upload-script mode
+    # No target needed for --upload mode
     # Jump to function definitions section
     :
   else
