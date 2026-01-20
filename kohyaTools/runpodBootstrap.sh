@@ -81,9 +81,30 @@ while [[ $# -gt 0 ]]; do
     --no-run) RUN_REMOTE=0; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --upload) WRITE_UPLOAD_SCRIPT_ONLY=1; shift ;;
-    --model-root) MODEL_ROOT="$2"; shift 2 ;;
-    -p) SSH_PORT="$2"; shift 2 ;;
-    -i) SSH_IDENTITY="$2"; shift 2 ;;
+    --model-root)
+      if [[ -z "${2:-}" ]]; then
+        echo "ERROR: --model-root requires a PATH argument"
+        exit 1
+      fi
+      MODEL_ROOT="$2"
+      shift 2
+      ;;
+    -p)
+      if [[ -z "${2:-}" ]]; then
+        echo "ERROR: -p requires a port number"
+        exit 1
+      fi
+      SSH_PORT="$2"
+      shift 2
+      ;;
+    -i)
+      if [[ -z "${2:-}" ]]; then
+        echo "ERROR: -i requires an identity file path"
+        exit 1
+      fi
+      SSH_IDENTITY="$2"
+      shift 2
+      ;;
     -h|--help) usage ;;
     *)
       if [[ -z "$TARGET" ]]; then
@@ -227,13 +248,33 @@ done\n\
 log(){ echo -e \"\\n==> $*\\n\"; }\n\
 run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"\$DRY_PREFIX $*\"; else \"$@\"; fi }\n\
 \n\
+log \"template drift diagnostics\"\n\
+echo \"--- System Info ---\"\n\
+uname -a\n\
+echo\n\
+echo \"--- OS Release ---\"\n\
+cat /etc/os-release || true\n\
+echo\n\
+echo \"--- GPU Info ---\"\n\
+nvidia-smi || true\n\
+echo\n\
+echo \"--- Shell ---\"\n\
+echo \"shell=$SHELL\"\n\
+echo\n\
+echo \"--- Conda Environment Variables ---\"\n\
+env | grep -i conda || true\n\
+echo\n\
+echo \"--- Conda Config Files ---\"\n\
+ls -la /root/.condarc /etc/conda/.condarc 2>/dev/null || true\n\
+echo\n\
+\n\
 log \"checking gpu\"\n\
 if command -v nvidia-smi >/dev/null 2>&1; then run nvidia-smi || true; else echo \"WARNING: nvidia-smi not found\"; fi\n\
 \n\
 log \"ensuring base tools\"\n\
 if command -v apt-get >/dev/null 2>&1; then\n\
   run apt-get update -y\n\
-  run apt-get install -y git wget rsync tmux htop unzip build-essential python3-venv python3-pip ca-certificates\n\
+  run apt-get install -y git wget rsync tmux htop unzip build-essential python3-venv python3-pip ca-certificates vim\n\
 else\n\
   echo \"WARNING: apt-get not found. Assuming base image has tools.\"\n\
 fi\n\
@@ -259,6 +300,30 @@ if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
 else\n\
   # shellcheck disable=SC1090\n\
   source \"$CONDA_DIR/etc/profile.d/conda.sh\"\n\
+fi\n\
+\n\
+# configure conda for resilience\n\
+log \"configuring conda channels\"\n\
+if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
+  echo \"$DRY_PREFIX conda config --remove-key channels 2>/dev/null || true\"\n\
+  echo \"$DRY_PREFIX conda config --add channels conda-forge\"\n\
+  echo \"$DRY_PREFIX conda config --set channel_priority strict\"\n\
+else\n\
+  conda config --remove-key channels 2>/dev/null || true\n\
+  conda config --add channels conda-forge\n\
+  conda config --set channel_priority strict\n\
+fi\n\
+\n\
+# log conda configuration\n\
+log \"conda configuration\"\n\
+if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
+  echo \"$DRY_PREFIX conda info\"\n\
+  echo \"$DRY_PREFIX conda config --show channels\"\n\
+else\n\
+  conda info\n\
+  echo\n\
+  echo \"--- Conda Channels ---\"\n\
+  conda config --show channels\n\
 fi\n\
 \n\
 # accept conda ToS for anaconda channels\n\
@@ -325,6 +390,9 @@ if [[ "$ENABLE_KOHYA" == "1" ]]; then
 
   run bash /workspace/runpodKohyaSetup.sh "${KOHYA_ARGS[@]}"
 fi
+\n\
+log \"creating ~/.bash_aliases\"\n\
+echo \"alias d=\\\"ls -al\\\"\" > ~/.bash_aliases\n\
 \n\
 log \"done\"\n\
 '
@@ -416,6 +484,18 @@ source \"$CONDA_DIR/etc/profile.d/conda.sh\"\n\
 conda activate \"$ENV_NAME\"\n\
 cd \"$COMFY_DIR\"\n\
 \n\
+# Check for nvidia GPU\n\
+if command -v nvidia-smi >/dev/null 2>&1; then\n\
+  if ! nvidia-smi >/dev/null 2>&1; then\n\
+    echo \"WARNING: nvidia-smi command found but failed to execute. No GPU detected.\"\n\
+    echo \"ComfyUI may run in CPU mode which will be significantly slower.\"\n\
+  fi\n\
+else\n\
+  echo \"WARNING: nvidia-smi not found. No NVIDIA GPU detected on this system.\"\n\
+  echo \"ComfyUI will run in CPU mode which will be significantly slower.\"\n\
+  echo \"For GPU acceleration, ensure NVIDIA drivers and CUDA are properly installed.\"\n\
+fi\n\
+\n\
 if command -v tmux >/dev/null 2>&1; then\n\
   if ! tmux has-session -t comfyui 2>/dev/null; then\n\
     tmux new -d -s comfyui \"source $CONDA_DIR/etc/profile.d/conda.sh && conda activate $ENV_NAME && python main.py --listen 0.0.0.0 --port $PORT\"\n\
@@ -501,29 +581,29 @@ DRY_PREFIX="[]"
 MODEL_ROOT=""
 
 usage() {
-  sed -n '2,14p' "$0"
+  sed -n '2,14p' \"\$0\"
   exit 0
 }
 
 # Parse options before ssh command
-while [[ $# -gt 0 ]]; do
-  case "$1" in
+while [[ \$# -gt 0 ]]; do
+  case \"\$1\" in
     -h|--help) usage ;;
     --dry-run) DRY_RUN=1; shift ;;
     --model-root)
       # Validate that an argument is provided
       # Path existence validation is performed later when MODEL_ROOT is used
-      if [[ -z "${2:-}" || "$2" == -* ]]; then
-        echo "ERROR: --model-root requires a PATH argument"
+      if [[ -z \"\${2:-}\" || \"\${2:-}\" == -* ]]; then
+        echo \"ERROR: --model-root requires a PATH argument\"
         exit 1
       fi
-      MODEL_ROOT="$2"
+      MODEL_ROOT=\"\$2\"
       shift 2
       ;;
     ssh) shift; break ;;
     *)
-      echo "ERROR: unexpected option: $1"
-      echo "Run with --help for usage information"
+      echo \"ERROR: unexpected option: \$1\"
+      echo \"Run with --help for usage information\"
       exit 1
       ;;
   esac
@@ -535,8 +615,22 @@ SSH_IDENTITY=\"\"
 
 while [[ \$# -gt 0 ]]; do
   case \"\$1\" in
-    -p) SSH_PORT=\"\$2\"; shift 2 ;;
-    -i) SSH_IDENTITY=\"\$2\"; shift 2 ;;
+    -p)
+      if [[ -z \"\${2:-}\" ]]; then
+        echo \"ERROR: -p requires a port number\"
+        exit 1
+      fi
+      SSH_PORT=\"\$2\"
+      shift 2
+      ;;
+    -i)
+      if [[ -z \"\${2:-}\" ]]; then
+        echo \"ERROR: -i requires an identity file path\"
+        exit 1
+      fi
+      SSH_IDENTITY=\"\$2\"
+      shift 2
+      ;;
     *)
       if [[ -z \"\$TARGET\" ]]; then
         TARGET=\"\$1\"
@@ -593,7 +687,7 @@ fi
 # WORKFLOW FILE (from bootstrap config)
 # ============================================================
 
-LOCAL_WORKFLOW=\"${LOCAL_WORKFLOW}\"
+LOCAL_WORKFLOW="${LOCAL_WORKFLOW}"
 
 # ============================================================
 # REMOTE TARGET PATHS (fixed)
@@ -672,8 +766,8 @@ rsyncOne() {
   local dst=\"\$2\"
 
   run rsync -avP --partial --inplace --no-perms --no-owner --no-group \
-    -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}" \
-    "$src" "$TARGET:$dst/"
+    -e \"ssh -p \${SSH_PORT} \${SSH_IDENTITY:+-i \$SSH_IDENTITY}\" \
+    \"\$src\" \"\$TARGET:\$dst/\"
 }
 
 rsyncOne \"\$LOCAL_CHECKPOINT\" \"\$REMOTE_CHECKPOINT\"
