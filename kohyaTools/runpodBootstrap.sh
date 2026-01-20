@@ -21,10 +21,14 @@
 #   --run            run remote setup after writing (default)
 #   --no-run         only write scripts, don't execute
 #   --dry-run        do not modify remote; print ssh commands and do a connectivity check
+#   --upload             only write uploadModels.sh locally and exit
 #   -h, --help       help
 #
 # Example:
 #   ./runpodBootstrap.sh root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
+#
+# Generate uploadModels.sh script only:
+#   ./runpodBootstrap.sh --upload
 #
 # Dry run (validate command / connectivity):
 #   ./runpodBootstrap.sh --dry-run root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
@@ -50,6 +54,7 @@ RUN_REMOTE=1
 DRY_RUN="${DRY_RUN:-0}"
 DRY_PREFIX="[]"
 MODEL_ROOT=""
+WRITE_UPLOAD_SCRIPT_ONLY=0
 
 TARGET=""
 SSH_PORT="22"
@@ -75,6 +80,7 @@ while [[ $# -gt 0 ]]; do
     --run) RUN_REMOTE=1; shift ;;
     --no-run) RUN_REMOTE=0; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --upload) WRITE_UPLOAD_SCRIPT_ONLY=1; shift ;;
     --model-root) MODEL_ROOT="$2"; shift 2 ;;
     -p) SSH_PORT="$2"; shift 2 ;;
     -i) SSH_IDENTITY="$2"; shift 2 ;;
@@ -92,22 +98,36 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$TARGET" ]]; then
-  echo "ERROR: missing user@host"
-  exit 1
+  if [[ "$WRITE_UPLOAD_SCRIPT_ONLY" == "1" ]]; then
+    # No target needed for --upload mode
+    # Jump to function definitions section
+    :
+  else
+    echo "ERROR: missing user@host"
+    exit 1
+  fi
 fi
 
-SSH_OPTS=(-p "$SSH_PORT" -o StrictHostKeyChecking=accept-new)
-if [[ -n "$SSH_IDENTITY" ]]; then
-  SSH_OPTS+=(-i "$SSH_IDENTITY")
-fi
+# Early exit if we're only writing the upload script
+if [[ "$WRITE_UPLOAD_SCRIPT_ONLY" == "1" ]]; then
+  # Skip SSH setup and connectivity checks
+  # Jump directly to the section after function definitions
+  # where writeLocalUploadModelsScript is called
+  :
+else
+  SSH_OPTS=(-p "$SSH_PORT" -o StrictHostKeyChecking=accept-new)
+  if [[ -n "$SSH_IDENTITY" ]]; then
+    SSH_OPTS+=(-i "$SSH_IDENTITY")
+  fi
 
-echo "target      : ${TARGET}:${SSH_PORT}"
-echo "identity    : ${SSH_IDENTITY:-<default>}"
-echo "comfyui     : ${ENABLE_COMFYUI}"
-echo "kohya       : ${ENABLE_KOHYA}"
-echo "run remote  : ${RUN_REMOTE}"
-echo "dry run     : ${DRY_RUN}"
-echo
+  echo "target      : ${TARGET}:${SSH_PORT}"
+  echo "identity    : ${SSH_IDENTITY:-<default>}"
+  echo "comfyui     : ${ENABLE_COMFYUI}"
+  echo "kohya       : ${ENABLE_KOHYA}"
+  echo "run remote  : ${RUN_REMOTE}"
+  echo "dry run     : ${DRY_RUN}"
+  echo
+fi
 
 # ---------------------------
 # Helper to run or print commands
@@ -133,14 +153,40 @@ ssh_cmd() {
 # ---------------------------
 # Connectivity check (safe even in dry-run)
 # ---------------------------
-echo "checking ssh connectivity..."
-if ssh "${SSH_OPTS[@]}" "$TARGET" "echo connected && uname -a" >/dev/null 2>&1; then
-  echo "connected..."
-else
-  echo "ERROR: could not connect to ${TARGET}:${SSH_PORT}"
-  exit 1
+if [[ "$WRITE_UPLOAD_SCRIPT_ONLY" != "1" ]]; then
+  echo "checking ssh connectivity..."
+  if ssh "${SSH_OPTS[@]}" "$TARGET" "echo connected && uname -a" >/dev/null 2>&1; then
+    echo "connected..."
+  else
+    echo "ERROR: could not connect to ${TARGET}:${SSH_PORT}"
+    exit 1
+  fi
+  echo
 fi
-echo
+
+# ---------------------------
+# Read workflow config from local config file
+# ---------------------------
+CONFIG_FILE="$HOME/.config/kohya/kohyaConfig.json"
+WORKFLOW_FILE=""
+WORKFLOW_DIR=""
+LOCAL_WORKFLOW=""
+
+if [[ -f "$CONFIG_FILE" ]]; then
+  # Read workflow file name and directory from config using python
+  if command -v python3 >/dev/null 2>&1; then
+    WORKFLOW_FILE=$(python3 -c "import json; cfg=json.load(open('$CONFIG_FILE')); print(cfg.get('comfyFullbodyWorkflow', ''))" 2>/dev/null || echo "")
+    WORKFLOW_DIR=$(python3 -c "import json; cfg=json.load(open('$CONFIG_FILE')); print(cfg.get('comfyWorkflowsDir', ''))" 2>/dev/null || echo "")
+    
+    if [[ -n "$WORKFLOW_FILE" && -n "$WORKFLOW_DIR" ]]; then
+      LOCAL_WORKFLOW="$WORKFLOW_DIR/$WORKFLOW_FILE"
+      if [[ ! -f "$LOCAL_WORKFLOW" ]]; then
+        echo "WARNING: workflow file not found: $LOCAL_WORKFLOW"
+        LOCAL_WORKFLOW=""
+      fi
+    fi
+  fi
+fi
 
 # ---------------------------
 # Remote script contents
@@ -430,48 +476,19 @@ fi\n\
 log \"kohya_ss setup complete\"\n\
 '
 
-# ---------------------------
-# Write scripts to remote (or print command in dry-run)
-# ---------------------------
-write_remote_file() {
-  local remote_path="$1"
-  local content="$2"
-
-  if [[ "$DRY_RUN" == "1" ]]; then
-    echo "${DRY_PREFIX} would write remote file: ${remote_path}"
-    cat <<CMD
-ssh ${SSH_OPTS[*]} ${TARGET} 'cat > ${remote_path} <<'"'"'EOF'"'"'
-${content}
-EOF
-chmod +x ${remote_path}'
-CMD
-    return 0
-  fi
-
-  # Use a single SSH session to write the file via heredoc
-  # shellcheck disable=SC2029
-  ssh "${SSH_OPTS[@]}" "$TARGET" "cat > ${remote_path} <<'EOF'
-${content}
-EOF
-chmod +x ${remote_path}
-"
-  echo "wrote ${remote_path}"
-}
-
-writeLocalUploadModelsScript() {
-  local outPath="./uploadModels.sh"
-
-  cat > "$outPath" <<'EOF'
-#!/usr/bin/env bash
+# Local upload models script: uploadModels.sh
+# - Uploads required models and workflow files to runpod
+# - Uses workflow info from config file read above
+LOCAL_UPLOAD_SCRIPT="#!/usr/bin/env bash
 # uploadModels.sh (local)
 #
-# Upload minimal models required by fullbody_api.json
+# Upload minimal models required by fullbody_api.json and workflow files
 #
 # Usage:
 #   ./uploadModels.sh [--dry-run] [--model-root PATH] ssh user@host -p PORT -i KEY
 #
 # Defaults:
-#   model-root = $HOME/Source/ComfyUI/models
+#   model-root = \$HOME/Source/ComfyUI/models
 #
 # Example:
 #   ./uploadModels.sh ssh root@213.192.2.88 -p 40190 -i ~/.ssh/id_ed25519
@@ -512,98 +529,105 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-TARGET=""
-SSH_PORT="22"
-SSH_IDENTITY=""
+TARGET=\"\"
+SSH_PORT=\"22\"
+SSH_IDENTITY=\"\"
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -p) SSH_PORT="$2"; shift 2 ;;
-    -i) SSH_IDENTITY="$2"; shift 2 ;;
+while [[ \$# -gt 0 ]]; do
+  case \"\$1\" in
+    -p) SSH_PORT=\"\$2\"; shift 2 ;;
+    -i) SSH_IDENTITY=\"\$2\"; shift 2 ;;
     *)
-      if [[ -z "$TARGET" ]]; then
-        TARGET="$1"
+      if [[ -z \"\$TARGET\" ]]; then
+        TARGET=\"\$1\"
         shift
       else
-        echo "ERROR: unexpected arg: $1"
+        echo \"ERROR: unexpected arg: \$1\"
         exit 1
       fi
       ;;
   esac
 done
 
-if [[ -z "$TARGET" ]]; then
-  echo "ERROR: missing user@host"
+if [[ -z \"\$TARGET\" ]]; then
+  echo \"ERROR: missing user@host\"
   exit 1
 fi
 
-SSH_OPTS=(-p "$SSH_PORT" -o StrictHostKeyChecking=accept-new)
-if [[ -n "$SSH_IDENTITY" ]]; then
-  SSH_OPTS+=(-i "$SSH_IDENTITY")
+SSH_OPTS=(-p \"\$SSH_PORT\" -o StrictHostKeyChecking=accept-new)
+if [[ -n \"\$SSH_IDENTITY\" ]]; then
+  SSH_OPTS+=(-i \"\$SSH_IDENTITY\")
 fi
 
-echo "target   : ${TARGET}:${SSH_PORT}"
-echo "identity : ${SSH_IDENTITY:-<default>}"
-echo "dry run  : ${DRY_RUN}"
+echo \"target   : \${TARGET}:\${SSH_PORT}\"
+echo \"identity : \${SSH_IDENTITY:-<default>}\"
+echo \"dry run  : \${DRY_RUN}\"
 echo
 
 # ============================================================
 # REQUIRED FILES (from fullbody_api.json)
 # ============================================================
-CHECKPOINT="v1-5-pruned-emaonly.safetensors"
-LORA="kathy_person_r16_512_bs2.safetensors"
-YOLO="face_yolov8n.pt"
+CHECKPOINT=\"v1-5-pruned-emaonly.safetensors\"
+LORA=\"kathy_person_r16_512_bs2.safetensors\"
+YOLO=\"face_yolov8n.pt\"
 
 # ============================================================
 # LOCAL MODEL ROOT
 #
 # Priority:
 #   1) --model-root PATH
-#   2) $HOME/Source/ComfyUI/models (default)
+#   2) \$HOME/Source/ComfyUI/models (default)
 # ============================================================
 
-if [[ -z "$MODEL_ROOT" ]]; then
-  MODEL_ROOT="$HOME/Source/ComfyUI/models"
+if [[ -z \"\$MODEL_ROOT\" ]]; then
+  MODEL_ROOT=\"\$HOME/Source/ComfyUI/models\"
 fi
 
-if [[ ! -d "$MODEL_ROOT" ]]; then
-  echo "ERROR: local models folder not found: $MODEL_ROOT"
-  echo "       supply --model-root /path/to/models"
+if [[ ! -d \"\$MODEL_ROOT\" ]]; then
+  echo \"ERROR: local models folder not found: \$MODEL_ROOT\"
+  echo \"       supply --model-root /path/to/models\"
   exit 1
 fi
+
+# ============================================================
+# WORKFLOW FILE (from bootstrap config)
+# ============================================================
+
+LOCAL_WORKFLOW=\"${LOCAL_WORKFLOW}\"
 
 # ============================================================
 # REMOTE TARGET PATHS (fixed)
 # ============================================================
 
-REMOTE_BASE="/workspace/ComfyUI/models"
-REMOTE_CHECKPOINT="${REMOTE_BASE}/checkpoints"
-REMOTE_LORA="${REMOTE_BASE}/loras"
-REMOTE_BBOX="${REMOTE_BASE}/bbox"
+REMOTE_BASE=\"/workspace/ComfyUI/models\"
+REMOTE_CHECKPOINT=\"\${REMOTE_BASE}/checkpoints\"
+REMOTE_LORA=\"\${REMOTE_BASE}/loras\"
+REMOTE_BBOX=\"\${REMOTE_BASE}/bbox\"
+REMOTE_WORKFLOWS=\"/workspace/workflows\"
 
 run() {
-  if [[ "$DRY_RUN" == "1" ]]; then
-    echo "${DRY_PREFIX} $*"
+  if [[ \"\$DRY_RUN\" == \"1\" ]]; then
+    echo \"\${DRY_PREFIX} \$*\"
   else
-    "$@"
+    \"\$@\"
   fi
 }
 
 # Find a file in a preferred path first, then search under MODEL_ROOT.
 findLocalFile() {
-  local preferred="$1"
-  local filename="$2"
+  local preferred=\"\$1\"
+  local filename=\"\$2\"
 
-  if [[ -f "$preferred" ]]; then
-    echo "$preferred"
+  if [[ -f \"\$preferred\" ]]; then
+    echo \"\$preferred\"
     return 0
   fi
 
   # fallback search (stop at first match)
   local found
-  found="$(find "$MODEL_ROOT" -type f -name "$filename" -print -quit 2>/dev/null || true)"
-  if [[ -n "$found" && -f "$found" ]]; then
-    echo "$found"
+  found=\"\$(find \"\$MODEL_ROOT\" -type f -name \"\$filename\" -print -quit 2>/dev/null || true)\"
+  if [[ -n \"\$found\" && -f \"\$found\" ]]; then
+    echo \"\$found\"
     return 0
   fi
 
@@ -611,56 +635,105 @@ findLocalFile() {
 }
 
 # Preferred locations based on ComfyUI convention
-LOCAL_CHECKPOINT="$(findLocalFile "${MODEL_ROOT}/checkpoints/${CHECKPOINT}" "${CHECKPOINT}")" || {
-  echo "ERROR: could not find checkpoint: ${CHECKPOINT}"
-  echo "       looked in: ${MODEL_ROOT}/checkpoints/"
+LOCAL_CHECKPOINT=\"\$(findLocalFile \"\${MODEL_ROOT}/checkpoints/\${CHECKPOINT}\" \"\${CHECKPOINT}\")\" || {
+  echo \"ERROR: could not find checkpoint: \${CHECKPOINT}\"
+  echo \"       looked in: \${MODEL_ROOT}/checkpoints/\"
   exit 1
 }
 
-LOCAL_LORA="$(findLocalFile "${MODEL_ROOT}/loras/${LORA}" "${LORA}")" || {
-  echo "ERROR: could not find lora: ${LORA}"
-  echo "       looked in: ${MODEL_ROOT}/loras/"
+LOCAL_LORA=\"\$(findLocalFile \"\${MODEL_ROOT}/loras/\${LORA}\" \"\${LORA}\")\" || {
+  echo \"ERROR: could not find lora: \${LORA}\"
+  echo \"       looked in: \${MODEL_ROOT}/loras/\"
   exit 1
 }
 
-LOCAL_YOLO="$(findLocalFile "${MODEL_ROOT}/bbox/${YOLO}" "${YOLO}")" || {
-  echo "ERROR: could not find yolo model: ${YOLO}"
-  echo "       looked in: ${MODEL_ROOT}/bbox/"
+LOCAL_YOLO=\"\$(findLocalFile \"\${MODEL_ROOT}/bbox/\${YOLO}\" \"\${YOLO}\")\" || {
+  echo \"ERROR: could not find yolo model: \${YOLO}\"
+  echo \"       looked in: \${MODEL_ROOT}/bbox/\"
   exit 1
 }
 
-echo "local model root : ${MODEL_ROOT}"
-echo "checkpoint       : ${LOCAL_CHECKPOINT}"
-echo "lora             : ${LOCAL_LORA}"
-echo "bbox model       : ${LOCAL_YOLO}"
+echo
+echo \"local model root : \${MODEL_ROOT}\"
+echo \"checkpoint       : \${LOCAL_CHECKPOINT}\"
+echo \"lora             : \${LOCAL_LORA}\"
+echo \"bbox model       : \${LOCAL_YOLO}\"
+if [[ -n \"\$LOCAL_WORKFLOW\" ]]; then
+  echo \"workflow file    : \${LOCAL_WORKFLOW}\"
+fi
 echo
 
 # create remote dirs
-run ssh "${SSH_OPTS[@]}" "$TARGET" \
-  "mkdir -p '${REMOTE_CHECKPOINT}' '${REMOTE_LORA}' '${REMOTE_BBOX}'"
+run ssh \"\${SSH_OPTS[@]}\" \"\$TARGET\" \\
+  \"mkdir -p '\${REMOTE_CHECKPOINT}' '\${REMOTE_LORA}' '\${REMOTE_BBOX}' '\${REMOTE_WORKFLOWS}'\"
 
 rsyncOne() {
-  local src="$1"
-  local dst="$2"
+  local src=\"\$1\"
+  local dst=\"\$2\"
 
   run rsync -avP --partial --inplace --no-perms --no-owner --no-group \
     -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}" \
     "$src" "$TARGET:$dst/"
 }
 
-rsyncOne "$LOCAL_CHECKPOINT" "$REMOTE_CHECKPOINT"
-rsyncOne "$LOCAL_LORA" "$REMOTE_LORA"
-rsyncOne "$LOCAL_YOLO" "$REMOTE_BBOX"
+rsyncOne \"\$LOCAL_CHECKPOINT\" \"\$REMOTE_CHECKPOINT\"
+rsyncOne \"\$LOCAL_LORA\" \"\$REMOTE_LORA\"
+rsyncOne \"\$LOCAL_YOLO\" \"\$REMOTE_BBOX\"
+
+# Upload workflow file if found
+if [[ -n \"\$LOCAL_WORKFLOW\" && -f \"\$LOCAL_WORKFLOW\" ]]; then
+  echo
+  echo \"uploading workflow file...\"
+  rsyncOne \"\$LOCAL_WORKFLOW\" \"\$REMOTE_WORKFLOWS\"
+fi
 
 echo
-echo "done"
-EOF
+echo \"done\"
+"
 
+# ---------------------------
+# Write scripts to remote (or print command in dry-run)
+# ---------------------------
+write_remote_file() {
+  local remote_path="$1"
+  local content="$2"
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "${DRY_PREFIX} would write remote file: ${remote_path}"
+    cat <<CMD
+ssh ${SSH_OPTS[*]} ${TARGET} 'cat > ${remote_path} <<'"'"'EOF'"'"'
+${content}
+EOF
+chmod +x ${remote_path}'
+CMD
+    return 0
+  fi
+
+  # Use a single SSH session to write the file via heredoc
+  # shellcheck disable=SC2029
+  ssh "${SSH_OPTS[@]}" "$TARGET" "cat > ${remote_path} <<'EOF'
+${content}
+EOF
+chmod +x ${remote_path}
+"
+  echo "wrote ${remote_path}"
+}
+
+writeLocalUploadModelsScript() {
+  local outPath="./uploadModels.sh"
+  echo "$LOCAL_UPLOAD_SCRIPT" > "$outPath"
   chmod +x "$outPath"
   echo "wrote ${outPath}"
 }
 
 
+# ---------------------------
+# Early exit if we're only writing the upload script
+# ---------------------------
+if [[ "$WRITE_UPLOAD_SCRIPT_ONLY" == "1" ]]; then
+  writeLocalUploadModelsScript
+  exit 0
+fi
 
 write_remote_file "/workspace/runpodSetup.sh" "$REMOTE_SETUP_SCRIPT"
 write_remote_file "/workspace/runpodComfySetup.sh" "$REMOTE_COMFY_SETUP_SCRIPT"
