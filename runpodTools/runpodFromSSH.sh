@@ -152,20 +152,34 @@ fi
 echo
 
 # Copy runpod folder to remote
-echo "copying runpod/ to remote..."
+echo "copying runpodTools/ to remote..."
 
 if [[ "$DRY_RUN" == "1" ]]; then
-  echo "...[] would rsync $RUNPOD_DIR to ${TARGET}:/workspace/runpodTools/"
+  echo "...[] would copy $RUNPOD_DIR to ${TARGET}:/workspace/runpodTools/"
 else
-  # Use rsync if available, otherwise tar+ssh
+  # Check if rsync is available on both local and remote
+  HAS_LOCAL_RSYNC=0
+  HAS_REMOTE_RSYNC=0
+  
   if command -v rsync >/dev/null 2>&1; then
+    HAS_LOCAL_RSYNC=1
+  fi
+  
+  if ssh "${SSH_OPTS[@]}" "$TARGET" "command -v rsync" >/dev/null 2>&1; then
+    HAS_REMOTE_RSYNC=1
+  fi
+  
+  # Use rsync if available on both sides, otherwise tar+ssh
+  if [[ "$HAS_LOCAL_RSYNC" == "1" && "$HAS_REMOTE_RSYNC" == "1" ]]; then
+    echo "...using rsync"
     rsync -avz --delete \
       -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}" \
       "$RUNPOD_DIR/" "$TARGET:/workspace/runpodTools/"
     echo "...rsync complete"
   else
-    # Fallback: tar + ssh
-    tar czf - -C "$(dirname "$RUNPOD_DIR")" runpod | \
+    # Fallback: tar + ssh (doesn't require rsync on either end)
+    echo "...using tar+ssh (rsync not available on remote)"
+    tar czf - -C "$(dirname "$RUNPOD_DIR")" runpodTools | \
       ssh "${SSH_OPTS[@]}" "$TARGET" "cd /workspace && tar xzf -"
     echo "...tar transfer complete"
   fi
