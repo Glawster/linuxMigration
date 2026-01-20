@@ -254,7 +254,7 @@ if command -v nvidia-smi >/dev/null 2>&1; then run nvidia-smi || true; else echo
 log \"ensuring base tools\"\n\
 if command -v apt-get >/dev/null 2>&1; then\n\
   run apt-get update -y\n\
-  run apt-get install -y git wget rsync tmux htop unzip build-essential python3-venv python3-pip ca-certificates\n\
+  run apt-get install -y git wget rsync tmux htop unzip build-essential python3-venv python3-pip ca-certificates vim\n\
 else\n\
   echo \"WARNING: apt-get not found. Assuming base image has tools.\"\n\
 fi\n\
@@ -346,6 +346,9 @@ if [[ "$ENABLE_KOHYA" == "1" ]]; then
 
   run bash /workspace/runpodKohyaSetup.sh "${KOHYA_ARGS[@]}"
 fi
+\n\
+log \"creating ~/.bash_aliases\"\n\
+echo \"alias d=\\\"ls -al\\\"\" > ~/.bash_aliases\n\
 \n\
 log \"done\"\n\
 '
