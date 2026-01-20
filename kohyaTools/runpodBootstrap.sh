@@ -247,32 +247,42 @@ CONDA_DIR=\"/workspace/miniconda3\"\n\
 ENV_NAME=\"runpod\"\n\
 \n\
 # install miniconda if missing\n\
-if [[ ! -x \"\$CONDA_DIR/bin/conda\" ]]; then\n\
+if [[ ! -x \"$CONDA_DIR/bin/conda\" ]]; then\n\
   run wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /workspace/miniconda.sh\n\
-  run bash /workspace/miniconda.sh -b -p \"\$CONDA_DIR\"\n\
+  run bash /workspace/miniconda.sh -b -p \"$CONDA_DIR\"\n\
   run rm -f /workspace/miniconda.sh\n\
 fi\n\
 \n\
 # activate conda\n\
-if [[ \"\$DRY_RUN\" == \"1\" ]]; then\n\
-  echo \"\$DRY_PREFIX source \$CONDA_DIR/etc/profile.d/conda.sh\"\n\
+if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
+  echo \"$DRY_PREFIX source $CONDA_DIR/etc/profile.d/conda.sh\"\n\
 else\n\
   # shellcheck disable=SC1090\n\
-  source \"\$CONDA_DIR/etc/profile.d/conda.sh\"\n\
+  source \"$CONDA_DIR/etc/profile.d/conda.sh\"\n\
+fi\n\
+\n\
+# accept conda ToS for anaconda channels\n\
+log \"accepting conda terms of service\"\n\
+if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
+  echo \"$DRY_PREFIX conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main\"\n\
+  echo \"$DRY_PREFIX conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r\"\n\
+else\n\
+  conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main 2>/dev/null || true\n\
+  conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 2>/dev/null || true\n\
 fi\n\
 \n\
 # create env if missing\n\
-if [[ \"\$DRY_RUN\" == \"1\" ]]; then\n\
-  echo \"\$DRY_PREFIX conda create -n \$ENV_NAME python=3.10 -y\"\n\
-  echo \"\$DRY_PREFIX conda activate \$ENV_NAME\"\n\
+if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
+  echo \"$DRY_PREFIX conda create -n $ENV_NAME python=3.10 -y\"\n\
+  echo \"$DRY_PREFIX conda activate $ENV_NAME\"\n\
 else\n\
-  if ! conda env list | awk \"{print \\$1}\" | grep -qx \"\$ENV_NAME\"; then\n\
-    run conda create -n \"\$ENV_NAME\" python=3.10 -y\n\
+  if ! conda env list | awk \"{print \\$1}\" | grep -qx \"$ENV_NAME\"; then\n\
+    run conda create -n \"$ENV_NAME\" python=3.10 -y\n\
   fi\n\
-  conda activate \"\$ENV_NAME\"\n\
+  conda activate \"$ENV_NAME\"\n\
 fi\n\
 \n\
-log \"conda environment ready: \$ENV_NAME\"\n\
+log \"conda environment ready: $ENV_NAME\"\n\
 \n\
 # ---------------------------\n\
 # ComfyUI\n\
@@ -281,12 +291,12 @@ log \"conda environment ready: \$ENV_NAME\"\n\
 log \"installing ComfyUI-Manager (custom node)\"\n\
 \n\
 COMFY_DIR=\"/workspace/ComfyUI\"\n\
-MANAGER_DIR=\"\${COMFY_DIR}/custom_nodes/ComfyUI-Manager\"\n\
+MANAGER_DIR=\"${COMFY_DIR}/custom_nodes/ComfyUI-Manager\"\n\
 \n\
-if [[ ! -d \"\${MANAGER_DIR}/.git\" ]]; then\n\
-  run git clone https://github.com/ltdrdata/ComfyUI-Manager.git \"\${MANAGER_DIR}\"\n\
+if [[ ! -d \"${MANAGER_DIR}/.git\" ]]; then\n\
+  run git clone https://github.com/ltdrdata/ComfyUI-Manager.git \"${MANAGER_DIR}\"\n\
 else\n\
-  run bash -lc \"cd \\\"\${MANAGER_DIR}\\\" && git pull --ff-only || true\"\n\
+  run bash -lc \"cd \\\"${MANAGER_DIR}\\\" && git pull --ff-only || true\"\n\
 fi\n\
 \n\
 if [[ \"$ENABLE_COMFYUI\" == \"1\" ]]; then
@@ -487,24 +497,37 @@ LOCAL_UPLOAD_SCRIPT="#!/usr/bin/env bash
 set -euo pipefail
 
 DRY_RUN=0
-DRY_PREFIX=\"[]\"
-MODEL_ROOT=\"\"
+DRY_PREFIX="[]"
+MODEL_ROOT=""
 
-# Parse arguments
-while [[ \$# -gt 0 ]]; do
-  case \"\$1\" in
+usage() {
+  sed -n '2,14p' "$0"
+  exit 0
+}
+
+# Parse options before ssh command
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage ;;
     --dry-run) DRY_RUN=1; shift ;;
-    --model-root) MODEL_ROOT=\"\$2\"; shift 2 ;;
-    ssh) break ;;
-    *) echo \"ERROR: unexpected arg before ssh: \$1\"; exit 1 ;;
+    --model-root)
+      # Validate that an argument is provided
+      # Path existence validation is performed later when MODEL_ROOT is used
+      if [[ -z "${2:-}" || "$2" == -* ]]; then
+        echo "ERROR: --model-root requires a PATH argument"
+        exit 1
+      fi
+      MODEL_ROOT="$2"
+      shift 2
+      ;;
+    ssh) shift; break ;;
+    *)
+      echo "ERROR: unexpected option: $1"
+      echo "Run with --help for usage information"
+      exit 1
+      ;;
   esac
 done
-
-if [[ \"\${1:-}\" != \"ssh\" ]]; then
-  echo \"ERROR: expected ssh command\"
-  exit 1
-fi
-shift
 
 TARGET=\"\"
 SSH_PORT=\"22\"
@@ -648,9 +671,9 @@ rsyncOne() {
   local src=\"\$1\"
   local dst=\"\$2\"
 
-  run rsync -avP --partial --inplace \\
-    -e \"ssh -p \${SSH_PORT} \${SSH_IDENTITY:+-i \$SSH_IDENTITY}\" \\
-    \"\$src\" \"\$TARGET:\$dst/\"
+  run rsync -avP --partial --inplace --no-perms --no-owner --no-group \
+    -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}" \
+    "$src" "$TARGET:$dst/"
 }
 
 rsyncOne \"\$LOCAL_CHECKPOINT\" \"\$REMOTE_CHECKPOINT\"
