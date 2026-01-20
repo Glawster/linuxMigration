@@ -81,9 +81,30 @@ while [[ $# -gt 0 ]]; do
     --no-run) RUN_REMOTE=0; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --upload) WRITE_UPLOAD_SCRIPT_ONLY=1; shift ;;
-    --model-root) MODEL_ROOT="$2"; shift 2 ;;
-    -p) SSH_PORT="$2"; shift 2 ;;
-    -i) SSH_IDENTITY="$2"; shift 2 ;;
+    --model-root)
+      if [[ -z "${2:-}" ]]; then
+        echo "ERROR: --model-root requires a PATH argument"
+        exit 1
+      fi
+      MODEL_ROOT="$2"
+      shift 2
+      ;;
+    -p)
+      if [[ -z "${2:-}" ]]; then
+        echo "ERROR: -p requires a port number"
+        exit 1
+      fi
+      SSH_PORT="$2"
+      shift 2
+      ;;
+    -i)
+      if [[ -z "${2:-}" ]]; then
+        echo "ERROR: -i requires an identity file path"
+        exit 1
+      fi
+      SSH_IDENTITY="$2"
+      shift 2
+      ;;
     -h|--help) usage ;;
     *)
       if [[ -z "$TARGET" ]]; then
@@ -501,29 +522,29 @@ DRY_PREFIX="[]"
 MODEL_ROOT=""
 
 usage() {
-  sed -n '2,14p' "$0"
+  sed -n '2,14p' \"\$0\"
   exit 0
 }
 
 # Parse options before ssh command
-while [[ $# -gt 0 ]]; do
-  case "$1" in
+while [[ \$# -gt 0 ]]; do
+  case \"\$1\" in
     -h|--help) usage ;;
     --dry-run) DRY_RUN=1; shift ;;
     --model-root)
       # Validate that an argument is provided
       # Path existence validation is performed later when MODEL_ROOT is used
-      if [[ -z "${2:-}" || "$2" == -* ]]; then
-        echo "ERROR: --model-root requires a PATH argument"
+      if [[ -z \"\${2:-}\" || \"\${2:-}\" == -* ]]; then
+        echo \"ERROR: --model-root requires a PATH argument\"
         exit 1
       fi
-      MODEL_ROOT="$2"
+      MODEL_ROOT=\"\$2\"
       shift 2
       ;;
     ssh) shift; break ;;
     *)
-      echo "ERROR: unexpected option: $1"
-      echo "Run with --help for usage information"
+      echo \"ERROR: unexpected option: \$1\"
+      echo \"Run with --help for usage information\"
       exit 1
       ;;
   esac
@@ -535,8 +556,22 @@ SSH_IDENTITY=\"\"
 
 while [[ \$# -gt 0 ]]; do
   case \"\$1\" in
-    -p) SSH_PORT=\"\$2\"; shift 2 ;;
-    -i) SSH_IDENTITY=\"\$2\"; shift 2 ;;
+    -p)
+      if [[ -z \"\${2:-}\" ]]; then
+        echo \"ERROR: -p requires a port number\"
+        exit 1
+      fi
+      SSH_PORT=\"\$2\"
+      shift 2
+      ;;
+    -i)
+      if [[ -z \"\${2:-}\" ]]; then
+        echo \"ERROR: -i requires an identity file path\"
+        exit 1
+      fi
+      SSH_IDENTITY=\"\$2\"
+      shift 2
+      ;;
     *)
       if [[ -z \"\$TARGET\" ]]; then
         TARGET=\"\$1\"
@@ -593,7 +628,7 @@ fi
 # WORKFLOW FILE (from bootstrap config)
 # ============================================================
 
-LOCAL_WORKFLOW=\"${LOCAL_WORKFLOW}\"
+LOCAL_WORKFLOW="${LOCAL_WORKFLOW}"
 
 # ============================================================
 # REMOTE TARGET PATHS (fixed)
@@ -672,8 +707,8 @@ rsyncOne() {
   local dst=\"\$2\"
 
   run rsync -avP --partial --inplace --no-perms --no-owner --no-group \
-    -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}" \
-    "$src" "$TARGET:$dst/"
+    -e \"ssh -p \${SSH_PORT} \${SSH_IDENTITY:+-i \$SSH_IDENTITY}\" \
+    \"\$src\" \"\$TARGET:\$dst/\"
 }
 
 rsyncOne \"\$LOCAL_CHECKPOINT\" \"\$REMOTE_CHECKPOINT\"
