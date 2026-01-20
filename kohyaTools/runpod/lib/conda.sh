@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# lib/conda.sh
+# Conda environment management helpers
+
+# Ensure miniconda is installed
+ensureMiniconda() {
+  local conda_dir="${1:-/workspace/miniconda3}"
+  
+  if [[ -x "$conda_dir/bin/conda" ]]; then
+    log "...miniconda already installed at $conda_dir"
+    return 0
+  fi
+  
+  log "installing miniconda to $conda_dir"
+  
+  run wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh
+  run bash /tmp/miniconda.sh -b -p "$conda_dir"
+  run rm -f /tmp/miniconda.sh
+  
+  log "...miniconda installed"
+}
+
+# Configure conda channels for resilience
+ensureCondaChannels() {
+  local conda_dir="${1:-/workspace/miniconda3}"
+  
+  log "configuring conda channels"
+  
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo "${DRY_PREFIX:-...[]} conda config --remove-key channels"
+    echo "${DRY_PREFIX:-...[]} conda config --add channels conda-forge"
+    echo "${DRY_PREFIX:-...[]} conda config --set channel_priority strict"
+  else
+    # shellcheck disable=SC1090
+    source "$conda_dir/etc/profile.d/conda.sh"
+    
+    conda config --remove-key channels 2>/dev/null || true
+    conda config --add channels conda-forge
+    conda config --set channel_priority strict
+  fi
+  
+  log "...channels configured"
+}
+
+# Accept conda ToS
+acceptCondaTos() {
+  local conda_dir="${1:-/workspace/miniconda3}"
+  
+  log "accepting conda terms of service"
+  
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo "${DRY_PREFIX:-...[]} conda tos accept"
+  else
+    # shellcheck disable=SC1090
+    source "$conda_dir/etc/profile.d/conda.sh"
+    
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main 2>/dev/null || true
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 2>/dev/null || true
+  fi
+}
+
+# Ensure conda environment exists
+ensureCondaEnv() {
+  local conda_dir="${1:-/workspace/miniconda3}"
+  local env_name="${2:-runpod}"
+  local python_version="${3:-3.10}"
+  
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo "${DRY_PREFIX:-...[]} would ensure conda env: $env_name"
+    return 0
+  fi
+  
+  # shellcheck disable=SC1090
+  source "$conda_dir/etc/profile.d/conda.sh"
+  
+  if conda env list | awk '{print $1}' | grep -qx "$env_name"; then
+    log "...conda environment exists: $env_name"
+  else
+    log "creating conda environment: $env_name"
+    run conda create -n "$env_name" python="$python_version" -y
+    log "...environment created"
+  fi
+  
+  conda activate "$env_name"
+  log "...activated conda environment: $env_name"
+}
+
+# Activate conda environment
+activateCondaEnv() {
+  local conda_dir="${1:-/workspace/miniconda3}"
+  local env_name="${2:-runpod}"
+  
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo "${DRY_PREFIX:-...[]} source $conda_dir/etc/profile.d/conda.sh"
+    echo "${DRY_PREFIX:-...[]} conda activate $env_name"
+    return 0
+  fi
+  
+  # shellcheck disable=SC1090
+  source "$conda_dir/etc/profile.d/conda.sh"
+  conda activate "$env_name"
+}
