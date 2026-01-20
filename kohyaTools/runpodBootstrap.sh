@@ -440,6 +440,18 @@ source \"$CONDA_DIR/etc/profile.d/conda.sh\"\n\
 conda activate \"$ENV_NAME\"\n\
 cd \"$COMFY_DIR\"\n\
 \n\
+# Check for nvidia GPU\n\
+if command -v nvidia-smi >/dev/null 2>&1; then\n\
+  if ! nvidia-smi >/dev/null 2>&1; then\n\
+    echo \"WARNING: nvidia-smi command found but failed to execute. No GPU detected.\"\n\
+    echo \"ComfyUI may run in CPU mode which will be significantly slower.\"\n\
+  fi\n\
+else\n\
+  echo \"WARNING: nvidia-smi not found. No NVIDIA GPU detected on this system.\"\n\
+  echo \"ComfyUI will run in CPU mode which will be significantly slower.\"\n\
+  echo \"For GPU acceleration, ensure NVIDIA drivers and CUDA are properly installed.\"\n\
+fi\n\
+\n\
 if command -v tmux >/dev/null 2>&1; then\n\
   if ! tmux has-session -t comfyui 2>/dev/null; then\n\
     tmux new -d -s comfyui \"source $CONDA_DIR/etc/profile.d/conda.sh && conda activate $ENV_NAME && python main.py --listen 0.0.0.0 --port $PORT\"\n\
