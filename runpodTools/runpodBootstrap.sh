@@ -196,12 +196,10 @@ for step in "${STEPS_TO_RUN[@]}"; do
   if ! bash "$STEP_SCRIPT"; then
     die "step failed: $step"
   fi
-  
-  echo
 done
 
 # Create bash aliases
-log "creating ~/.bash_aliases"
+log "==> creating ~/.bash_aliases"
 if [[ "$DRY_RUN" == "1" ]]; then
   echo "${DRY_PREFIX} echo 'alias d=\"ls -al\"' > ~/.bash_aliases"
 else
@@ -209,4 +207,4 @@ else
 fi
 
 log "==> bootstrap complete"
-log "log file: $LOGFILE"
+log "==> log file: $LOGFILE"

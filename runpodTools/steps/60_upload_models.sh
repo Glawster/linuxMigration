@@ -18,7 +18,6 @@ main() {
   log "...model upload instructions"
   
   cat <<'INFO'
-
 To upload models to this RunPod instance:
 
 1. Generate the uploadModels.sh script locally:
@@ -36,7 +35,6 @@ For ComfyUI, ensure you have these model types:
 - checkpoints (in models/checkpoints/)
 - loras (in models/loras/)
 - bbox models (in models/bbox/)
-
 INFO
   
   log "...upload models info displayed"
