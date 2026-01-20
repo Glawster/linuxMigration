@@ -248,6 +248,26 @@ done\n\
 log(){ echo -e \"\\n==> $*\\n\"; }\n\
 run(){ if [[ \"$DRY_RUN\" == \"1\" ]]; then echo \"\$DRY_PREFIX $*\"; else \"$@\"; fi }\n\
 \n\
+log \"template drift diagnostics\"\n\
+echo \"--- System Info ---\"\n\
+uname -a\n\
+echo\n\
+echo \"--- OS Release ---\"\n\
+cat /etc/os-release || true\n\
+echo\n\
+echo \"--- GPU Info ---\"\n\
+nvidia-smi || true\n\
+echo\n\
+echo \"--- Shell ---\"\n\
+echo \"shell=$SHELL\"\n\
+echo\n\
+echo \"--- Conda Environment Variables ---\"\n\
+env | grep -i conda || true\n\
+echo\n\
+echo \"--- Conda Config Files ---\"\n\
+ls -la /root/.condarc /etc/conda/.condarc 2>/dev/null || true\n\
+echo\n\
+\n\
 log \"checking gpu\"\n\
 if command -v nvidia-smi >/dev/null 2>&1; then run nvidia-smi || true; else echo \"WARNING: nvidia-smi not found\"; fi\n\
 \n\
@@ -280,6 +300,30 @@ if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
 else\n\
   # shellcheck disable=SC1090\n\
   source \"$CONDA_DIR/etc/profile.d/conda.sh\"\n\
+fi\n\
+\n\
+# configure conda for resilience\n\
+log \"configuring conda channels\"\n\
+if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
+  echo \"$DRY_PREFIX conda config --remove-key channels 2>/dev/null || true\"\n\
+  echo \"$DRY_PREFIX conda config --add channels conda-forge\"\n\
+  echo \"$DRY_PREFIX conda config --set channel_priority strict\"\n\
+else\n\
+  conda config --remove-key channels 2>/dev/null || true\n\
+  conda config --add channels conda-forge\n\
+  conda config --set channel_priority strict\n\
+fi\n\
+\n\
+# log conda configuration\n\
+log \"conda configuration\"\n\
+if [[ \"$DRY_RUN\" == \"1\" ]]; then\n\
+  echo \"$DRY_PREFIX conda info\"\n\
+  echo \"$DRY_PREFIX conda config --show channels\"\n\
+else\n\
+  conda info\n\
+  echo\n\
+  echo \"--- Conda Channels ---\"\n\
+  conda config --show channels\n\
 fi\n\
 \n\
 # accept conda ToS for anaconda channels\n\
