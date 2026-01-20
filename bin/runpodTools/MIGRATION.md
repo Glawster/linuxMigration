@@ -15,7 +15,7 @@ kohyaTools/
 
 ### New Structure
 ```
-kohyaTools/
+bin/
   runpod/
     lib/                 (reusable libraries)
     steps/               (modular step scripts)
@@ -34,14 +34,7 @@ kohyaTools/
 ### Now use:
 
 ```bash
-./kohyaTools/runpod/runpodFromSSH.sh ssh root@host -p 40023 -i ~/.ssh/key
-```
-
-Or continue using the old path (backward compatible wrappers provided):
-
-```bash
-./kohyaTools/runpodFromSSH.sh ssh root@host -p 40023 -i ~/.ssh/key
-# Shows deprecation notice, forwards to new script
+./bin/runpod/runpodFromSSH.sh ssh root@host -p 40023 -i ~/.ssh/key
 ```
 
 ## New Features
@@ -64,7 +57,7 @@ Or continue using the old path (backward compatible wrappers provided):
 
 ### 2. State Tracking
 
-Steps are tracked in `/workspace/runpod/state.env`. Rerunning won't reinstall everything:
+Steps are tracked in `/workspace/runpodTools/state.env`. Rerunning won't reinstall everything:
 
 ```bash
 # First run: installs everything
@@ -79,12 +72,12 @@ Steps are tracked in `/workspace/runpod/state.env`. Rerunning won't reinstall ev
 
 ### 3. Better Logging
 
-All output is logged to `/workspace/runpod/logs/bootstrap.TIMESTAMP.log`:
+All output is logged to `/workspace/runpodTools/logs/bootstrap.TIMESTAMP.log`:
 
 ```bash
 # On remote pod:
-ls -lrt /workspace/runpod/logs/
-tail -f /workspace/runpod/logs/bootstrap.*.log
+ls -lrt /workspace/runpodTools/logs/
+tail -f /workspace/runpodTools/logs/bootstrap.*.log
 ```
 
 ### 4. Dry Run
@@ -150,22 +143,22 @@ See what would happen without making changes:
 
 ```bash
 # On remote pod:
-rm /workspace/runpod/state.env
-bash /workspace/runpod/runpodBootstrap.sh
+rm /workspace/runpodTools/state.env
+bash /workspace/runpodTools/runpodBootstrap.sh
 ```
 
 ### Check Logs
 
 ```bash
 # On remote pod:
-tail -100 /workspace/runpod/logs/bootstrap.*.log
+tail -100 /workspace/runpodTools/logs/bootstrap.*.log
 ```
 
 ### Manual Step Execution
 
 ```bash
 # On remote pod:
-bash /workspace/runpod/steps/40_comfyui.sh
+bash /workspace/runpodTools/steps/40_comfyui.sh
 ```
 
 ## Benefits of New Structure
@@ -177,16 +170,6 @@ bash /workspace/runpod/steps/40_comfyui.sh
 5. **Testable**: Steps can be tested individually
 6. **Maintainable**: Changes isolated to specific files
 
-## Backward Compatibility
-
-The old script locations (`kohyaTools/runpodFromSSH.sh` and `kohyaTools/runpodBootstrap.sh`) remain as wrappers that:
-
-1. Show a deprecation notice
-2. Forward to the new modular scripts
-3. Work identically to the old scripts
-
-You can continue using the old paths, but we recommend migrating to the new paths.
-
 ## Need Help?
 
-See `kohyaTools/runpod/README.md` for full documentation.
+See `bin/runpod/README.md` for full documentation.

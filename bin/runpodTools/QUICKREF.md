@@ -45,16 +45,16 @@
 ./runpodFromSSH.sh --dry-run ssh root@HOST -p PORT -i KEY
 
 # On remote pod: check logs
-tail -100 /workspace/runpod/logs/bootstrap.*.log
+tail -100 /workspace/runpodTools/logs/bootstrap.*.log
 
 # On remote pod: check state
-cat /workspace/runpod/state.env
+cat /workspace/runpodTools/state.env
 
 # On remote pod: run single step
-bash /workspace/runpod/steps/40_comfyui.sh
+bash /workspace/runpodTools/steps/40_comfyui.sh
 
 # Reset state
-rm /workspace/runpod/state.env
+rm /workspace/runpodTools/state.env
 ```
 
 ## Common Scenarios
@@ -78,7 +78,7 @@ rm /workspace/runpod/state.env
 ```bash
 ./runpodFromSSH.sh --no-run ssh root@HOST -p PORT -i KEY
 # Then on remote:
-bash /workspace/runpod/runpodBootstrap.sh
+bash /workspace/runpodTools/runpodBootstrap.sh
 ```
 
 ### Upload Models
@@ -93,7 +93,7 @@ bash /workspace/runpod/runpodBootstrap.sh
 ### Start ComfyUI
 ```bash
 # On remote pod:
-bash /workspace/runpod/startComfyUI.sh 8188
+bash /workspace/runpodTools/startComfyUI.sh 8188
 tmux attach -t comfyui
 ```
 
@@ -101,11 +101,11 @@ tmux attach -t comfyui
 
 | Location | Purpose |
 |----------|---------|
-| `/workspace/runpod/` | Main directory (remote) |
-| `/workspace/runpod/lib/` | Library functions |
-| `/workspace/runpod/steps/` | Step scripts |
-| `/workspace/runpod/logs/` | Timestamped logs |
-| `/workspace/runpod/state.env` | Completion tracking |
+| `/workspace/runpodTools/` | Main directory (remote) |
+| `/workspace/runpodTools/lib/` | Library functions |
+| `/workspace/runpodTools/steps/` | Step scripts |
+| `/workspace/runpodTools/logs/` | Timestamped logs |
+| `/workspace/runpodTools/state.env` | Completion tracking |
 | `/workspace/ComfyUI/` | ComfyUI installation |
 | `/workspace/kohya_ss/` | Kohya SS installation |
 | `/workspace/miniconda3/` | Miniconda installation |
@@ -114,13 +114,13 @@ tmux attach -t comfyui
 
 ```bash
 # Show workspace inventory
-bash /workspace/runpod/lib/workspace.sh
+bash /workspace/runpodTools/lib/workspace.sh
 
 # Check connectivity
 ssh -p PORT -i KEY root@HOST "echo connected"
 
 # View recent logs
-ls -lrt /workspace/runpod/logs/
+ls -lrt /workspace/runpodTools/logs/
 
 # Kill ComfyUI
 tmux kill-session -t comfyui
@@ -138,8 +138,8 @@ conda activate runpod
 | SSH connection fails | Check port, host, and key |
 | Need to rerun specific step | Use `--only STEP` |
 | Want to see what will happen | Use `--dry-run` |
-| Step failed | Check logs in `/workspace/runpod/logs/` |
-| Reset everything | `rm /workspace/runpod/state.env` |
+| Step failed | Check logs in `/workspace/runpodTools/logs/` |
+| Reset everything | `rm /workspace/runpodTools/state.env` |
 
 ## All Options
 
@@ -174,9 +174,9 @@ conda activate runpod
 ```bash
 # Show help
 ./runpodFromSSH.sh --help
-bash /workspace/runpod/runpodBootstrap.sh --help
+bash /workspace/runpodTools/runpodBootstrap.sh --help
 
 # Read documentation
-cat kohyaTools/runpod/README.md
+cat bin/runpod/README.md
 cat kohyaTools/MIGRATION.md
 ```

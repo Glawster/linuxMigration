@@ -21,7 +21,7 @@ kohyaTools/
 
 ### After (Modular)
 ```
-kohyaTools/runpod/
+bin/runpod/
 ├── lib/                    # Reusable libraries
 │   ├── common.sh           (52 lines)
 │   ├── ssh.sh              (78 lines)
@@ -164,13 +164,13 @@ kohyaTools/runpod/
 ./runpodFromSSH.sh --only 40_comfyui ssh root@host -p PORT -i KEY
 
 # Or manually on remote:
-bash /workspace/runpod/steps/40_comfyui.sh
+bash /workspace/runpodTools/steps/40_comfyui.sh
 
 # Check logs:
-tail -100 /workspace/runpod/logs/bootstrap.*.log
+tail -100 /workspace/runpodTools/logs/bootstrap.*.log
 
 # Check state:
-cat /workspace/runpod/state.env
+cat /workspace/runpodTools/state.env
 ```
 
 ## Code Quality

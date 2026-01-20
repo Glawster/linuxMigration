@@ -2,37 +2,45 @@
 
 This directory contains a modular, idempotent bootstrap system for RunPod instances.
 
+**Note**: Run scripts from the `bin/` directory to maintain git repository context.
+
 ## Directory Structure
 
 ```
-runpod/
-  lib/                      # Reusable library functions
-    common.sh               # Logging, run, die, timestamp helpers
-    ssh.sh                  # SSH command builders, remote execution
-    apt.sh                  # APT package management
-    conda.sh                # Conda environment setup
-    git.sh                  # Git repository management (idempotent)
-    workspace.sh            # Common paths, state tracking
-    diagnostics.sh          # System diagnostics
-  steps/                    # Individual setup steps
-    10_diagnostics.sh       # System diagnostics
-    20_base_tools.sh        # Base system tools via apt
-    30_conda.sh             # Miniconda setup
-    40_comfyui.sh           # ComfyUI setup
-    50_kohya.sh             # Kohya SS setup
-    60_upload_models.sh     # Model upload instructions
-  logs/                     # Bootstrap logs (auto-created)
-  runpodBootstrap.sh        # Remote-side step runner
-  runpodFromSSH.sh          # Local-side orchestrator
-  startComfyUI.sh           # Start ComfyUI in tmux
-  generateUploadScript.sh   # Generate uploadModels.sh
+bin/
+  runpodFromSSH.sh          # Wrapper to run from bin directory
+  runpodBootstrap.sh        # Wrapper to run from bin directory
+  runpod/
+    lib/                      # Reusable library functions
+      common.sh               # Logging, run, die, timestamp helpers
+      ssh.sh                  # SSH command builders, remote execution
+      apt.sh                  # APT package management
+      conda.sh                # Conda environment setup
+      git.sh                  # Git repository management (idempotent)
+      workspace.sh            # Common paths, state tracking
+      diagnostics.sh          # System diagnostics
+    steps/                    # Individual setup steps
+      10_diagnostics.sh       # System diagnostics
+      20_base_tools.sh        # Base system tools via apt
+      30_conda.sh             # Miniconda setup
+      40_comfyui.sh           # ComfyUI setup
+      50_kohya.sh             # Kohya SS setup
+      60_upload_models.sh     # Model upload instructions
+    logs/                     # Bootstrap logs (auto-created)
+    runpodBootstrap.sh        # Remote-side step runner
+    runpodFromSSH.sh          # Local-side orchestrator
+    startComfyUI.sh           # Start ComfyUI in tmux
+    generateUploadScript.sh   # Generate uploadModels.sh
 ```
 
 ## Usage
 
-### Quick Start (from local machine)
+### Quick Start (from bin directory)
 
 ```bash
+# Change to bin directory
+cd bin
+
 # Basic setup with ComfyUI (default)
 ./runpodFromSSH.sh ssh root@HOST -p PORT -i ~/.ssh/id_ed25519
 
@@ -46,6 +54,7 @@ runpod/
 ### Advanced Usage
 
 ```bash
+# Change to bin directory first: cd bin
 # List available steps
 ./runpodFromSSH.sh --list ssh root@HOST -p PORT -i KEY
 
@@ -71,16 +80,16 @@ If you're already on the RunPod instance:
 
 ```bash
 # Run all steps
-bash /workspace/runpod/runpodBootstrap.sh
+bash /workspace/runpodTools/runpodBootstrap.sh
 
 # With options
-bash /workspace/runpod/runpodBootstrap.sh --kohya --force
+bash /workspace/runpodTools/runpodBootstrap.sh --kohya --force
 
 # List steps
-bash /workspace/runpod/runpodBootstrap.sh --list
+bash /workspace/runpodTools/runpodBootstrap.sh --list
 
 # Run specific step
-bash /workspace/runpod/runpodBootstrap.sh --only 40_comfyui
+bash /workspace/runpodTools/runpodBootstrap.sh --only 40_comfyui
 ```
 
 ## Features
@@ -90,12 +99,12 @@ bash /workspace/runpod/runpodBootstrap.sh --only 40_comfyui
 Each step checks if work is already done:
 - If desired state exists → skip
 - If exists but wrong → repair or move aside
-- State tracked in `/workspace/runpod/state.env`
+- State tracked in `/workspace/runpodTools/state.env`
 - Use `--force` to ignore state and rerun
 
 ### Smart Logging
 
-- All output tee'd to `/workspace/runpod/logs/bootstrap.TIMESTAMP.log`
+- All output tee'd to `/workspace/runpodTools/logs/bootstrap.TIMESTAMP.log`
 - Survives disconnects
 - Easy debugging
 
@@ -119,7 +128,7 @@ Each step is independent and can be:
 After bootstrap completes:
 
 ```bash
-bash /workspace/runpod/startComfyUI.sh 8188
+bash /workspace/runpodTools/startComfyUI.sh 8188
 ```
 
 Or from the bootstrap scripts (automatic when using `--comfyui`).
@@ -146,7 +155,7 @@ Or with custom model root:
 
 ## State File
 
-Located at `/workspace/runpod/state.env`, tracks completed steps:
+Located at `/workspace/runpodTools/state.env`, tracks completed steps:
 
 ```bash
 DONE_DIAGNOSTICS=1
@@ -208,20 +217,20 @@ fi
 ### Check logs
 
 ```bash
-ls -lrt /workspace/runpod/logs/
-tail -f /workspace/runpod/logs/bootstrap.LATEST.log
+ls -lrt /workspace/runpodTools/logs/
+tail -f /workspace/runpodTools/logs/bootstrap.LATEST.log
 ```
 
 ### Check state
 
 ```bash
-cat /workspace/runpod/state.env
+cat /workspace/runpodTools/state.env
 ```
 
 ### Reset state
 
 ```bash
-rm /workspace/runpod/state.env
+rm /workspace/runpodTools/state.env
 ```
 
 ### Dry run

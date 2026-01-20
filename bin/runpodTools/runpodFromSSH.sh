@@ -29,7 +29,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RUNPOD_DIR="$SCRIPT_DIR/runpod"
+RUNPOD_DIR="$SCRIPT_DIR/runpodTools"
 
 ENABLE_KOHYA=0
 ENABLE_COMFYUI=1
@@ -155,13 +155,13 @@ echo
 echo "copying runpod/ to remote..."
 
 if [[ "$DRY_RUN" == "1" ]]; then
-  echo "...[] would rsync $RUNPOD_DIR to ${TARGET}:/workspace/runpod/"
+  echo "...[] would rsync $RUNPOD_DIR to ${TARGET}:/workspace/runpodTools/"
 else
   # Use rsync if available, otherwise tar+ssh
   if command -v rsync >/dev/null 2>&1; then
     rsync -avz --delete \
       -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}" \
-      "$RUNPOD_DIR/" "$TARGET:/workspace/runpod/"
+      "$RUNPOD_DIR/" "$TARGET:/workspace/runpodTools/"
     echo "...rsync complete"
   else
     # Fallback: tar + ssh
@@ -176,7 +176,7 @@ echo
 if [[ "$LIST_STEPS" == "1" ]]; then
   echo "available steps on remote:"
   # shellcheck disable=SC2029
-  ssh "${SSH_OPTS[@]}" "$TARGET" "bash /workspace/runpod/runpodBootstrap.sh --list"
+  ssh "${SSH_OPTS[@]}" "$TARGET" "bash /workspace/runpodTools/runpodBootstrap.sh --list"
   exit 0
 fi
 
@@ -209,13 +209,13 @@ if [[ "$RUN_REMOTE" == "1" ]]; then
   echo "running remote bootstrap..."
   
   if [[ "$DRY_RUN" == "1" ]]; then
-    echo "...[] would run: ssh ${SSH_OPTS[*]} ${TARGET} bash /workspace/runpod/runpodBootstrap.sh ${REMOTE_ARGS[*]}"
+    echo "...[] would run: ssh ${SSH_OPTS[*]} ${TARGET} bash /workspace/runpodTools/runpodBootstrap.sh ${REMOTE_ARGS[*]}"
   else
     # shellcheck disable=SC2029
-    ssh "${SSH_OPTS[@]}" "$TARGET" "bash /workspace/runpod/runpodBootstrap.sh ${REMOTE_ARGS[*]}"
+    ssh "${SSH_OPTS[@]}" "$TARGET" "bash /workspace/runpodTools/runpodBootstrap.sh ${REMOTE_ARGS[*]}"
   fi
 else
   echo "remote scripts copied. to run manually:"
   echo "  ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY} ${TARGET}"
-  echo "  bash /workspace/runpod/runpodBootstrap.sh ${REMOTE_ARGS[*]}"
+  echo "  bash /workspace/runpodTools/runpodBootstrap.sh ${REMOTE_ARGS[*]}"
 fi
