@@ -27,6 +27,9 @@
 # Example:
 #   ./runpodBootstrap.sh root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
 #
+# Generate uploadModels.sh script only:
+#   ./runpodBootstrap.sh --write-upload-script
+#
 # Dry run (validate command / connectivity):
 #   ./runpodBootstrap.sh --dry-run root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
 
@@ -490,11 +493,17 @@ set -euo pipefail
 
 DRY_RUN=0
 DRY_PREFIX="[]"
+MODEL_ROOT=""
 
-if [[ "${1:-}" == "--dry-run" ]]; then
-  DRY_RUN=1
-  shift
-fi
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run) DRY_RUN=1; shift ;;
+    --model-root) MODEL_ROOT="$2"; shift 2 ;;
+    ssh) break ;;
+    *) echo "ERROR: unexpected arg before ssh: $1"; exit 1 ;;
+  esac
+done
 
 if [[ "${1:-}" != "ssh" ]]; then
   echo "ERROR: expected ssh command"
