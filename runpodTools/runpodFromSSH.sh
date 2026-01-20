@@ -151,34 +151,59 @@ else
 fi
 echo
 
-# Copy runpod folder to remote
+# Install base tools first (includes rsync)
+echo "installing base tools on remote..."
+
+if [[ "$DRY_RUN" == "1" ]]; then
+  echo "...[] would install base tools"
+else
+  # Run apt-get update and install essential packages including rsync
+  ssh "${SSH_OPTS[@]}" "$TARGET" 'bash -s' <<'INSTALL_BASE_TOOLS'
+set -euo pipefail
+
+# Set environment for non-interactive apt
+export DEBIAN_FRONTEND=noninteractive
+export TZ=Etc/UTC
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+
+echo "...updating apt"
+apt-get update -y >/dev/null 2>&1
+
+echo "...installing base packages"
+apt-get install -y \
+  git \
+  wget \
+  rsync \
+  tmux \
+  htop \
+  unzip \
+  build-essential \
+  python3-venv \
+  python3-pip \
+  ca-certificates \
+  vim >/dev/null 2>&1
+
+echo "...base tools installed"
+INSTALL_BASE_TOOLS
+fi
+echo
+
+# Copy runpod folder to remote (rsync is now available)
 echo "copying runpodTools/ to remote..."
 
 if [[ "$DRY_RUN" == "1" ]]; then
-  echo "...[] would copy $RUNPOD_DIR to ${TARGET}:/workspace/runpodTools/"
+  echo "...[] would rsync $RUNPOD_DIR to ${TARGET}:/workspace/runpodTools/"
 else
-  # Check if rsync is available on both local and remote
-  HAS_LOCAL_RSYNC=0
-  HAS_REMOTE_RSYNC=0
-  
+  # Use rsync (now installed on remote)
   if command -v rsync >/dev/null 2>&1; then
-    HAS_LOCAL_RSYNC=1
-  fi
-  
-  if ssh "${SSH_OPTS[@]}" "$TARGET" "command -v rsync" >/dev/null 2>&1; then
-    HAS_REMOTE_RSYNC=1
-  fi
-  
-  # Use rsync if available on both sides, otherwise tar+ssh
-  if [[ "$HAS_LOCAL_RSYNC" == "1" && "$HAS_REMOTE_RSYNC" == "1" ]]; then
-    echo "...using rsync"
     rsync -avz --delete \
       -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}" \
       "$RUNPOD_DIR/" "$TARGET:/workspace/runpodTools/"
     echo "...rsync complete"
   else
-    # Fallback: tar + ssh (doesn't require rsync on either end)
-    echo "...using tar+ssh (rsync not available on remote)"
+    # Fallback if rsync not on local (unlikely)
+    echo "...using tar+ssh (rsync not available locally)"
     tar czf - -C "$(dirname "$RUNPOD_DIR")" runpodTools | \
       ssh "${SSH_OPTS[@]}" "$TARGET" "cd /workspace && tar xzf -"
     echo "...tar transfer complete"
@@ -214,6 +239,8 @@ fi
 if [[ -n "$ONLY_STEP" ]]; then
   REMOTE_ARGS+=(--only "$ONLY_STEP")
 fi
+# Skip base_tools since we already installed it
+REMOTE_ARGS+=(--skip "20_base_tools")
 for skip_step in "${SKIP_STEPS[@]}"; do
   REMOTE_ARGS+=(--skip "$skip_step")
 done
