@@ -10,6 +10,8 @@ LIB_DIR="$(dirname "$SCRIPT_DIR")/lib"
 # shellcheck disable=SC1091
 source "$LIB_DIR/common.sh"
 # shellcheck disable=SC1091
+source "$LIB_DIR/ssh.sh"
+# shellcheck disable=SC1091
 source "$LIB_DIR/apt.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/workspace.sh"

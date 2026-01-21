@@ -10,6 +10,8 @@ LIB_DIR="$(dirname "$SCRIPT_DIR")/lib"
 # shellcheck disable=SC1091
 source "$LIB_DIR/common.sh"
 # shellcheck disable=SC1091
+source "$LIB_DIR/ssh.sh"
+# shellcheck disable=SC1091
 source "$LIB_DIR/git.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/conda.sh"
@@ -47,7 +49,8 @@ main() {
       req_files="$req_files $COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
     fi
     echo "${DRY_PREFIX:-...[]} pip install -r $req_files"
-  else
+  elif [[ -z "${SSH_TARGET:-}" ]]; then
+    # Local execution
     python -m pip install --upgrade pip wheel
     pip install torch torchvision torchaudio --index-url "$torch_index"
     
@@ -60,6 +63,26 @@ main() {
     
     # Verify CUDA
     python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
+  else
+    # Remote execution
+    runRemoteHeredoc <<EOF
+source "$CONDA_DIR/etc/profile.d/conda.sh"
+conda activate "$ENV_NAME"
+
+python -m pip install --upgrade pip wheel
+pip install torch torchvision torchaudio --index-url "$torch_index"
+
+# Install ComfyUI requirements
+pip install -r "$COMFY_DIR/requirements.txt"
+
+# Install ComfyUI-Manager requirements if they exist
+if [ -f "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt" ]; then
+  pip install -r "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
+fi
+
+# Verify CUDA
+python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
+EOF
   fi
   
   markStepDone "COMFYUI"

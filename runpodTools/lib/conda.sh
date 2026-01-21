@@ -6,16 +6,36 @@
 ensureMiniconda() {
   local conda_dir="${1:-/workspace/miniconda3}"
   
-  if [[ -x "$conda_dir/bin/conda" ]]; then
-    log "...miniconda already installed at $conda_dir"
-    return 0
+  # Check if conda already exists
+  if [[ -z "${SSH_TARGET:-}" ]]; then
+    # Local check
+    if [[ -x "$conda_dir/bin/conda" ]]; then
+      log "...miniconda already installed at $conda_dir"
+      return 0
+    fi
+  else
+    # Remote check
+    if runRemote "$SSH_TARGET" "test -x '$conda_dir/bin/conda'" 2>/dev/null; then
+      log "...miniconda already installed on remote at $conda_dir"
+      return 0
+    fi
   fi
   
   log "installing miniconda to $conda_dir"
   
-  run wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh
-  run bash /tmp/miniconda.sh -b -p "$conda_dir"
-  run rm -f /tmp/miniconda.sh
+  if [[ -z "${SSH_TARGET:-}" ]]; then
+    # Local execution
+    run wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh
+    run bash /tmp/miniconda.sh -b -p "$conda_dir"
+    run rm -f /tmp/miniconda.sh
+  else
+    # Remote execution
+    runRemoteHeredoc <<EOF
+wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh
+bash /tmp/miniconda.sh -b -p "$conda_dir"
+rm -f /tmp/miniconda.sh
+EOF
+  fi
   
   log "...miniconda installed"
 }
@@ -30,13 +50,25 @@ ensureCondaChannels() {
     echo "${DRY_PREFIX:-...[]} conda config --remove-key channels"
     echo "${DRY_PREFIX:-...[]} conda config --add channels conda-forge"
     echo "${DRY_PREFIX:-...[]} conda config --set channel_priority strict"
-  else
+    return 0
+  fi
+  
+  if [[ -z "${SSH_TARGET:-}" ]]; then
+    # Local execution
     # shellcheck disable=SC1090
     source "$conda_dir/etc/profile.d/conda.sh"
     
     conda config --remove-key channels 2>/dev/null || true
     conda config --add channels conda-forge
     conda config --set channel_priority strict
+  else
+    # Remote execution
+    runRemoteHeredoc <<EOF
+source "$conda_dir/etc/profile.d/conda.sh"
+conda config --remove-key channels 2>/dev/null || true
+conda config --add channels conda-forge
+conda config --set channel_priority strict
+EOF
   fi
   
   log "...channels configured"
@@ -50,12 +82,23 @@ acceptCondaTos() {
   
   if [[ "${DRY_RUN:-0}" == "1" ]]; then
     echo "${DRY_PREFIX:-...[]} conda tos accept"
-  else
+    return 0
+  fi
+  
+  if [[ -z "${SSH_TARGET:-}" ]]; then
+    # Local execution
     # shellcheck disable=SC1090
     source "$conda_dir/etc/profile.d/conda.sh"
     
     conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main 2>/dev/null || true
     conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 2>/dev/null || true
+  else
+    # Remote execution
+    runRemoteHeredoc <<EOF
+source "$conda_dir/etc/profile.d/conda.sh"
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main 2>/dev/null || true
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 2>/dev/null || true
+EOF
   fi
 }
 
@@ -70,19 +113,38 @@ ensureCondaEnv() {
     return 0
   fi
   
-  # shellcheck disable=SC1090
-  source "$conda_dir/etc/profile.d/conda.sh"
-  
-  if conda env list | awk '{print $1}' | grep -qx "$env_name"; then
-    log "...conda environment exists: $env_name"
+  if [[ -z "${SSH_TARGET:-}" ]]; then
+    # Local execution
+    # shellcheck disable=SC1090
+    source "$conda_dir/etc/profile.d/conda.sh"
+    
+    if conda env list | awk '{print $1}' | grep -qx "$env_name"; then
+      log "...conda environment exists: $env_name"
+    else
+      log "creating conda environment: $env_name"
+      conda create -n "$env_name" python="$python_version" -y
+      log "...environment created"
+    fi
+    
+    conda activate "$env_name"
+    log "...activated conda environment: $env_name"
   else
-    log "creating conda environment: $env_name"
-    run conda create -n "$env_name" python="$python_version" -y
-    log "...environment created"
+    # Remote execution
+    runRemoteHeredoc <<EOF
+source "$conda_dir/etc/profile.d/conda.sh"
+
+if conda env list | awk '{print \$1}' | grep -qx "$env_name"; then
+  echo "...conda environment exists: $env_name"
+else
+  echo "creating conda environment: $env_name"
+  conda create -n "$env_name" python="$python_version" -y
+  echo "...environment created"
+fi
+
+conda activate "$env_name"
+echo "...activated conda environment: $env_name"
+EOF
   fi
-  
-  conda activate "$env_name"
-  log "...activated conda environment: $env_name"
 }
 
 # Activate conda environment
@@ -96,7 +158,13 @@ activateCondaEnv() {
     return 0
   fi
   
-  # shellcheck disable=SC1090
-  source "$conda_dir/etc/profile.d/conda.sh"
-  conda activate "$env_name"
+  if [[ -z "${SSH_TARGET:-}" ]]; then
+    # Local execution
+    # shellcheck disable=SC1090
+    source "$conda_dir/etc/profile.d/conda.sh"
+    conda activate "$env_name"
+  else
+    # Remote execution - just log it, actual activation happens in the remote shell
+    log "...will activate conda environment $env_name on remote"
+  fi
 }

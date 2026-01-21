@@ -14,10 +14,24 @@ buildSshOpts() {
   fi
 }
 
+# Execute command (locally or remotely depending on SSH_TARGET)
+# This is the key function that enables transparent local/remote execution
+runCmd() {
+  if [[ -z "${SSH_TARGET:-}" ]]; then
+    # Local execution
+    run "$@"
+  else
+    # Remote execution
+    runRemote "$SSH_TARGET" "$@"
+  fi
+}
+
 # Run command on remote host
 runRemote() {
   local target="$1"
   shift
+  
+  buildSshOpts
   
   if [[ "${DRY_RUN:-0}" == "1" ]]; then
     echo "${DRY_PREFIX:-...[]} ssh ${SSH_OPTS[*]} ${target} $*"
@@ -28,11 +42,28 @@ runRemote() {
   ssh "${SSH_OPTS[@]}" "$target" "$@"
 }
 
+# Execute multi-line command on remote via heredoc
+runRemoteHeredoc() {
+  local target="${SSH_TARGET}"
+  
+  buildSshOpts
+  
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo "${DRY_PREFIX:-...[]} would ssh with heredoc to ${target}"
+    cat
+    return 0
+  fi
+  
+  ssh "${SSH_OPTS[@]}" "$target" 'bash -s'
+}
+
 # Copy file to remote using rsync with fallback to scp
 copyToRemote() {
   local src="$1"
   local target="$2"
   local dst="$3"
+  
+  buildSshOpts
   
   if [[ "${DRY_RUN:-0}" == "1" ]]; then
     echo "${DRY_PREFIX:-...[]} rsync/scp $src -> ${target}:${dst}"
@@ -42,7 +73,7 @@ copyToRemote() {
   # Try rsync first
   if isCommand rsync; then
     rsync -avP --partial --inplace --no-perms --no-owner --no-group \
-      -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}" \
+      -e "ssh -p ${SSH_PORT:-22} ${SSH_IDENTITY:+-i $SSH_IDENTITY}" \
       "$src" "$target:$dst/"
   else
     # Fallback to scp
@@ -55,6 +86,8 @@ writeRemoteFile() {
   local target="$1"
   local remote_path="$2"
   local content="$3"
+  
+  buildSshOpts
   
   if [[ "${DRY_RUN:-0}" == "1" ]]; then
     echo "${DRY_PREFIX:-...[]} would write remote file: ${remote_path}"
@@ -74,12 +107,46 @@ chmod +x ${remote_path}
 checkSshConnectivity() {
   local target="$1"
   
+  buildSshOpts
   log "checking ssh connectivity..."
   
   if ssh "${SSH_OPTS[@]}" "$target" "echo connected && uname -a" >/dev/null 2>&1; then
     log "...connected"
     return 0
   else
-    die "could not connect to ${target}:${SSH_PORT}"
+    die "could not connect to ${target}:${SSH_PORT:-22}"
+  fi
+}
+
+# Check if command exists (local or remote)
+checkCommand() {
+  local cmd="$1"
+  
+  if [[ -z "${SSH_TARGET:-}" ]]; then
+    isCommand "$cmd"
+  else
+    runRemote "$SSH_TARGET" "command -v $cmd" >/dev/null 2>&1
+  fi
+}
+
+# Check if directory exists (local or remote)
+checkDir() {
+  local dir="$1"
+  
+  if [[ -z "${SSH_TARGET:-}" ]]; then
+    [[ -d "$dir" ]]
+  else
+    runRemote "$SSH_TARGET" "test -d '$dir'" >/dev/null 2>&1
+  fi
+}
+
+# Check if file exists (local or remote)
+checkFile() {
+  local file="$1"
+  
+  if [[ -z "${SSH_TARGET:-}" ]]; then
+    [[ -f "$file" ]]
+  else
+    runRemote "$SSH_TARGET" "test -f '$file'" >/dev/null 2>&1
   fi
 }
