@@ -30,6 +30,50 @@ runpodTools/
 
 ## Usage
 
+### Execution Modes
+
+This system supports two execution modes:
+
+#### Mode 1: Remote Execution via SSH (Recommended)
+
+Run the bootstrap script **locally on your machine** and execute all commands on the remote RunPod instance via SSH as root:
+
+```bash
+./runpodTools/runpodFromSSH.sh ssh root@HOST -p PORT -i ~/.ssh/id_ed25519
+```
+
+**How it works:**
+- Your local machine orchestrates the setup
+- All commands (apt, git, conda, pip) execute on the remote RunPod instance via SSH
+- Libraries transparently detect SSH_TARGET and use remote execution
+- No files need to be copied to the remote instance
+- Safe to disconnect and reconnect (logs preserved on remote)
+
+**Benefits:**
+- Control from your local machine
+- No need to manage scripts on the remote instance
+- Can monitor progress locally
+- Easy to rerun or modify steps
+
+#### Mode 2: Direct Local Execution
+
+Run the bootstrap script **directly on the RunPod instance**:
+
+```bash
+bash /workspace/runpodTools/runpodBootstrap.sh
+```
+
+**How it works:**
+- SSH into the RunPod instance first
+- Run the script directly on the remote machine
+- All commands execute locally on the instance
+- SSH_TARGET is not set, so libraries use local execution
+
+**When to use:**
+- Already have SSH access and prefer running directly
+- Debugging or testing individual steps
+- Don't want to maintain SSH connection from local machine
+
 ### Quick Start
 
 ```bash
