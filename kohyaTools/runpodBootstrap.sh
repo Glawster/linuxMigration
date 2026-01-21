@@ -271,6 +271,11 @@ echo\n\
 log \"checking gpu\"\n\
 if command -v nvidia-smi >/dev/null 2>&1; then run nvidia-smi || true; else echo \"WARNING: nvidia-smi not found\"; fi\n\
 \n\
+log \"cleaning apt locks\"\n\
+rm -f /var/lib/apt/lists/lock 2>/dev/null || true\n\
+rm -f /var/cache/apt/archives/lock 2>/dev/null || true\n\
+rm -f /var/lib/dpkg/lock* 2>/dev/null || true\n\
+\n\
 log \"ensuring base tools\"\n\
 if command -v apt-get >/dev/null 2>&1; then\n\
   run apt-get update -y\n\
