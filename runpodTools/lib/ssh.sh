@@ -72,8 +72,14 @@ copyToRemote() {
   
   # Try rsync first
   if isCommand rsync; then
+    # Build rsync SSH command from SSH_OPTS
+    local rsync_ssh="ssh"
+    for opt in "${SSH_OPTS[@]}"; do
+      rsync_ssh="$rsync_ssh $opt"
+    done
+    
     rsync -avP --partial --inplace --no-perms --no-owner --no-group \
-      -e "ssh -p ${SSH_PORT:-22} ${SSH_IDENTITY:+-i $SSH_IDENTITY}" \
+      -e "$rsync_ssh" \
       "$src" "$target:$dst/"
   else
     # Fallback to scp

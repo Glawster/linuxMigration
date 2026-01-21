@@ -24,7 +24,9 @@ ensureGitRepo() {
     
     # If directory exists but not a git repo, move aside
     if [[ -d "$dir" ]]; then
-      moveAside "$dir"
+      local backup="${dir}.backup.$(timestamp)"
+      warn "Moving aside: $dir -> $backup"
+      run mv "$dir" "$backup"
     fi
     
     # Clone the repo
