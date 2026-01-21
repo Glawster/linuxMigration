@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # steps/60_upload_models.sh
-# Instructions for uploading models (informational step)
+# Generate uploadModels.sh script for model uploads
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$(dirname "$SCRIPT_DIR")/lib"
+RUNPOD_TOOLS_DIR="$(dirname "$SCRIPT_DIR")"
 
 # shellcheck disable=SC1091
 source "$LIB_DIR/common.sh"
@@ -15,29 +16,31 @@ source "$LIB_DIR/workspace.sh"
 main() {
   log "step: upload models"
   
-  log "...model upload instructions"
+  log "generating uploadModels.sh script"
   
-  cat <<'INFO'
-To upload models to this RunPod instance:
+  # Generate the upload script
+  local GENERATE_SCRIPT="${RUNPOD_TOOLS_DIR}/generateUploadScript.sh"
+  local OUTPUT_FILE="${RUNPOD_TOOLS_DIR}/uploadModels.sh"
+  
+  if [[ -f "$GENERATE_SCRIPT" ]]; then
+    "$GENERATE_SCRIPT" "$OUTPUT_FILE"
+    log "uploadModels.sh created at: $OUTPUT_FILE"
+    
+    cat <<'INFO'
 
-1. Generate the uploadModels.sh script locally:
-   ./runpodBootstrap.sh --upload
-
-2. Run the upload script with your connection details:
-   ./uploadModels.sh ssh user@host -p PORT -i KEY
-
-3. Or use rsync directly:
-   rsync -avP --partial --inplace --ignore-existing \
-     -e "ssh -p PORT -i ~/.ssh/KEY" \
-     models/ user@host:/workspace/ComfyUI/models/
+To upload models to this RunPod instance, run:
+   ./runpodTools/uploadModels.sh ssh user@host -p PORT -i KEY
 
 For ComfyUI, ensure you have these model types:
 - checkpoints (in models/checkpoints/)
 - loras (in models/loras/)
 - bbox models (in models/bbox/)
 INFO
+  else
+    warn "generateUploadScript.sh not found at: $GENERATE_SCRIPT"
+  fi
   
-  log "...upload models info displayed"
+  log "upload models step complete"
 }
 
 # Run if executed directly

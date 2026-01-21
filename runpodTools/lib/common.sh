@@ -4,7 +4,7 @@
 
 # Logging functions
 log() {
-  echo -e "\n...$*\n"
+  echo -e "\n$*...\n"
 }
 
 warn() {

@@ -186,7 +186,7 @@ main() {
   # Do work here
   
   markStepDone "STEPNAME"
-  log "...done"
+  log "done"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
