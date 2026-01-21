@@ -4,15 +4,15 @@
 
 # Logging functions
 log() {
-  echo -e "\n$*...\n"
+  echo -e "$*...\n"
 }
 
 warn() {
-  echo -e "\nWARNING: $*\n" >&2
+  echo -e "WARNING: $*\n" >&2
 }
 
 error() {
-  echo -e "\nERROR: $*\n" >&2
+  echo -e "ERROR: $*\n" >&2
 }
 
 die() {
