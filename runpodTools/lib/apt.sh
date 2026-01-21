@@ -17,6 +17,12 @@ ensureAptPackages() {
   export LANG=C.UTF-8
   export LC_ALL=C.UTF-8
   
+  # Clean apt locks before update
+  log "cleaning apt locks"
+  rm -f /var/lib/apt/lists/lock 2>/dev/null || true
+  rm -f /var/cache/apt/archives/lock 2>/dev/null || true
+  rm -f /var/lib/dpkg/lock* 2>/dev/null || true
+  
   run apt-get update -y
   run apt-get install -y \
     git \
