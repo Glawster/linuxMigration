@@ -176,10 +176,10 @@ source "$LIB_DIR/common.sh"
 source "$LIB_DIR/workspace.sh"
 
 main() {
-  log "==> step: stepname"
+  log "step: stepname"
   
   if isStepDone "STEPNAME" && [[ "${FORCE:-0}" != "1" ]]; then
-    log "...already done"
+    log "already done"
     return 0
   fi
   

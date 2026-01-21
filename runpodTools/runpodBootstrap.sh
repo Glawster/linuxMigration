@@ -112,7 +112,7 @@ fi
 export WORKSPACE_ROOT RUNPOD_DIR CONDA_DIR COMFY_DIR KOHYA_DIR WORKFLOWS_DIR
 export ENV_NAME STATE_FILE
 
-log "==> runpod bootstrap (modular)"
+log "runpod bootstrap (modular)"
 echo "comfyui : $ENABLE_COMFYUI"
 echo "kohya   : $ENABLE_KOHYA"
 echo "dry run : $DRY_RUN"
