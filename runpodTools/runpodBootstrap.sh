@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# runpodBootstrap.sh (modular version)
+# runpodBootstrap.sh (modular version - LOCAL EXECUTION)
 #
-# Remote-side bootstrap that runs on the RunPod instance.
+# Local-side bootstrap that runs on YOUR MACHINE.
+# Uses SSH to execute commands on the remote RunPod instance.
 # Uses the step runner pattern to execute modular steps.
 #
 # Usage:

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # runpodFromSSH.sh (modular version)
 #
-# Local helper that:
+# Local orchestrator that:
 # - Parses SSH connection details
-# - Copies the runpod/ folder to the remote host
-# - Executes the remote bootstrap script
+# - Executes all commands on remote via SSH from local
+# - No files copied to remote (all scripts stay local)
 #
 # Usage:
 #   ./runpodFromSSH.sh [options] ssh user@host -p PORT -i KEY
@@ -12,7 +12,6 @@
 # Options:
 #   --kohya          enable kohya setup
 #   --no-comfyui     disable comfyui setup
-#   --no-run         only copy files, don't execute bootstrap
 #   --dry-run        dry run mode (show what would be done)
 #   --force          force rerun of all steps
 #   --from STEP      start from specific step
@@ -33,7 +32,6 @@ RUNPOD_DIR="$SCRIPT_DIR"
 
 ENABLE_KOHYA=0
 ENABLE_COMFYUI=1
-RUN_REMOTE=1
 DRY_RUN=0
 FORCE=0
 FROM_STEP=""
@@ -42,7 +40,7 @@ SKIP_STEPS=()
 LIST_STEPS=0
 
 usage() {
-  sed -n '2,25p' "$0"
+  sed -n '2,23p' "$0"
   exit 0
 }
 
@@ -51,7 +49,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --kohya) ENABLE_KOHYA=1; shift ;;
     --no-comfyui) ENABLE_COMFYUI=0; shift ;;
-    --no-run) RUN_REMOTE=0; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --force) FORCE=1; shift ;;
     --from)
@@ -124,7 +121,6 @@ echo "target      : ${TARGET}:${SSH_PORT}"
 echo "identity    : ${SSH_IDENTITY:-<default>}"
 echo "comfyui     : ${ENABLE_COMFYUI}"
 echo "kohya       : ${ENABLE_KOHYA}"
-echo "run remote  : ${RUN_REMOTE}"
 echo "dry run     : ${DRY_RUN}"
 echo "force       : ${FORCE}"
 if [[ -n "$FROM_STEP" ]]; then
@@ -151,112 +147,43 @@ else
 fi
 echo
 
-# Install base tools first (includes rsync)
-echo "installing base tools on remote..."
-
-if [[ "$DRY_RUN" == "1" ]]; then
-  echo "...[] would install base tools"
-else
-  # Run apt-get update and install essential packages including rsync
-  ssh "${SSH_OPTS[@]}" "$TARGET" 'bash -s' <<'INSTALL_BASE_TOOLS'
-set -euo pipefail
-
-# Set environment for non-interactive apt
-export DEBIAN_FRONTEND=noninteractive
-export TZ=Etc/UTC
-export LANG=C.UTF-8
-export LC_ALL=C.UTF-8
-
-echo "...updating apt"
-apt-get update -y >/dev/null 2>&1
-
-echo "...installing base packages"
-apt-get install -y \
-  git \
-  wget \
-  rsync \
-  tmux \
-  htop \
-  unzip \
-  build-essential \
-  python3-venv \
-  python3-pip \
-  ca-certificates \
-  vim >/dev/null 2>&1
-
-echo "...base tools installed"
-INSTALL_BASE_TOOLS
-fi
-echo
-
-# Copy runpod folder to remote (rsync is now available)
-echo "copying runpodTools/ to remote..."
-
-if [[ "$DRY_RUN" == "1" ]]; then
-  echo "...[] would rsync $RUNPOD_DIR to ${TARGET}:/workspace/runpodTools/"
-else
-  # Use rsync (now installed on remote)
-  if command -v rsync >/dev/null 2>&1; then
-    rsync -avz --delete --no-owner --no-group \
-      -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}" \
-      "$RUNPOD_DIR/" "$TARGET:/workspace/runpodTools/"
-    echo "...rsync complete"
-  else
-    # Fallback if rsync not on local (unlikely)
-    echo "...using tar+ssh (rsync not available locally)"
-    tar czf - -C "$(dirname "$RUNPOD_DIR")" "$(basename "$RUNPOD_DIR")" | \
-      ssh "${SSH_OPTS[@]}" "$TARGET" "cd /workspace && tar xzf -"
-    echo "...tar transfer complete"
-  fi
-fi
-echo
-
-# Handle --list (run remote list and exit)
+# Handle --list 
 if [[ "$LIST_STEPS" == "1" ]]; then
-  echo "available steps on remote:"
-  # shellcheck disable=SC2029
-  ssh "${SSH_OPTS[@]}" "$TARGET" "bash /workspace/runpodTools/runpodBootstrap.sh --list"
+  # Run local runpodBootstrap.sh to list steps
+  "$RUNPOD_DIR/runpodBootstrap.sh" --list
   exit 0
 fi
 
-# Build remote arguments
-REMOTE_ARGS=()
+# Build bootstrap arguments for local execution
+BOOTSTRAP_ARGS=()
 if [[ "$ENABLE_KOHYA" == "1" ]]; then
-  REMOTE_ARGS+=(--kohya)
+  BOOTSTRAP_ARGS+=(--kohya)
 fi
 if [[ "$ENABLE_COMFYUI" == "0" ]]; then
-  REMOTE_ARGS+=(--no-comfyui)
+  BOOTSTRAP_ARGS+=(--no-comfyui)
 fi
 if [[ "$DRY_RUN" == "1" ]]; then
-  REMOTE_ARGS+=(--dry-run)
+  BOOTSTRAP_ARGS+=(--dry-run)
 fi
 if [[ "$FORCE" == "1" ]]; then
-  REMOTE_ARGS+=(--force)
+  BOOTSTRAP_ARGS+=(--force)
 fi
 if [[ -n "$FROM_STEP" ]]; then
-  REMOTE_ARGS+=(--from "$FROM_STEP")
+  BOOTSTRAP_ARGS+=(--from "$FROM_STEP")
 fi
 if [[ -n "$ONLY_STEP" ]]; then
-  REMOTE_ARGS+=(--only "$ONLY_STEP")
+  BOOTSTRAP_ARGS+=(--only "$ONLY_STEP")
 fi
-# Skip base_tools since we already installed it
-REMOTE_ARGS+=(--skip "20_base_tools")
 for skip_step in "${SKIP_STEPS[@]}"; do
-  REMOTE_ARGS+=(--skip "$skip_step")
+  BOOTSTRAP_ARGS+=(--skip "$skip_step")
 done
 
-# Execute remote bootstrap
-if [[ "$RUN_REMOTE" == "1" ]]; then
-  echo "running remote bootstrap..."
-  
-  if [[ "$DRY_RUN" == "1" ]]; then
-    echo "...[] would run: ssh ${SSH_OPTS[*]} ${TARGET} bash /workspace/runpodTools/runpodBootstrap.sh ${REMOTE_ARGS[*]}"
-  else
-    # shellcheck disable=SC2029
-    ssh "${SSH_OPTS[@]}" "$TARGET" "bash /workspace/runpodTools/runpodBootstrap.sh ${REMOTE_ARGS[*]}"
-  fi
-else
-  echo "remote scripts copied. to run manually:"
-  echo "  ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY} ${TARGET}"
-  echo "  bash /workspace/runpodTools/runpodBootstrap.sh ${REMOTE_ARGS[*]}"
-fi
+# Export SSH connection details for steps to use
+export SSH_TARGET="$TARGET"
+export SSH_PORT
+export SSH_IDENTITY
+export SSH_OPTS_STR="${SSH_OPTS[*]}"
+
+# Run runpodBootstrap.sh LOCALLY (it will SSH to remote for each command)
+echo "running bootstrap locally (executing commands on remote via SSH)..."
+"$RUNPOD_DIR/runpodBootstrap.sh" "${BOOTSTRAP_ARGS[@]}"
