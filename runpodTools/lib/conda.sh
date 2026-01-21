@@ -133,7 +133,7 @@ ensureCondaEnv() {
     runRemoteHeredoc <<EOF
 source "$conda_dir/etc/profile.d/conda.sh"
 
-if conda env list | awk '{print \$1}' | grep -qx "$env_name"; then
+if conda env list | awk '{print \\$1}' | grep -qx "$env_name"; then
   echo "...conda environment exists: $env_name"
 else
   echo "creating conda environment: $env_name"

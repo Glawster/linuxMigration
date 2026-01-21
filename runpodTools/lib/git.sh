@@ -31,7 +31,8 @@ ensureGitRepo() {
     log "...cloning: $url -> $dir"
     run git clone "$url" "$dir"
   else
-    # Remote execution via SSH
+    # Remote execution
+    # Check if it's a valid git repo
     if runRemote "$SSH_TARGET" "test -d '$dir/.git'" 2>/dev/null; then
       log "...repo exists on remote, pulling: $dir"
       runRemote "$SSH_TARGET" "cd '$dir' && git fetch --all --prune 2>/dev/null || true && git pull --ff-only 2>/dev/null || true"
@@ -40,7 +41,7 @@ ensureGitRepo() {
     
     # If directory exists but not a git repo, move aside
     if runRemote "$SSH_TARGET" "test -d '$dir'" 2>/dev/null; then
-      local backup="${dir}.backup.$(timestamp)"
+      local backup="${dir}.backup.$(date +%Y%m%d_%H%M%S)"
       warn "Moving aside on remote: $dir -> $backup"
       runRemote "$SSH_TARGET" "mv '$dir' '$backup'"
     fi
