@@ -16,17 +16,20 @@ source "$LIB_DIR/workspace.sh"
 main() {
   log "step: upload models"
   
-  log "generating uploadModels.sh script"
+  log "generating uploadModels.sh script..."
   
-  # Generate the upload script
+  # Generate the upload script in the LOCAL runpodTools directory
   local GENERATE_SCRIPT="${RUNPOD_TOOLS_DIR}/generateUploadScript.sh"
   local OUTPUT_FILE="${RUNPOD_TOOLS_DIR}/uploadModels.sh"
   
   if [[ -f "$GENERATE_SCRIPT" ]]; then
-    "$GENERATE_SCRIPT" "$OUTPUT_FILE"
-    log "uploadModels.sh created at: $OUTPUT_FILE"
+    # Run the generator directly (it should already be local)
+    bash "$GENERATE_SCRIPT" "$OUTPUT_FILE"
     
-    cat <<'INFO'
+    if [[ -f "$OUTPUT_FILE" ]]; then
+      log "uploadModels.sh created at: $OUTPUT_FILE"
+      
+      cat <<'INFO'
 
 To upload models to this RunPod instance, run:
    ./runpodTools/uploadModels.sh ssh user@host -p PORT -i KEY
@@ -36,6 +39,9 @@ For ComfyUI, ensure you have these model types:
 - loras (in models/loras/)
 - bbox models (in models/bbox/)
 INFO
+    else
+      warn "uploadModels.sh was not created successfully"
+    fi
   else
     warn "generateUploadScript.sh not found at: $GENERATE_SCRIPT"
   fi

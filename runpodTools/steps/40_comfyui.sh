@@ -40,17 +40,23 @@ main() {
   if [[ "${DRY_RUN:-0}" == "1" ]]; then
     echo "${DRY_PREFIX:-...[]} pip install --upgrade pip wheel"
     echo "${DRY_PREFIX:-...[]} pip install torch torchvision torchaudio --index-url $torch_index"
-    echo "${DRY_PREFIX:-...[]} pip install -r $COMFY_DIR/requirements.txt"
-    echo "${DRY_PREFIX:-...[]} pip install -r $COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
+    
+    # Combine requirements files for single pip install
+    local req_files="$COMFY_DIR/requirements.txt"
+    if [[ -f "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt" ]]; then
+      req_files="$req_files $COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
+    fi
+    echo "${DRY_PREFIX:-...[]} pip install -r $req_files"
   else
     python -m pip install --upgrade pip wheel
     pip install torch torchvision torchaudio --index-url "$torch_index"
-    pip install -r "$COMFY_DIR/requirements.txt"
     
-    # Install Manager dependencies if exists
+    # Combine requirements files for single pip install (more efficient)
+    local req_args=(-r "$COMFY_DIR/requirements.txt")
     if [[ -f "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt" ]]; then
-      pip install -r "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
+      req_args+=(-r "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt")
     fi
+    pip install "${req_args[@]}"
     
     # Verify CUDA
     python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
