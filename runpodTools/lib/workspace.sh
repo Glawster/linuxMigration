@@ -14,6 +14,8 @@ WORKFLOWS_DIR="${WORKFLOWS_DIR:-${WORKSPACE_ROOT}/workflows}"
 ENV_NAME="${ENV_NAME:-runpod}"
 
 # State file for tracking completed steps
+STATE_FILE_DIR="/root/.runpodToolsState"
+run mkdir -p "$STATE_FILE_DIR"
 STATE_FILE="${RUNPOD_DIR}/state.env"
 
 # Check if a step is marked as done

@@ -9,15 +9,9 @@ ensureGitRepo() {
   
   # If it's a valid git repo, pull
   if [[ -d "$dir/.git" ]]; then
-    log "...repo exists, pulling: $dir"
-    if [[ "${DRY_RUN:-0}" == "1" ]]; then
-      echo "${DRY_PREFIX:-...[]} git -C $dir fetch --all --prune"
-      echo "${DRY_PREFIX:-...[]} git -C $dir pull --ff-only"
-    else
-      git -C "$dir" fetch --all --prune 2>/dev/null || true
-      git -C "$dir" pull --ff-only 2>/dev/null || true
-    fi
-    return 0
+    log "repo exists, pulling: $dir"
+    run git -C "$dir" fetch --all --prune
+    run git -C "$dir" pull --ff-only
   fi
   
   # If directory exists but not a git repo, move aside

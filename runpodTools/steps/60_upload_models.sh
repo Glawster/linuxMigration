@@ -9,14 +9,15 @@ LIB_DIR="$(dirname "$SCRIPT_DIR")/lib"
 RUNPOD_TOOLS_DIR="$(dirname "$SCRIPT_DIR")"
 
 # shellcheck disable=SC1091
+source "$LIB_DIR/ssh.sh"
+buildSshOpts
+# shellcheck disable=SC1091
 source "$LIB_DIR/common.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/workspace.sh"
 
 main() {
-  log "step: upload models"
-  
-  log "generating uploadModels.sh script..."
+  logTask "generating uploadModels.sh script"
   
   # Generate the upload script in the LOCAL runpodTools directory
   local GENERATE_SCRIPT="${RUNPOD_TOOLS_DIR}/generateUploadScript.sh"

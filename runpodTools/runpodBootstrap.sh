@@ -29,18 +29,26 @@ LIB_DIR="$RUNPOD_DIR/lib"
 STEPS_DIR="$RUNPOD_DIR/steps"
 LOGDIR="$RUNPOD_DIR/logs"
 
-# Defaults
-ENABLE_COMFYUI=1
-ENABLE_KOHYA=0
-export DRY_RUN=0
-export DRY_PREFIX="...[]]"
-export FORCE=0
+# Defaults (respect env from runpodFromSSH.sh)
+ENABLE_COMFYUI="${ENABLE_COMFYUI:-1}"
+ENABLE_KOHYA="${ENABLE_KOHYA:-0}"
+
+DRY_RUN="${DRY_RUN:-0}"
+DRY_PREFIX="${DRY_PREFIX:-[]}"
+
+FORCE="${FORCE:-0}"
+
+export DRY_RUN DRY_PREFIX FORCE ENABLE_COMFYUI ENABLE_KOHYA
+
 FROM_STEP=""
 ONLY_STEP=""
 SKIP_STEPS=()
 LIST_STEPS=0
 
 # Load common libraries
+# shellcheck disable=SC1091
+source "$LIB_DIR/ssh.sh"
+buildSshOpts
 # shellcheck disable=SC1091
 source "$LIB_DIR/common.sh"
 # shellcheck disable=SC1091
@@ -101,7 +109,7 @@ fi
 
 # Setup logging
 mkdir -p "$LOGDIR"
-LOGFILE="$LOGDIR/bootstrap.$(timestamp).log"
+LOGFILE="$LOGDIR/bootstrap.$(date +"%Y%m%d_%H%M%S").log"
 
 # Tee output to log file
 if [[ "$DRY_RUN" != "1" ]]; then
@@ -114,10 +122,11 @@ export WORKSPACE_ROOT RUNPOD_DIR CONDA_DIR COMFY_DIR KOHYA_DIR WORKFLOWS_DIR
 export ENV_NAME STATE_FILE
 
 log "runpod bootstrap (modular)"
-echo "comfyui : $ENABLE_COMFYUI"
-echo "kohya   : $ENABLE_KOHYA"
-echo "dry run : $DRY_RUN"
-echo "force   : $FORCE"
+echo "comfyui   : $ENABLE_COMFYUI"
+echo "kohya     : $ENABLE_KOHYA"
+echo "dry run   : $DRY_RUN"
+echo "force     : $FORCE"
+echo "state file: $STATE_FILE"
 echo
 
 # Define steps to run
@@ -178,7 +187,6 @@ fi
 
 # Run steps
 log "running steps: ${STEPS_TO_RUN[*]}"
-echo
 
 for step in "${STEPS_TO_RUN[@]}"; do
   STEP_SCRIPT="$STEPS_DIR/${step}.sh"
@@ -188,7 +196,7 @@ for step in "${STEPS_TO_RUN[@]}"; do
     continue
   fi
   
-  log "...step: $step"
+  logTask $step
   
   # Make executable
   chmod +x "$STEP_SCRIPT"
@@ -202,7 +210,7 @@ done
 # Create bash aliases
 log "creating ~/.bash_aliases"
 if [[ "$DRY_RUN" == "1" ]]; then
-  echo "${DRY_PREFIX} echo 'alias d=\"ls -al\"' > ~/.bash_aliases"
+  dryrun  "echo 'alias d=\"ls -al\"' > ~/.bash_aliases"
 else
   echo 'alias d="ls -al"' > ~/.bash_aliases
 fi
@@ -210,7 +218,7 @@ fi
 # Generate uploadModels.sh script
 log "generating uploadModels.sh script"
 if [[ "$DRY_RUN" == "1" ]]; then
-  echo "${DRY_PREFIX} $RUNPOD_DIR/generateUploadScript.sh $RUNPOD_DIR/uploadModels.sh"
+  dryrun "$RUNPOD_DIR/generateUploadScript.sh $RUNPOD_DIR/uploadModels.sh"
 else
   "$RUNPOD_DIR/generateUploadScript.sh" "$RUNPOD_DIR/uploadModels.sh"
 fi

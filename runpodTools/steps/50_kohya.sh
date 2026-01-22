@@ -8,6 +8,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$(dirname "$SCRIPT_DIR")/lib"
 
 # shellcheck disable=SC1091
+source "$LIB_DIR/ssh.sh"
+buildSshOpts
+# shellcheck disable=SC1091
 source "$LIB_DIR/common.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/git.sh"
@@ -17,11 +20,11 @@ source "$LIB_DIR/conda.sh"
 source "$LIB_DIR/workspace.sh"
 
 main() {
-  log "step: kohya"
+  logTask "kohya"
   
   # Check if already done and not forcing
   if isStepDone "KOHYA" && [[ "${FORCE:-0}" != "1" ]]; then
-    log "...kohya already configured (use --force to rerun)"
+    log "kohya already configured (use --force to rerun)"
     return 0
   fi
   
@@ -34,16 +37,14 @@ main() {
   # Install dependencies
   log "installing kohya_ss dependencies"
   
-  if [[ "${DRY_RUN:-0}" == "1" ]]; then
-    echo "${DRY_PREFIX:-...[]} pip install -r $KOHYA_DIR/requirements.txt"
-  else
+  run bash -c '
     if [[ -f "$KOHYA_DIR/requirements.txt" ]]; then
       pip install -r "$KOHYA_DIR/requirements.txt"
     fi
-  fi
-  
+  '
+
   markStepDone "KOHYA"
-  log "...kohya done"
+  log "kohya done"
 }
 
 # Run if executed directly

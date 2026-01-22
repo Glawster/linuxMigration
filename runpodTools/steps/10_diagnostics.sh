@@ -8,6 +8,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$(dirname "$SCRIPT_DIR")/lib"
 
 # shellcheck disable=SC1091
+source "$LIB_DIR/ssh.sh"
+buildSshOpts
+# shellcheck disable=SC1091
 source "$LIB_DIR/common.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/diagnostics.sh"
@@ -15,18 +18,18 @@ source "$LIB_DIR/diagnostics.sh"
 source "$LIB_DIR/workspace.sh"
 
 main() {
-  log "step: diagnostics"
-  
   # Check if already done and not forcing
   if isStepDone "DIAGNOSTICS" && [[ "${FORCE:-0}" != "1" ]]; then
-    log "...diagnostics already completed (use --force to rerun)"
+    log "diagnostics already completed (use --force to rerun)"
     return 0
   fi
   
+  logTask "running runpod diagnostics"
   runDiagnostics
   
   markStepDone "DIAGNOSTICS"
-  log "...diagnostics done"
+  markStepDone "GPU_CHECK"
+  log "diagnostics done"
 }
 
 # Run if executed directly

@@ -28,60 +28,52 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RUNPOD_DIR="$SCRIPT_DIR"
 
-ENABLE_KOHYA=0
-ENABLE_COMFYUI=1
 DRY_RUN=0
-FORCE=0
-FROM_STEP=""
-ONLY_STEP=""
-SKIP_STEPS=()
-LIST_STEPS=0
+DRY_PREFIX="[]"
 
-usage() {
-  sed -n '2,23p' "$0"
-  exit 0
-}
+BOOTSTRAP_ARGS=()
 
-# Parse options before ssh command
+# parse options until we hit "ssh"
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --kohya) ENABLE_KOHYA=1; shift ;;
-    --no-comfyui) ENABLE_COMFYUI=0; shift ;;
-    --dry-run) DRY_RUN=1; shift ;;
-    --force) FORCE=1; shift ;;
-    --from)
-      FROM_STEP="$2"
+    --dry-run)
+      DRY_RUN=1
+      BOOTSTRAP_ARGS+=(--dry-run)
+      shift
+      ;;
+    --kohya)
+      BOOTSTRAP_ARGS+=(--kohya)
+      shift
+      ;;
+    --no-comfyui)
+      BOOTSTRAP_ARGS+=(--no-comfyui)
+      shift
+      ;;
+    --force)
+      BOOTSTRAP_ARGS+=(--force)
+      shift
+      ;;
+    --from|--only|--skip)
+      BOOTSTRAP_ARGS+=("$1" "$2")
       shift 2
       ;;
-    --only)
-      ONLY_STEP="$2"
-      shift 2
+    --list|-h|--help)
+      BOOTSTRAP_ARGS+=("$1")
+      shift
       ;;
-    --skip)
-      SKIP_STEPS+=("$2")
-      shift 2
+    ssh)
+      shift
+      break
       ;;
-    --list) LIST_STEPS=1; shift ;;
-    -h|--help) usage ;;
-    ssh) break ;;
     *)
-      echo "ERROR: unknown option: $1"
       usage
       ;;
   esac
 done
 
-if [[ $# -lt 2 || "$1" != "ssh" ]]; then
-  echo "ERROR: expected ssh command after options"
-  usage
-fi
-shift
-
-# Parse SSH arguments
-TARGET=""
-SSH_PORT="22"
+SSH_TARGET=""
+SSH_PORT=""
 SSH_IDENTITY=""
 
 while [[ $# -gt 0 ]]; do
@@ -95,95 +87,46 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     *)
-      if [[ -z "$TARGET" ]]; then
-        TARGET="$1"
+      if [[ -z "$SSH_TARGET" ]]; then
+        SSH_TARGET="$1"
+        shift
       else
-        echo "ERROR: unexpected argument: $1"
+        echo "ERROR: unexpected arg: $1" >&2
         exit 1
       fi
-      shift
       ;;
   esac
 done
 
-if [[ -z "$TARGET" ]]; then
-  echo "ERROR: could not determine user@host"
+if [[ -z "$SSH_TARGET" ]]; then
+  echo "ERROR: missing user@host" >&2
   exit 1
 fi
 
-# Build SSH options
-SSH_OPTS=(-p "$SSH_PORT" -o StrictHostKeyChecking=accept-new)
-if [[ -n "$SSH_IDENTITY" ]]; then
-  SSH_OPTS+=(-i "$SSH_IDENTITY")
-fi
-
-echo "target      : ${TARGET}:${SSH_PORT}"
+echo "target      : ${SSH_TARGET}${SSH_PORT:+:${SSH_PORT}}"
 echo "identity    : ${SSH_IDENTITY:-<default>}"
-echo "comfyui     : ${ENABLE_COMFYUI}"
-echo "kohya       : ${ENABLE_KOHYA}"
 echo "dry run     : ${DRY_RUN}"
-echo "force       : ${FORCE}"
-if [[ -n "$FROM_STEP" ]]; then
-  echo "from step   : ${FROM_STEP}"
-fi
-if [[ -n "$ONLY_STEP" ]]; then
-  echo "only step   : ${ONLY_STEP}"
-fi
-if [[ ${#SKIP_STEPS[@]} -gt 0 ]]; then
-  echo "skip steps  : ${SKIP_STEPS[*]}"
-fi
-if [[ "$LIST_STEPS" == "1" ]]; then
-  echo "list steps  : yes"
-fi
 echo
 
-# Check connectivity
-echo "checking ssh connectivity..."
-if ssh "${SSH_OPTS[@]}" "$TARGET" "echo connected && uname -a" >/dev/null 2>&1; then
-  echo "...connected"
-else
-  echo "ERROR: could not connect to ${TARGET}:${SSH_PORT}"
-  exit 1
-fi
-echo
+# export remote mode so common.sh refuses local execution
+export REQUIRE_REMOTE=1
+export DRY_RUN
+export DRY_PREFIX
 
-# Handle --list 
-if [[ "$LIST_STEPS" == "1" ]]; then
-  # Run local runpodBootstrap.sh to list steps
-  "$RUNPOD_DIR/runpodBootstrap.sh" --list
-  exit 0
-fi
-
-# Build bootstrap arguments for local execution
-BOOTSTRAP_ARGS=()
-if [[ "$ENABLE_KOHYA" == "1" ]]; then
-  BOOTSTRAP_ARGS+=(--kohya)
-fi
-if [[ "$ENABLE_COMFYUI" == "0" ]]; then
-  BOOTSTRAP_ARGS+=(--no-comfyui)
-fi
-if [[ "$DRY_RUN" == "1" ]]; then
-  BOOTSTRAP_ARGS+=(--dry-run)
-fi
-if [[ "$FORCE" == "1" ]]; then
-  BOOTSTRAP_ARGS+=(--force)
-fi
-if [[ -n "$FROM_STEP" ]]; then
-  BOOTSTRAP_ARGS+=(--from "$FROM_STEP")
-fi
-if [[ -n "$ONLY_STEP" ]]; then
-  BOOTSTRAP_ARGS+=(--only "$ONLY_STEP")
-fi
-for skip_step in "${SKIP_STEPS[@]}"; do
-  BOOTSTRAP_ARGS+=(--skip "$skip_step")
-done
-
-# Export SSH connection details for steps to use
-export SSH_TARGET="$TARGET"
+export SSH_TARGET
 export SSH_PORT
 export SSH_IDENTITY
-export SSH_OPTS_STR="${SSH_OPTS[*]}"
 
-# Run runpodBootstrap.sh LOCALLY (it will SSH to remote for each command)
-echo "running bootstrap locally (executing commands on remote via SSH)..."
-"$RUNPOD_DIR/runpodBootstrap.sh" "${BOOTSTRAP_ARGS[@]}"
+# quick connectivity check (real even in dry-run; cheap + catches wrong port)
+echo "checking ssh connectivity..."
+if [[ "${DRY_RUN}" == "1" ]]; then
+  echo "${DRY_PREFIX} ssh -p ${SSH_PORT} -o StrictHostKeyChecking=accept-new ${SSH_IDENTITY:+-i ${SSH_IDENTITY}} ${SSH_TARGET} 'echo connected && uname -a'"
+else
+  ssh -p "${SSH_PORT}" -o StrictHostKeyChecking=accept-new ${SSH_IDENTITY:+-i "${SSH_IDENTITY}"} \
+    "${SSH_TARGET}" "echo connected && uname -a" >/dev/null
+  echo "connected..."
+fi
+echo
+
+# run modular bootstrap (steps must use run/isCommand only)
+exec bash "${SCRIPT_DIR}/runpodBootstrap.sh" "${BOOTSTRAP_ARGS[@]}"

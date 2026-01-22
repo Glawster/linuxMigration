@@ -8,6 +8,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$(dirname "$SCRIPT_DIR")/lib"
 
 # shellcheck disable=SC1091
+source "$LIB_DIR/ssh.sh"
+buildSshOpts
+# shellcheck disable=SC1091
 source "$LIB_DIR/common.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/apt.sh"
@@ -15,27 +18,27 @@ source "$LIB_DIR/apt.sh"
 source "$LIB_DIR/workspace.sh"
 
 main() {
-  log "step: base tools"
   
   # Check if already done and not forcing
   if isStepDone "BASE_TOOLS" && [[ "${FORCE:-0}" != "1" ]]; then
-    log "...base tools already installed (use --force to rerun)"
+    log "base tools already installed (use --force to rerun)"
     return 0
   fi
   
-  # Check GPU
-  log "checking gpu"
-  if isCommand nvidia-smi; then
-    run nvidia-smi || true
+  # in base_tools step
+  if isStepDone "GPU_CHECK" && [[ "${FORCE:-0}" != "1" ]]; then
+    log "gpu already checked"
   else
-    warn "nvidia-smi not found"
+    log "checking gpu"
+    run nvidia-smi
+    markStepDone "GPU_CHECK"
   fi
-  
+
   # Install packages
   ensureAptPackages
   
   markStepDone "BASE_TOOLS"
-  log "...base tools done"
+  log "base tools done"
 }
 
 # Run if executed directly

@@ -1,102 +1,178 @@
 #!/usr/bin/env bash
 # lib/conda.sh
-# Conda environment management helpers
+# Conda environment management helpers (remote-safe)
+#
+# Rule:
+#   - never call `source` or `conda` locally
+#   - always go through: run bash -lc "source ... && conda ..."
 
-# Ensure miniconda is installed
-ensureMiniconda() {
-  local conda_dir="${1:-/workspace/miniconda3}"
-  
-  if [[ -x "$conda_dir/bin/conda" ]]; then
-    log "...miniconda already installed at $conda_dir"
+set -euo pipefail
+
+resolveCondaExe() {
+  local condaDir="$1"
+
+  if run bash -lc "test -x '${condaDir}/condabin/conda'"; then
+    echo "${condaDir}/condabin/conda"
     return 0
   fi
-  
-  log "installing miniconda to $conda_dir"
-  
-  run wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh
-  run bash /tmp/miniconda.sh -b -p "$conda_dir"
-  run rm -f /tmp/miniconda.sh
-  
-  log "...miniconda installed"
+
+  if run bash -lc "test -x '${condaDir}/bin/conda'"; then
+    echo "${condaDir}/bin/conda"
+    return 0
+  fi
+
+  if run bash -lc "test -x '${condaDir}/_conda'"; then
+    echo "${condaDir}/_conda"
+    return 0
+  fi
+
+  return 1
 }
 
-# Configure conda channels for resilience
+# ------------------------------------------------------------
+# internal helper: run conda in a single remote shell
+# ------------------------------------------------------------
+_condaExec() {
+  local conda_dir="$1"
+  shift
+
+  local condaExe
+  condaExe="$(resolveCondaExe "$conda_dir" 2>/dev/null || true)"
+
+  if [[ -z "${condaExe:-}" ]]; then
+    error "conda executable not found in ${conda_dir}"
+    return 1
+  fi
+
+  run bash -lc "'${condaExe}' $*"
+}
+
+# ------------------------------------------------------------
+# ensure conda is installed at CONDA_DIR (idempotent + self-healing)
+# ------------------------------------------------------------
+ensureConda() {
+  # supports being called as: ensureConda "$CONDA_DIR"
+  # but defaults to global CONDA_DIR if not supplied
+  local conda_dir="${1:-${CONDA_DIR}}"
+  if [[ -z "${conda_dir:-}" ]]; then
+    error "CONDA_DIR not set"
+    return 1
+  fi
+
+  logTask "ensuring conda installation at ${conda_dir}"
+
+  local conda_bin=""
+  conda_bin="$(resolveCondaExe "$conda_dir")"
+
+  local installer="/tmp/miniconda.sh"
+  local url="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
+
+  # healthy?
+  # if conda exists but is missing exec bit, fix it once
+  if run bash -lc "test -f '${conda_bin}' && ! test -x '${conda_bin}'"; then
+    warn "conda exists but is not executable; chmod +x"
+    run bash -lc "chmod +x '${conda_bin}' || true"
+  fi
+
+  if [[ -n "$conda_bin" ]] && run bash -lc "'${conda_bin}' --version >/dev/null 2>&1"; then
+    log "conda already installed: ${conda_dir}"
+    run "${conda_bin}" update -y -n base -c defaults conda || true
+    return 0
+  fi
+
+  # partial?
+  if run bash -lc "test -e '${conda_dir}'"; then
+    warn "conda directory exists but install looks incomplete: ${conda_dir}"
+  fi
+
+  log "downloading miniconda installer"
+  run wget -q "$url" -O "$installer"
+
+  log "installing/updating miniconda (-u)"
+  if run bash "$installer" -b -u -p "${conda_dir}"; then
+    :
+  else
+    warn "conda update-in-place failed, wiping and reinstalling..."
+    run rm -rf "${conda_dir}"
+    run bash "$installer" -b -p "${conda_dir}"
+  fi
+
+  run rm -f "$installer"
+
+  # final sanity check + diagnostics
+  if [[ -z "$condaBin" ]] || ! run bash -lc "'${condaBin}' --version"; then
+    run bash -lc "ls -la '${conda_dir}' || true"
+    run bash -lc "ls -la '${conda_dir}/bin' || true"
+    run bash -lc "ls -la '${conda_dir}/condabin' || true"
+    error "conda install failed: ${conda_dir}"
+    return 1
+  fi
+
+  log "conda installed at: ${conda_dir}"
+}
+
+# ------------------------------------------------------------
+# configure conda channels (remote-safe)
+# ------------------------------------------------------------
 ensureCondaChannels() {
-  local conda_dir="${1:-/workspace/miniconda3}"
-  
+  local conda_dir="${1:-${CONDA_DIR}}"
+  if [[ -z "${conda_dir:-}" ]]; then
+    error "CONDA_DIR not set"
+    return 1
+  fi
+
   log "configuring conda channels"
-  
-  if [[ "${DRY_RUN:-0}" == "1" ]]; then
-    echo "${DRY_PREFIX:-...[]} conda config --remove-key channels"
-    echo "${DRY_PREFIX:-...[]} conda config --add channels conda-forge"
-    echo "${DRY_PREFIX:-...[]} conda config --set channel_priority strict"
-  else
-    # shellcheck disable=SC1090
-    source "$conda_dir/etc/profile.d/conda.sh"
-    
-    conda config --remove-key channels 2>/dev/null || true
-    conda config --add channels conda-forge
-    conda config --set channel_priority strict
-  fi
-  
-  log "...channels configured"
+
+  # remove-key returns non-zero if missing; keep your behaviour
+  _condaExec "$conda_dir" "config --remove-key channels 2>/dev/null || true"
+  _condaExec "$conda_dir" "config --add channels conda-forge"
+  _condaExec "$conda_dir" "config --set channel_priority strict"
+
+  log "channels configured"
 }
 
-# Accept conda ToS
+# ------------------------------------------------------------
+# accept conda ToS (remote-safe)
+# ------------------------------------------------------------
 acceptCondaTos() {
-  local conda_dir="${1:-/workspace/miniconda3}"
-  
-  log "accepting conda terms of service"
-  
-  if [[ "${DRY_RUN:-0}" == "1" ]]; then
-    echo "${DRY_PREFIX:-...[]} conda tos accept"
-  else
-    # shellcheck disable=SC1090
-    source "$conda_dir/etc/profile.d/conda.sh"
-    
-    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main 2>/dev/null || true
-    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 2>/dev/null || true
+  local conda_dir="${1:-${CONDA_DIR}}"
+  if [[ -z "${conda_dir:-}" ]]; then
+    error "CONDA_DIR not set"
+    return 1
   fi
+
+  log "accepting conda terms of service"
+
+  _condaExec "$conda_dir" "tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main 2>/dev/null || true"
+  _condaExec "$conda_dir" "tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 2>/dev/null || true"
 }
 
-# Ensure conda environment exists
+# ------------------------------------------------------------
+# ensure env exists (remote-safe, idempotent)
+# ------------------------------------------------------------
 ensureCondaEnv() {
-  local conda_dir="${1:-/workspace/miniconda3}"
+  local conda_dir="${1:-${CONDA_DIR}}"
   local env_name="${2:-runpod}"
   local python_version="${3:-3.10}"
-  
-  if [[ "${DRY_RUN:-0}" == "1" ]]; then
-    echo "${DRY_PREFIX:-...[]} would ensure conda env: $env_name"
+
+  if [[ -z "${conda_dir:-}" ]]; then
+    error "CONDA_DIR not set"
+    return 1
+  fi
+
+  # Check if env exists
+  if _condaExec "$conda_dir" "env list | awk '{print \$1}' | grep -qx '${env_name}'"; then
+    log "conda environment exists: ${env_name}"
     return 0
   fi
-  
-  # shellcheck disable=SC1090
-  source "$conda_dir/etc/profile.d/conda.sh"
-  
-  if conda env list | awk '{print $1}' | grep -qx "$env_name"; then
-    log "...conda environment exists: $env_name"
-  else
-    log "creating conda environment: $env_name"
-    run conda create -n "$env_name" python="$python_version" -y
-    log "...environment created"
-  fi
-  
-  conda activate "$env_name"
-  log "...activated conda environment: $env_name"
+
+  log "creating conda environment: ${env_name}"
+  _condaExec "$conda_dir" "create -n '${env_name}' python='${python_version}' -y"
+  log "environment created"
 }
 
-# Activate conda environment
-activateCondaEnv() {
-  local conda_dir="${1:-/workspace/miniconda3}"
-  local env_name="${2:-runpod}"
-  
-  if [[ "${DRY_RUN:-0}" == "1" ]]; then
-    echo "${DRY_PREFIX:-...[]} source $conda_dir/etc/profile.d/conda.sh"
-    echo "${DRY_PREFIX:-...[]} conda activate $env_name"
-    return 0
-  fi
-  
-  # shellcheck disable=SC1090
-  source "$conda_dir/etc/profile.d/conda.sh"
-  conda activate "$env_name"
+condaEnvRun() {
+  local env="$1"
+  shift
+  run bash -lc "source '${CONDA_DIR}/etc/profile.d/conda.sh' && conda activate '${env}' && $*"
 }

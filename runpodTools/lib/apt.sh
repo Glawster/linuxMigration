@@ -9,7 +9,7 @@ ensureAptPackages() {
     return 0
   fi
   
-  log "ensuring base tools via apt"
+  logTask "ensuring base tools via apt"
   
   # Set environment for non-interactive apt
   export DEBIAN_FRONTEND=noninteractive
