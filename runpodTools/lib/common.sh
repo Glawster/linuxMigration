@@ -18,7 +18,7 @@ REQUIRE_REMOTE="${REQUIRE_REMOTE:-0}"
 
 # Logging functions
 log() { # used to giva an update to a task being actioned
-  echo -e "...$*\n"
+  echo -e "...$*"
 }
 
 logTask() { # used to say "am starting this task"
@@ -61,20 +61,14 @@ ensureRemoteConfigured() {
 }
 
 run() {
-  ensureRemoteConfigured
-
   if [[ "${DRY_RUN:-0}" == "1" ]]; then
-    echo "${DRY_PREFIX:-...[]} $*"
+    echo "${DRY_PREFIX:-[]} $*"
     return 0
   fi
 
-  if [[ -n "${SSH_TARGET:-}" ]] && declare -F runRemote >/dev/null 2>&1; then
-    runRemote "${SSH_TARGET}" "$@"
-    return $?
-  fi
-
   if [[ "${REQUIRE_REMOTE:-0}" == "1" ]]; then
-    die "Remote execution required but SSH_TARGET/runRemote not active."
+    runRemote "$@"
+    return $?
   fi
 
   "$@"

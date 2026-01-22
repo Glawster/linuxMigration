@@ -62,14 +62,14 @@ ensureConda() {
   logTask "ensuring conda installation at ${conda_dir}"
 
   local conda_bin=""
-  conda_bin="$(resolveCondaExe "$conda_dir")"
+  conda_bin="$(resolveCondaExe "$conda_dir" 2>/dev/null || true)"
 
   local installer="/tmp/miniconda.sh"
   local url="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
 
   # healthy?
   # if conda exists but is missing exec bit, fix it once
-  if run bash -lc "test -f '${conda_bin}' && ! test -x '${conda_bin}'"; then
+  if [[ -n "${conda_bin:-}" ]] && run bash -lc "test -f '${conda_bin}' && ! test -x '${conda_bin}'"; then
     warn "conda exists but is not executable; chmod +x"
     run bash -lc "chmod +x '${conda_bin}' || true"
   fi
@@ -98,9 +98,10 @@ ensureConda() {
   fi
 
   run rm -f "$installer"
+  # refresh conda path after installation
+  conda_bin="$(resolveCondaExe "$conda_dir" 2>/dev/null || true)"
 
-  # final sanity check + diagnostics
-  if [[ -z "$condaBin" ]] || ! run bash -lc "'${condaBin}' --version"; then
+  if [[ -z "${conda_bin:-}" ]] || ! run bash -lc "'${conda_bin}' --version >/dev/null 2>&1"; then
     run bash -lc "ls -la '${conda_dir}' || true"
     run bash -lc "ls -la '${conda_dir}/bin' || true"
     run bash -lc "ls -la '${conda_dir}/condabin' || true"
