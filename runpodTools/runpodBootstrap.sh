@@ -215,13 +215,6 @@ else
   echo 'alias d="ls -al"' > ~/.bash_aliases
 fi
 
-# Generate uploadModels.sh script
-log "generating uploadModels.sh script"
-if [[ "$DRY_RUN" == "1" ]]; then
-  dryrun "$RUNPOD_DIR/generateUploadScript.sh $RUNPOD_DIR/uploadModels.sh"
-else
-  "$RUNPOD_DIR/generateUploadScript.sh" "$RUNPOD_DIR/uploadModels.sh"
-fi
 
 log "bootstrap complete"
 log "log file: $LOGFILE"
