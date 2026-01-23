@@ -117,3 +117,15 @@ isCommand() {
 
   command -v "$cmd" >/dev/null 2>&1
 }
+
+hasCmd() {
+  # usage: hasCmd <command>
+  local cmd="$1"
+  run bash -lc "
+    command -v '${cmd}' >/dev/null 2>&1 || \
+    test -x '/usr/bin/${cmd}' || \
+    test -x '/bin/${cmd}' || \
+    test -x '/usr/sbin/${cmd}' || \
+    test -x '/sbin/${cmd}'
+  "
+}

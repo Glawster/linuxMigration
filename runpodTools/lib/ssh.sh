@@ -2,35 +2,18 @@
 set -euo pipefail
 
 isCommandRemote() {
-  # Returns 0 (true) if a command is clearly intended to run remotely.
-  # We treat "ssh ..." as remote and also anything executed via runRemote().
-  #
-  # usage: isCommandRemote "$@"
+  # usage: isCommandRemote <ssh_target> <cmd>
+  local target="${1:-}"
+  local cmd="${2:-}"
 
-  [[ $# -ge 1 ]] || return 1
-
-  case "$1" in
-    ssh)
-      return 0
-      ;;
-  esac
-
-  return 1
-}
-
-# Build SSH options as an ARRAY (never a string)
-buildSshOpts() {
-  SSH_OPTS=()
-
-  if [[ -n "${SSH_PORT:-}" ]]; then
-    SSH_OPTS+=(-p "$SSH_PORT")
+  if [[ -z "${target}" || -z "${cmd}" ]]; then
+    return 1
   fi
 
-  SSH_OPTS+=(-o StrictHostKeyChecking=accept-new)
+  # always (re)build opts; avoids array-length quirks
+  buildSshOpts
 
-  if [[ -n "${SSH_IDENTITY:-}" ]]; then
-    SSH_OPTS+=(-i "$SSH_IDENTITY")
-  fi
+  ssh "${SSH_OPTS[@]}" "$target" "command -v '$cmd' >/dev/null 2>&1"
 }
 
 runRemote() {
@@ -51,4 +34,13 @@ runRemote() {
   printf -v remoteCmd "%q " "$@"
 
   ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "$remoteCmd"
+}
+
+buildSshOpts() {
+  declare -ag SSH_OPTS
+  SSH_OPTS=()
+
+  [[ -n "${SSH_PORT:-}" ]] && SSH_OPTS+=(-p "$SSH_PORT")
+  SSH_OPTS+=(-o StrictHostKeyChecking=accept-new)
+  [[ -n "${SSH_IDENTITY:-}" ]] && SSH_OPTS+=(-i "$SSH_IDENTITY")
 }
