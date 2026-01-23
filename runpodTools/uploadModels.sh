@@ -136,12 +136,12 @@ if [[ -z "$WORKFLOWS_DIR" ]]; then
     WORKFLOWS_DIR=$(python3 -c "
 import json, sys
 try:
-    with open('$KOHYA_CONFIG', 'r') as f:
+    with open(sys.argv[1], 'r') as f:
         cfg = json.load(f)
         print(cfg.get('comfyWorkflowsDir', ''))
 except:
     pass
-" 2>/dev/null || true)
+" "$KOHYA_CONFIG" 2>/dev/null || true)
   fi
   
   # Fallback to default if not found
