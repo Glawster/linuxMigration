@@ -67,7 +67,7 @@ listSteps() {
   echo "  30_conda          - Setup miniconda and conda environment"
   echo "  40_comfyui        - Setup ComfyUI (optional, default on)"
   echo "  50_kohya          - Setup Kohya SS (optional, default off)"
-  echo "  60_upload_models  - Show model upload instructions"
+  echo "  60_upload_models  - Generate upload script for models and workflows"
   echo
   echo "Use --from, --only, --skip to control step execution"
   exit 0
@@ -208,11 +208,12 @@ for step in "${STEPS_TO_RUN[@]}"; do
 done
 
 # Create bash aliases
-log "creating ~/.bash_aliases"
+log "creating /root/.bash_aliases"
 if [[ "$DRY_RUN" == "1" ]]; then
   dryrun  "echo 'alias d=\"ls -al\"' > ~/.bash_aliases"
 else
-  echo 'alias d="ls -al"' > ~/.bash_aliases
+  # create this on the runpod
+  run bash -lc "echo \"alias d='ls -al'\" > ~/.bash_aliases"
 fi
 
 
