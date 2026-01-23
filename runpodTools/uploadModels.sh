@@ -209,8 +209,8 @@ LOCAL_YOLO="$(findLocalFile "${MODEL_ROOT}/bbox/${YOLO}" "${YOLO}")" || {
 }
 
 # Find and validate workflow files
-declare -a LOCAL_WORKFLOW_PATHS
-MISSING_WORKFLOWS=()
+declare -a LOCAL_WORKFLOW_PATHS=()
+declare -a MISSING_WORKFLOWS=()
 
 if [[ -d "$WORKFLOWS_DIR" ]]; then
   for workflow in "${WORKFLOW_FILES[@]}"; do
