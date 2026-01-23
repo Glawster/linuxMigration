@@ -67,7 +67,7 @@ listSteps() {
   echo "  30_conda          - Setup miniconda and conda environment"
   echo "  40_comfyui        - Setup ComfyUI (optional, default on)"
   echo "  50_kohya          - Setup Kohya SS (optional, default off)"
-  echo "  60_upload_models  - Show model upload instructions"
+  echo "  60_upload_models  - Generate upload script for models and workflows"
   echo
   echo "Use --from, --only, --skip to control step execution"
   exit 0
