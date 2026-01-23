@@ -54,9 +54,70 @@ main() {
   # Verify CUDA
   condaEnvRun "$ENV_NAME" python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
 
+  log "generating startComfyUI.sh helper"
+
+  local tmpFile
+  tmpFile="$(mktemp)"
+
+  generateStartComfyUiScript "$tmpFile"
+
+  run scp "${SSH_OPTS[@]}" "$tmpFile" "${SSH_TARGET}:/workspace/startComfyUI.sh"
+  run ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "chmod +x /workspace/startComfyUI.sh"
+
+  rm -f "$tmpFile"
+
+  log "startComfyUI.sh installed to /workspace"
+
   markStepDone "COMFYUI"
   log "...comfyui done"
 }
+
+generateStartComfyUiScript() {
+  local outFile="$1"
+
+  cat > "$outFile" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+WORKSPACE="/workspace"
+COMFY_DIR="$WORKSPACE/ComfyUI"
+CONDA_DIR="$WORKSPACE/miniconda3"
+ENV_NAME="runpod"
+PORT=8188
+SESSION="comfyui"
+
+if [[ ! -d "$COMFY_DIR" ]]; then
+  echo "ERROR: ComfyUI directory not found: $COMFY_DIR" >&2
+  exit 1
+fi
+
+if [[ ! -f "$CONDA_DIR/etc/profile.d/conda.sh" ]]; then
+  echo "ERROR: conda not found at $CONDA_DIR" >&2
+  exit 1
+fi
+
+source "$CONDA_DIR/etc/profile.d/conda.sh"
+conda activate "$ENV_NAME"
+
+cd "$COMFY_DIR"
+
+if command -v tmux >/dev/null 2>&1; then
+  if tmux has-session -t "$SESSION" 2>/dev/null; then
+    echo "ComfyUI already running (tmux session: $SESSION)"
+  else
+    tmux new-session -d -s "$SESSION" \
+      "python main.py --listen 0.0.0.0 --port $PORT"
+    echo "Started ComfyUI in tmux session '$SESSION' on port $PORT"
+  fi
+else
+  echo "tmux not available; starting ComfyUI in foreground"
+  exec python main.py --listen 0.0.0.0 --port $PORT
+fi
+EOF
+
+  chmod +x "$outFile"
+}
+
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   main "$@"

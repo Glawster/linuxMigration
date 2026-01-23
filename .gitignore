@@ -29,6 +29,6 @@ Thumbs.db
 
 # project stuff
 runs/
-uploadModels.sh
 runpodTools/logs/
 runpodTools/state.env
+runpodTools/uploadModels.sh
