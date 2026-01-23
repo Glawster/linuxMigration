@@ -29,6 +29,29 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [options] ssh user@host -p PORT -i KEY
+
+Options:
+  --kohya          enable kohya setup
+  --no-comfyui     disable comfyui setup
+  --dry-run        dry run mode (show what would be done)
+  --force          force rerun of all steps
+  --from STEP      start from specific step
+  --only STEP      run only specific step
+  --skip STEP      skip specific step
+  --list           list available steps
+  -h, --help       show this help
+
+Examples:
+  ./runpodFromSSH.sh ssh root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
+  ./runpodFromSSH.sh --kohya ssh root@...
+  ./runpodFromSSH.sh --only 40_comfyui ssh root@...
+EOF
+  exit 1
+}
+
 DRY_RUN=0
 DRY_PREFIX="[]"
 

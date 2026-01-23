@@ -74,6 +74,33 @@ run() {
   "$@"
 }
 
+runCapture() {
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo ""
+    return 0
+  fi
+
+  if [[ "${REQUIRE_REMOTE:-0}" == "1" ]]; then
+    if [[ -z "${SSH_TARGET:-}" ]]; then
+      echo "ERROR: SSH_TARGET not set" >&2
+      return 1
+    fi
+
+    # Ensure SSH_OPTS exists
+    if [[ "${#SSH_OPTS[@]:-0}" == "0" ]]; then
+      buildSshOpts
+    fi
+
+    local remoteCmd=""
+    printf -v remoteCmd "%q " "$@"
+
+    ssh "${SSH_OPTS[@]}" "${SSH_TARGET}" "$remoteCmd"
+    return $?
+  fi
+
+  "$@"
+}
+
 isCommand() {
   # usage: isCommand <cmd>
   ensureRemoteConfigured

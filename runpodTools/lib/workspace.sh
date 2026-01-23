@@ -2,7 +2,11 @@
 # lib/workspace.sh
 # Common workspace paths and inventory helpers
 
-# Common paths
+set -euo pipefail
+
+# ============================================================
+# Workspace paths
+# ============================================================
 WORKSPACE_ROOT="${WORKSPACE_ROOT:-/workspace}"
 RUNPOD_DIR="${RUNPOD_DIR:-${WORKSPACE_ROOT}/runpodTools}"
 CONDA_DIR="${CONDA_DIR:-${WORKSPACE_ROOT}/miniconda3}"
@@ -13,65 +17,80 @@ WORKFLOWS_DIR="${WORKFLOWS_DIR:-${WORKSPACE_ROOT}/workflows}"
 # Default conda environment
 ENV_NAME="${ENV_NAME:-runpod}"
 
-# State file for tracking completed steps
-STATE_FILE_DIR="/root/.runpodToolsState"
-run mkdir -p "$STATE_FILE_DIR"
+# ============================================================
+# Remote state tracking
+# ============================================================
+# State must live on the remote pod (NOT locally)
 STATE_FILE="${RUNPOD_DIR}/state.env"
 
-# Check if a step is marked as done
+# Ensure remote directory exists (idempotent)
+run mkdir -p "$(dirname "$STATE_FILE")" || true
+
+# ------------------------------------------------------------
+# isStepDone (REMOTE)
+# ------------------------------------------------------------
 isStepDone() {
   local step="$1"
-  
-  if [[ ! -f "$STATE_FILE" ]]; then
-    return 1
-  fi
-  
-  # shellcheck disable=SC1090
-  source "$STATE_FILE"
-  
-  local var_name="DONE_${step}"
-  [[ "${!var_name:-0}" == "1" ]]
+
+  run bash -lc "set -e; test -f '${STATE_FILE}' || exit 1; \
+    source '${STATE_FILE}'; \
+    var='DONE_${step}'; \
+    [[ \"\${!var:-0}\" == '1' ]]"
 }
 
-# Mark a step as done
+# ------------------------------------------------------------
+# markStepDone (REMOTE)
+# ------------------------------------------------------------
 markStepDone() {
   local step="$1"
-  
-  ensureDir "$(dirname "$STATE_FILE")"
-  
-  # Update or add the marker
-  if [[ -f "$STATE_FILE" ]]; then
-    if grep -q "^DONE_${step}=" "$STATE_FILE"; then
-      sed -i "s/^DONE_${step}=.*/DONE_${step}=1/" "$STATE_FILE"
-    else
-      echo "DONE_${step}=1" >> "$STATE_FILE"
-    fi
-  else
-    echo "DONE_${step}=1" > "$STATE_FILE"
-  fi
+  log "marking step done: ${step}"
+
+  run bash -lc "set -e; mkdir -p '$(dirname "$STATE_FILE")'; \
+    if test -f '${STATE_FILE}'; then \
+      if grep -q '^DONE_${step}=' '${STATE_FILE}'; then \
+        sed -i 's/^DONE_${step}=.*/DONE_${step}=1/' '${STATE_FILE}'; \
+      else \
+        printf '%s\n' 'DONE_${step}=1' >> '${STATE_FILE}'; \
+      fi; \
+    else \
+      printf '%s\n' 'DONE_${step}=1' > '${STATE_FILE}'; \
+    fi"
 }
 
-# Inventory of workspace
+# ------------------------------------------------------------
+# showInventory (REMOTE)
+# ------------------------------------------------------------
 showInventory() {
   log "workspace inventory"
-  
-  echo "--- Directories ---"
-  ls -ld "$WORKSPACE_ROOT" "$RUNPOD_DIR" "$CONDA_DIR" "$COMFY_DIR" "$KOHYA_DIR" "$WORKFLOWS_DIR" 2>/dev/null || true
-  echo
-  
-  echo "--- Conda Environments ---"
-  if [[ -x "$CONDA_DIR/bin/conda" ]]; then
-    "$CONDA_DIR/bin/conda" env list 2>/dev/null || true
-  else
-    echo "Miniconda not installed"
-  fi
-  echo
-  
-  echo "--- State File ---"
-  if [[ -f "$STATE_FILE" ]]; then
-    cat "$STATE_FILE"
-  else
-    echo "No state file"
-  fi
-  echo
+
+  run bash -lc "
+    echo '--- Directories ---'
+    ls -ld \
+      '${WORKSPACE_ROOT}' \
+      '${RUNPOD_DIR}' \
+      '${CONDA_DIR}' \
+      '${COMFY_DIR}' \
+      '${KOHYA_DIR}' \
+      '${WORKFLOWS_DIR}' \
+      2>/dev/null || true
+    echo
+
+    echo '--- Conda Environments ---'
+    if test -x '${CONDA_DIR}/condabin/conda'; then
+      '${CONDA_DIR}/condabin/conda' env list 2>/dev/null || true
+    elif test -x '${CONDA_DIR}/bin/conda'; then
+      '${CONDA_DIR}/bin/conda' env list 2>/dev/null || true
+    else
+      echo 'Miniconda not installed'
+    fi
+    echo
+
+    echo '--- State File ---'
+    if test -f '${STATE_FILE}'; then
+      cat '${STATE_FILE}'
+    else
+      echo 'No state file'
+    fi
+    echo
+  "
 }

@@ -21,33 +21,37 @@ source "$LIB_DIR/workspace.sh"
 
 main() {
   logTask "kohya"
-  
+
   # Check if already done and not forcing
   if isStepDone "KOHYA" && [[ "${FORCE:-0}" != "1" ]]; then
     log "kohya already configured (use --force to rerun)"
     return 0
   fi
-  
-  # Ensure repo
+
+  # Ensure repo (remote-safe ensureGitRepo required)
   ensureGitRepo "$KOHYA_DIR" "https://github.com/bmaltais/kohya_ss.git"
-  
-  # Activate conda
-  activateCondaEnv "$CONDA_DIR" "$ENV_NAME"
-  
-  # Install dependencies
+
   log "installing kohya_ss dependencies"
-  
-  run bash -c '
-    if [[ -f "$KOHYA_DIR/requirements.txt" ]]; then
-      pip install -r "$KOHYA_DIR/requirements.txt"
-    fi
-  '
+
+  # ensure sd-scripts exists where kohya expects it
+  if ! run test -d "$KOHYA_DIR/sd-scripts"; then
+    log "cloning sd-scripts into kohya_ss"
+    ensureGitRepo "$KOHYA_DIR/sd-scripts" "https://github.com/kohya-ss/sd-scripts.git"
+  fi
+
+  log "installing kohya_ss dependencies"
+
+  # IMPORTANT: requirements.txt existence must be checked REMOTELY
+  if run test -f "$KOHYA_DIR/requirements.txt"; then
+    condaEnvRun "$ENV_NAME" bash -lc "cd '$KOHYA_DIR' && python -m pip install -r requirements.txt --root-user-action=ignore"
+  else
+    warn "requirements.txt not found: $KOHYA_DIR/requirements.txt"
+  fi
 
   markStepDone "KOHYA"
   log "kohya done"
 }
 
-# Run if executed directly
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   main "$@"
 fi

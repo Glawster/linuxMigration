@@ -41,13 +41,14 @@ runRemote() {
 
   buildSshOpts
 
-  # DRY RUN: show exactly what would be executed
   if [[ "${DRY_RUN:-0}" == "1" ]]; then
     echo "${DRY_PREFIX:-[]} ssh ${SSH_OPTS[*]} ${SSH_TARGET} $*"
     return 0
   fi
 
-  # ✅ CORRECT ORDER:
-  # ssh [opts] target command argv...
-  ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "$@"
+  # Build ONE remote command string (argv-safe)
+  local remoteCmd=""
+  printf -v remoteCmd "%q " "$@"
+
+  ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "$remoteCmd"
 }
