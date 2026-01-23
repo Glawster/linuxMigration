@@ -3,7 +3,7 @@
 copyToComfyUI.py
 
 Forward mode (default):
-- scan trainingRoot for images
+- scan trainingRoot for images (ignores files with .orig in filename)
 - detect faces
 - classify framing into full-body / half-body / portrait (heuristic)
 - detect low-resolution images
@@ -122,6 +122,9 @@ def iterImages(root: Path, skipDirs: set[str]) -> Iterable[Path]:
         dirNames[:] = [d for d in dirNames if d not in skipDirs]
         for name in fileNames:
             p = Path(dirPath) / name
+            # Skip files with .orig in the filename (e.g., file.orig, file.orig_01)
+            if ".orig" in name.lower():
+                continue
             if p.suffix.lower() in IMAGE_EXTS:
                 yield p
 
