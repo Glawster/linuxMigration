@@ -1,6 +1,0 @@
-{
-  "comfyFullbodyWorkflow": "fullbody_likeness_1_8.json",
-  "comfyHalfbodyWorkflow": "halfbody_custom.json",
-  "comfyPortraitWorkflow": "portrait_custom.json",
-  "comfyWorkflowsDir": "/tmp/test_workflows"
-}
