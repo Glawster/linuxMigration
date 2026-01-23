@@ -473,6 +473,10 @@ def main() -> int:
         bucket = classifyImage(img, rules)
         if bucket:
             jobs.append((img, bucket))
+        else:
+            # Image doesn't match any classification rules - skip it
+            relSkip = img.relative_to(comfyInput).as_posix()
+            logger.info("%s skip (no bucket match): %s", prefix, relSkip)
 
     logger.info("%s run dir: %s", prefix, runDir)
     logger.info("%s found images: %d", prefix, len(allImages))
