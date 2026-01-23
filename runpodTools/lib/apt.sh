@@ -6,10 +6,6 @@
 ensureAptPackages() {
   log "checking package manager"
 
-  run bash -lc "ls -la /usr/bin/apt-get /usr/bin/apt /bin/apt-get /bin/apt 2>/dev/null || true"
-  run bash -lc "command -v apt-get || true"
-  run bash -lc "command -v apt || true"
-
   if ! isCommand apt-get; then
     warn "apt-get not found. Assuming base image has required tools."
     return 0
@@ -41,17 +37,4 @@ ensureAptPackages() {
     warn "no apt/apt-get available on this pod image, skipping system packages"
   fi
 
-  #run apt-get update -y
-  #run apt-get install -y \
-  #  git \
-    #wget \
-    #rsync \
-    #tmux \
-    #htop \
-    #unzip \
-    #build-essential \
-    #python3-venv \
-    #python3-pip \
-    #ca-certificates \
-    #vim
 }

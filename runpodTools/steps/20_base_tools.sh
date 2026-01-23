@@ -19,7 +19,6 @@ source "$LIB_DIR/workspace.sh"
 
 main() {
   log "base tools context"
-  run bash -lc 'echo "host=$(hostname) user=$(whoami) pwd=$(pwd)"; echo "PATH=$PATH"'
  
   # Check if already done and not forcing
   if isStepDone "BASE_TOOLS" && [[ "${FORCE:-0}" != "1" ]]; then
