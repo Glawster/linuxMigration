@@ -132,13 +132,6 @@ CHECKPOINT="v1-5-pruned-emaonly.safetensors"
 LORA="kathy_person_r16_512_bs2.safetensors"
 YOLO="face_yolov8n.pt"
 
-# Required workflow files
-WORKFLOW_FILES=(
-  "fullbody_api.json"
-  "halfbody_api.json"
-  "portrait_api.json"
-)
-
 # Local model root
 if [[ -z "$MODEL_ROOT" ]]; then
   MODEL_ROOT="$HOME/Source/ComfyUI/models"
@@ -150,10 +143,11 @@ if [[ ! -d "$MODEL_ROOT" ]]; then
   exit 1
 fi
 
+# Read workflow configuration from kohyaConfig.json
+KOHYA_CONFIG="$HOME/.config/kohya/kohyaConfig.json"
+
 # Local workflows directory
 if [[ -z "$WORKFLOWS_DIR" ]]; then
-  # Try to read from kohyaConfig.json if available
-  KOHYA_CONFIG="$HOME/.config/kohya/kohyaConfig.json"
   if [[ -f "$KOHYA_CONFIG" ]] && command -v python3 &>/dev/null; then
     WORKFLOWS_DIR=$(python3 -c "
 import json, sys
@@ -170,6 +164,33 @@ except:
   if [[ -z "$WORKFLOWS_DIR" ]]; then
     WORKFLOWS_DIR="$HOME/.config/kohya/workflows"
   fi
+fi
+
+# Read workflow filenames from kohyaConfig.json
+declare -a WORKFLOW_FILES=()
+if [[ -f "$KOHYA_CONFIG" ]] && command -v python3 &>/dev/null; then
+  # Read all three workflow filenames from config
+  read -r FULLBODY_WF HALFBODY_WF PORTRAIT_WF < <(python3 -c "
+import json, sys
+try:
+    with open(sys.argv[1], 'r') as f:
+        cfg = json.load(f)
+        fullbody = cfg.get('comfyFullbodyWorkflow', 'fullbody_api.json')
+        halfbody = cfg.get('comfyHalfbodyWorkflow', 'halfbody_api.json')
+        portrait = cfg.get('comfyPortraitWorkflow', 'portrait_api.json')
+        print(fullbody, halfbody, portrait)
+except:
+    print('fullbody_api.json halfbody_api.json portrait_api.json')
+" "$KOHYA_CONFIG" 2>/dev/null || echo "fullbody_api.json halfbody_api.json portrait_api.json")
+  
+  WORKFLOW_FILES=("$FULLBODY_WF" "$HALFBODY_WF" "$PORTRAIT_WF")
+else
+  # Fallback to defaults if config not available
+  WORKFLOW_FILES=(
+    "fullbody_api.json"
+    "halfbody_api.json"
+    "portrait_api.json"
+  )
 fi
 
 # Expand home directory reference
