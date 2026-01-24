@@ -4,11 +4,10 @@
 Unified runner for ComfyUI img2img workflows with image classification support.
 
 Modes:
-- Local mode:   use --comfyurl (e.g. http://127.0.0.1:8188)
-- Remote mode:  use --remoteurl (e.g. https://<pod>-8188.proxy.runpod.net)
-
+- Local mode:   use --local (e.g. http://127.0.0.1:8188)
+- Remote mode:  use --remote (e.g. https://<pod>-8188.proxy.runpod.net)
 Selection rules:
-- Provide exactly one of --comfyurl or --remoteurl.
+- Provide exactly one of --local or --remote.
 
 Workflow:
 - Classifies images into fullbody, halfbody, or portrait based on folder names and filename patterns.
@@ -276,8 +275,8 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=0, help="process at most N images (0 = no limit)")
 
     # Mode selection
-    parser.add_argument("--comfyurl", default=None, help="local ComfyUI base url (e.g. http://127.0.0.1:8188)")
-    parser.add_argument("--remoteurl", default=None, help="remote ComfyUI base url (e.g. RunPod proxy url)")
+    parser.add_argument("--local", default=None, help="local ComfyUI base url (e.g. http://127.0.0.1:8188)")
+    parser.add_argument("--remote", default=None, help="remote ComfyUI base url (e.g. RunPod proxy url)")
 
     # Folders (local filesystem)
     parser.add_argument("--comfyin", type=Path, default=Path(getCfgValue(cfg, "comfyInput", "./input")))
@@ -304,23 +303,23 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
 def resolveMode(args: argparse.Namespace, cfg: Dict[str, Any]) -> Tuple[str, str]:
     """Return (mode, baseUrl)."""
 
-    # Backward compatible: if user didn't pass --comfyurl/--remoteurl, fall back to config comfyUrl as local.
+    # Backward compatible: if user didn't pass --local/--remote, fall back to config comfyUrl as local.
     # But still require explicit intent if neither is provided AND cfg has no comfyUrl.
     cfgComfyUrl = str(getCfgValue(cfg, "comfyUrl", "")).strip()
 
-    if args.comfyurl and args.remoteurl:
-        raise ValueError("use either --comfyurl OR --remoteurl, not both")
+    if args.local and args.remote:
+        raise ValueError("use either --local OR --remote, not both")
 
-    if args.remoteurl:
-        return ("remote", str(args.remoteurl))
+    if args.remote:
+        return ("remote", str(args.remote))
 
-    if args.comfyurl:
-        return ("local", str(args.comfyurl))
+    if args.local:
+        return ("local", str(args.local))
 
     if cfgComfyUrl:
         return ("local", cfgComfyUrl)
 
-    raise ValueError("one of --comfyurl or --remoteurl is required")
+    raise ValueError("one of --local or --remote is required")
 
 
 def getWorkflowPaths(cfg: Dict[str, Any], workflowsDir: Path) -> Dict[str, Path]:

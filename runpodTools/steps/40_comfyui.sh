@@ -31,6 +31,10 @@ main() {
   # Ensure repos (remote-safe via ensureGitRepo)
   ensureGitRepo "$COMFY_DIR" "https://github.com/comfyanonymous/ComfyUI.git"
   ensureGitRepo "$COMFY_DIR/custom_nodes/ComfyUI-Manager" "https://github.com/ltdrdata/ComfyUI-Manager.git"
+  ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/ltdrdata/ComfyUI-Impact-Pack.git"     # ComfyuiImactPack
+  ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git"  # ComfyuiImactSubPack
+  #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/facebookresearch/sam2"                # ComfyuiImactPack
+  # ComfyUI Impact Subpack installed by pip
 
   # Install dependencies
   log "installing ComfyUI dependencies"
@@ -39,7 +43,7 @@ main() {
 
   condaEnvRun "$ENV_NAME" python --version
   condaEnvRun "$ENV_NAME" python -m pip install --root-user-action=ignore --upgrade pip wheel
-  condaEnvRun "$ENV_NAME" pip install --root-user-action=ignore torch torchvision torchaudio --index-url "$torch_index"
+  condaEnvRun "$ENV_NAME" pip install --root-user-action=ignore torch torchvision torchaudio ultralytics>=8.3.162 --index-url "$torch_index"
 
   # Combine requirements files for single pip install (more efficient)
   local req_args=(-r "$COMFY_DIR/requirements.txt")
@@ -61,8 +65,8 @@ main() {
 
   generateStartComfyUiScript "$tmpFile"
 
-  run scp "${SSH_OPTS[@]}" "$tmpFile" "${SSH_TARGET}:/workspace/startComfyUI.sh"
-  run ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "chmod +x /workspace/startComfyUI.sh"
+  runLocal scp "${SSH_OPTS[@]}" "$tmpFile" "${SSH_TARGET}:/workspace/startComfyUI.sh"
+  run bash -lc "chmod +x /workspace/startComfyUI.sh"
 
   rm -f "$tmpFile"
 
