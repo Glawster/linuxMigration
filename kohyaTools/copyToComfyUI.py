@@ -3,7 +3,7 @@
 copyToComfyUI.py
 
 Forward mode (default):
-- scan trainingRoot for images (ignores backup files with .orig., .orig_nn, or __orig in filename)
+- scan trainingRoot for images (ignores backup files with .orig., .orig_*, or __orig in filename)
 - detect faces
 - classify framing into full-body / half-body / portrait (heuristic)
 - detect low-resolution images
@@ -122,9 +122,9 @@ def iterImages(root: Path, skipDirs: set[str]) -> Iterable[Path]:
         dirNames[:] = [d for d in dirNames if d not in skipDirs]
         for name in fileNames:
             p = Path(dirPath) / name
-            # Skip files with .orig. or .orig_nn or __orig in the filename
+            # Skip files with .orig. or .orig_* or __orig in the filename
             # These are backup/processed files that should not be re-copied
-            # Examples: file.orig.jpg, file.orig_01.png, file__orig.jpg, file__orig_001.jpg
+            # Examples: file.orig.jpg, file.orig_01.png, file.orig_backup.png, file__orig.jpg
             # Does NOT filter: file.original.jpg, myOriginal.jpg
             name_lower = name.lower()
             if ".orig." in name_lower or ".orig_" in name_lower or "__orig" in name_lower:
