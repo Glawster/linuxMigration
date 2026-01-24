@@ -216,9 +216,6 @@ mapfile -t ALL_AVAILABLE_STEPS < <(discoverSteps)
 ALL_STEPS=()
 
 for step in "${ALL_AVAILABLE_STEPS[@]}"; do
-  # Extract step number prefix (e.g., "40" from "40_comfyui")
-  step_num="${step%%_*}"
-  
   # Apply conditional logic for optional steps
   case "$step" in
     40_comfyui)
@@ -287,7 +284,7 @@ for step in "${STEPS_TO_RUN[@]}"; do
     continue
   fi
   
-  logTask $step
+  logTask "$step"
   
   # Make executable
   chmod +x "$STEP_SCRIPT"
