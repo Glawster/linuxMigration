@@ -69,6 +69,9 @@ main() {
   if ! acceptCondaTos "$CONDA_DIR"; then
     condaDiagnostics
     die "conda tos accept failed"
+  else
+    log "conda ToS accepted"
+    markStepDone "CONDA_TOS"
   fi
 
   # Now safe to update base conda if you still want it
@@ -77,6 +80,9 @@ main() {
   if ! ensureCondaChannels "$CONDA_DIR"; then
     condaDiagnostics
     die "conda channel configuration failed"
+  else
+    log "conda channels configured" 
+    markStepDone "CONDA_CHANNELS"
   fi
 
   if ! ensureCondaEnv "$CONDA_DIR" "$ENV_NAME" "3.10"; then

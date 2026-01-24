@@ -43,16 +43,31 @@ main() {
   log "...llava ref: ${LLAVA_REF}"
 
   # Ensure conda + env exist
-  if ! ensureConda "$CONDA_DIR"; then
-    die "conda not available"
+  if isStepDone "CONDA" && [[ "${FORCE:-0}" != "1" ]]; then
+    log "conda already configured"
+  else
+    if ! ensureConda "$CONDA_DIR"; then
+      die "conda not available"
+    fi
+    markStepDone "CONDA"
   fi
 
-  if ! acceptCondaTos "$CONDA_DIR"; then
-    die "conda tos accept failed"
+  if isStepDone "CONDA_TOS" && [[ "${FORCE:-0}" != "1" ]]; then
+    log "conda ToS already accepted"
+  else
+    if ! acceptCondaTos "$CONDA_DIR"; then
+      die "conda tos accept failed"
+    fi
+    markStepDone "CONDA_TOS"
   fi
 
-  if ! ensureCondaChannels "$CONDA_DIR"; then
-    die "conda channel configuration failed"
+  if isStepDone "CONDA_CHANNELS" && [[ "${FORCE:-0}" != "1" ]]; then
+    log "conda channels already configured"
+  else
+    if ! ensureCondaChannels "$CONDA_DIR"; then
+      die "conda channel configuration failed"
+    fi
+    markStepDone "CONDA_CHANNELS"
   fi
 
   # LLaVA generally works well on python 3.10

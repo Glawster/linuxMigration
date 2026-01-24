@@ -43,7 +43,7 @@ main() {
 
   condaEnvRun "$ENV_NAME" python --version
   condaEnvRun "$ENV_NAME" python -m pip install --root-user-action=ignore --upgrade pip wheel
-  condaEnvRun "$ENV_NAME" pip install --root-user-action=ignore torch torchvision torchaudio ultralytics>=8.3.162 --index-url "$torch_index"
+  condaEnvRun "$ENV_NAME" pip install --root-user-action=ignore torch torchvision torchaudio "ultralytics>=8.3.162" --index-url "$torch_index"
 
   # Combine requirements files for single pip install (more efficient)
   local req_args=(-r "$COMFY_DIR/requirements.txt")
