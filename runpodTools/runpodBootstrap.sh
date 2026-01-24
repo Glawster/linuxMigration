@@ -84,9 +84,16 @@ extractStepDescription() {
 resolveStepName() {
   # Resolve short form step name to full step name
   # e.g., "20" or "20_base" matches "20_base_tools"
+  # Uses DISCOVERED_STEPS_CACHE if available, otherwise discovers steps
   local short_name="$1"
   local available_steps
-  mapfile -t available_steps < <(discoverSteps)
+  
+  # Use cache if available, otherwise discover
+  if [[ ${#DISCOVERED_STEPS_CACHE[@]} -gt 0 ]]; then
+    available_steps=("${DISCOVERED_STEPS_CACHE[@]}")
+  else
+    mapfile -t available_steps < <(discoverSteps)
+  fi
   
   # First try exact match
   for step in "${available_steps[@]}"; do
@@ -162,16 +169,22 @@ if [[ "$LIST_STEPS" == "1" ]]; then
   listSteps
 fi
 
+# Cache discovered steps for efficiency
+DISCOVERED_STEPS_CACHE=()
+mapfile -t DISCOVERED_STEPS_CACHE < <(discoverSteps)
+
 # Resolve short form step names to full names
 if [[ -n "$FROM_STEP" ]]; then
+  ORIGINAL_FROM="$FROM_STEP"
   if ! FROM_STEP=$(resolveStepName "$FROM_STEP"); then
-    die "unknown step: $FROM_STEP"
+    die "unknown step: $ORIGINAL_FROM"
   fi
 fi
 
 if [[ -n "$ONLY_STEP" ]]; then
+  ORIGINAL_ONLY="$ONLY_STEP"
   if ! ONLY_STEP=$(resolveStepName "$ONLY_STEP"); then
-    die "unknown step: $ONLY_STEP"
+    die "unknown step: $ORIGINAL_ONLY"
   fi
 fi
 
