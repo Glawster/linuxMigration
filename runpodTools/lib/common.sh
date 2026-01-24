@@ -101,7 +101,7 @@ runCapture() {
   "$@"
 }
 
-runlocal() {
+runLocal() {
   local cmd="$*"
   if [[ "$DRY_RUN" == "1" ]]; then
     log "[local] $cmd"

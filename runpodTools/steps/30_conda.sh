@@ -95,7 +95,7 @@ main() {
   run bash -lc "source '${CONDA_DIR}/etc/profile.d/conda.sh' && conda config --show channels"
 
   markStepDone "CONDA"
-  log "done"
+  log "Conda done\n"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
