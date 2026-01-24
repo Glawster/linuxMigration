@@ -12,6 +12,7 @@
 #   --comfyui        enable ComfyUI setup (default)
 #   --no-comfyui     disable ComfyUI setup
 #   --kohya          enable kohya setup (default off)
+#   --llava          enable LLaVA setup (default off)
 #   --dry-run        print actions only, don't execute
 #   --force          force rerun of all steps (ignore state)
 #   --from STEP      start from specific step (e.g., 30_conda)
@@ -32,13 +33,14 @@ LOGDIR="$RUNPOD_DIR/logs"
 # Defaults (respect env from runpodFromSSH.sh)
 ENABLE_COMFYUI="${ENABLE_COMFYUI:-1}"
 ENABLE_KOHYA="${ENABLE_KOHYA:-0}"
+ENABLE_LLAVA="${ENABLE_LLAVA:-0}"
 
 DRY_RUN="${DRY_RUN:-0}"
 DRY_PREFIX="${DRY_PREFIX:-[]}"
 
 FORCE="${FORCE:-0}"
 
-export DRY_RUN DRY_PREFIX FORCE ENABLE_COMFYUI ENABLE_KOHYA
+export DRY_RUN DRY_PREFIX FORCE ENABLE_COMFYUI ENABLE_KOHYA ENABLE_LLAVA
 
 FROM_STEP=""
 ONLY_STEP=""
@@ -68,6 +70,7 @@ listSteps() {
   echo "  40_comfyui        - Setup ComfyUI (optional, default on)"
   echo "  50_kohya          - Setup Kohya SS (optional, default off)"
   echo "  60_upload_models  - Generate upload script for models and workflows"
+  echo "  70_llava          - Install LLaVA (optional, default off)"
   echo
   echo "Use --from, --only, --skip to control step execution"
   exit 0
@@ -79,6 +82,7 @@ while [[ $# -gt 0 ]]; do
     --comfyui) ENABLE_COMFYUI=1; shift ;;
     --no-comfyui) ENABLE_COMFYUI=0; shift ;;
     --kohya) ENABLE_KOHYA=1; shift ;;
+    --llava) ENABLE_LLAVA=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --force) FORCE=1; shift ;;
     --from)
@@ -146,6 +150,15 @@ if [[ "$ENABLE_KOHYA" == "1" ]]; then
 fi
 
 ALL_STEPS+=("60_upload_models")
+
+if [[ "$ENABLE_LLAVA" == "1" ]]; then
+  ALL_STEPS+=("70_llava")
+fi
+
+# Add optional LLaVA install step
+if [[ "$ENABLE_LLAVA" == "1" ]]; then
+  ALL_STEPS+=("70_llava")
+fi
 
 # Filter steps based on --from, --only, --skip
 STEPS_TO_RUN=()
