@@ -140,7 +140,7 @@ except:
   
   # Fallback to default if not found
   if [[ -z "$WORKFLOWS_DIR" ]]; then
-    WORKFLOWS_DIR="$HOME/.config/kohya/workflows"
+    WORKFLOWS_DIR="$HOME/Source/ComfyUI/user/default/workflows"
   fi
 fi
 
@@ -178,7 +178,7 @@ WORKFLOWS_DIR="${WORKFLOWS_DIR/#\~/$HOME}"
 REMOTE_BASE="/workspace/ComfyUI/models"
 REMOTE_CHECKPOINT="${REMOTE_BASE}/checkpoints"
 REMOTE_LORA="${REMOTE_BASE}/loras"
-REMOTE_BBOX="${REMOTE_BASE}/bbox"
+REMOTE_BBOX="${REMOTE_BASE}/ultralytics/bbox"
 REMOTE_WORKFLOWS="/workspace/workflows"
 
 run() {

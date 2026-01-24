@@ -59,17 +59,79 @@ usage() {
   exit 0
 }
 
+discoverSteps() {
+  # Discover all step scripts in the steps directory
+  # Returns sorted list of step basenames (without .sh extension)
+  local steps=()
+  if [[ -d "$STEPS_DIR" ]]; then
+    while IFS= read -r -d '' step_file; do
+      local step_name
+      step_name=$(basename "$step_file" .sh)
+      steps+=("$step_name")
+    done < <(find "$STEPS_DIR" -maxdepth 1 -name "[0-9]*_*.sh" -type f -print0 | sort -z)
+  fi
+  printf '%s\n' "${steps[@]}"
+}
+
+extractStepDescription() {
+  # Extract description from step script comment (line 3)
+  local step_file="$1"
+  if [[ -f "$step_file" ]]; then
+    sed -n '3s/^# //p' "$step_file"
+  fi
+}
+
+resolveStepName() {
+  # Resolve short form step name to full step name
+  # e.g., "20" or "20_base" matches "20_base_tools"
+  # Uses DISCOVERED_STEPS_CACHE if available, otherwise discovers steps
+  local short_name="$1"
+  local available_steps
+  
+  # Use cache if available, otherwise discover
+  if [[ ${#DISCOVERED_STEPS_CACHE[@]} -gt 0 ]]; then
+    available_steps=("${DISCOVERED_STEPS_CACHE[@]}")
+  else
+    mapfile -t available_steps < <(discoverSteps)
+  fi
+  
+  # First try exact match
+  for step in "${available_steps[@]}"; do
+    if [[ "$step" == "$short_name" ]]; then
+      echo "$step"
+      return 0
+    fi
+  done
+  
+  # Then try prefix match
+  for step in "${available_steps[@]}"; do
+    if [[ "$step" == "${short_name}"* ]]; then
+      echo "$step"
+      return 0
+    fi
+  done
+  
+  # No match found
+  return 1
+}
+
 listSteps() {
   echo "Available steps:"
   echo
-  echo "  10_diagnostics    - System diagnostics and template drift check"
-  echo "  20_base_tools     - Install base system tools via apt"
-  echo "  30_conda          - Setup miniconda and conda environment"
-  echo "  40_comfyui        - Setup ComfyUI (optional, default on)"
-  echo "  50_kohya          - Setup Kohya SS (optional, default off)"
-  echo "  60_upload_models  - Generate upload script for models and workflows"
+  
+  local steps
+  mapfile -t steps < <(discoverSteps)
+  
+  for step in "${steps[@]}"; do
+    local step_file="$STEPS_DIR/${step}.sh"
+    local description
+    description=$(extractStepDescription "$step_file")
+    printf "  %-18s - %s\n" "$step" "$description"
+  done
+  
   echo
   echo "Use --from, --only, --skip to control step execution"
+  echo "Short forms supported: --only 20 (matches 20_base_tools)"
   exit 0
 }
 
@@ -107,6 +169,37 @@ if [[ "$LIST_STEPS" == "1" ]]; then
   listSteps
 fi
 
+# Cache discovered steps for efficiency
+DISCOVERED_STEPS_CACHE=()
+mapfile -t DISCOVERED_STEPS_CACHE < <(discoverSteps)
+
+# Resolve short form step names to full names
+if [[ -n "$FROM_STEP" ]]; then
+  ORIGINAL_FROM="$FROM_STEP"
+  if ! FROM_STEP=$(resolveStepName "$FROM_STEP"); then
+    die "unknown step: $ORIGINAL_FROM"
+  fi
+fi
+
+if [[ -n "$ONLY_STEP" ]]; then
+  ORIGINAL_ONLY="$ONLY_STEP"
+  if ! ONLY_STEP=$(resolveStepName "$ONLY_STEP"); then
+    die "unknown step: $ORIGINAL_ONLY"
+  fi
+fi
+
+if [[ ${#SKIP_STEPS[@]} -gt 0 ]]; then
+  RESOLVED_SKIP_STEPS=()
+  for skip_step in "${SKIP_STEPS[@]}"; do
+    if resolved=$(resolveStepName "$skip_step"); then
+      RESOLVED_SKIP_STEPS+=("$resolved")
+    else
+      die "unknown step: $skip_step"
+    fi
+  done
+  SKIP_STEPS=("${RESOLVED_SKIP_STEPS[@]}")
+fi
+
 # Setup logging
 mkdir -p "$LOGDIR"
 LOGFILE="$LOGDIR/bootstrap.$(date +"%Y%m%d_%H%M%S").log"
@@ -129,23 +222,31 @@ echo "force     : $FORCE"
 echo "state file: $STATE_FILE"
 echo
 
-# Define steps to run
-ALL_STEPS=(
-  "10_diagnostics"
-  "20_base_tools"
-  "30_conda"
-)
+# Dynamically discover all available steps
+mapfile -t ALL_AVAILABLE_STEPS < <(discoverSteps)
 
-# Add optional steps based on flags
-if [[ "$ENABLE_COMFYUI" == "1" ]]; then
-  ALL_STEPS+=("40_comfyui")
-fi
+# Define steps to run based on discovered steps and feature flags
+ALL_STEPS=()
 
-if [[ "$ENABLE_KOHYA" == "1" ]]; then
-  ALL_STEPS+=("50_kohya")
-fi
-
-ALL_STEPS+=("60_upload_models")
+for step in "${ALL_AVAILABLE_STEPS[@]}"; do
+  # Apply conditional logic for optional steps
+  case "$step" in
+    40_comfyui)
+      if [[ "$ENABLE_COMFYUI" == "1" ]]; then
+        ALL_STEPS+=("$step")
+      fi
+      ;;
+    50_kohya)
+      if [[ "$ENABLE_KOHYA" == "1" ]]; then
+        ALL_STEPS+=("$step")
+      fi
+      ;;
+    *)
+      # Include all other steps by default
+      ALL_STEPS+=("$step")
+      ;;
+  esac
+done
 
 # Filter steps based on --from, --only, --skip
 STEPS_TO_RUN=()
@@ -196,7 +297,7 @@ for step in "${STEPS_TO_RUN[@]}"; do
     continue
   fi
   
-  logTask $step
+  logTask "$step"
   
   # Make executable
   chmod +x "$STEP_SCRIPT"

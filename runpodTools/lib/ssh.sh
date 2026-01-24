@@ -43,4 +43,6 @@ buildSshOpts() {
   [[ -n "${SSH_PORT:-}" ]] && SSH_OPTS+=(-p "$SSH_PORT")
   SSH_OPTS+=(-o StrictHostKeyChecking=accept-new)
   [[ -n "${SSH_IDENTITY:-}" ]] && SSH_OPTS+=(-i "$SSH_IDENTITY")
+  
+  return 0
 }
