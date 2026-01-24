@@ -39,7 +39,7 @@ main() {
   ensureAptPackages
   
   markStepDone "BASE_TOOLS"
-  log "base tools done"
+  log "base tools done\n"
 }
 
 # Run if executed directly

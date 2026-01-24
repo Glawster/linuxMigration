@@ -327,7 +327,7 @@ UPLOAD_SCRIPT
 
   chmod +x "$outputFile" || true
   log "uploadModels.sh created at: $outputFile"
-  log "done"
+  log "done\n"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

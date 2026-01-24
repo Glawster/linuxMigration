@@ -128,6 +128,7 @@ export ENV_NAME STATE_FILE
 log "runpod bootstrap (modular)"
 echo "comfyui   : $ENABLE_COMFYUI"
 echo "kohya     : $ENABLE_KOHYA"
+echo "llava     : $ENABLE_LLAVA"
 echo "dry run   : $DRY_RUN"
 echo "force     : $FORCE"
 echo "state file: $STATE_FILE"
