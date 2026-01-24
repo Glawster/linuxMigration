@@ -35,6 +35,7 @@ Usage: $(basename "$0") [options] ssh user@host -p PORT -i KEY
 
 Options:
   --kohya          enable kohya setup
+  --llava          enable llava setup
   --no-comfyui     disable comfyui setup
   --dry-run        dry run mode (show what would be done)
   --force          force rerun of all steps
@@ -67,6 +68,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --kohya)
       BOOTSTRAP_ARGS+=(--kohya)
+      shift
+      ;;
+    --llava)
+      BOOTSTRAP_ARGS+=(--llava)
       shift
       ;;
     --no-comfyui)

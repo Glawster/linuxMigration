@@ -101,6 +101,16 @@ runCapture() {
   "$@"
 }
 
+runlocal() {
+  local cmd="$*"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    log "[local] $cmd"
+  else
+    log "[local] running: $cmd"
+    eval "$cmd"
+  fi
+}
+
 isCommand() {
   # usage: isCommand <cmd>
   ensureRemoteConfigured
