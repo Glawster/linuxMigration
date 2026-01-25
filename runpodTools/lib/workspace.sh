@@ -43,7 +43,7 @@ isStepDone() {
 # ------------------------------------------------------------
 markStepDone() {
   local step="$1"
-  log "marking step done: ${step}"
+  #log "marking step done: ${step}" # Uncomment for debugging
 
   run bash -lc "set -e; mkdir -p '$(dirname "$STATE_FILE")'; \
     if test -f '${STATE_FILE}'; then \

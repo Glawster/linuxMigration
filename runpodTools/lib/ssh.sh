@@ -33,7 +33,7 @@ runRemote() {
   local remoteCmd=""
   printf -v remoteCmd "%q " "$@"
 
-  ssh "${SSH_OPTS[@]}" "$SSH_TARGET" bash -lc "$remoteCmd"
+  ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "$remoteCmd"
 }
 
 buildSshOpts() {
