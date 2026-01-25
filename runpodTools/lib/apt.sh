@@ -22,19 +22,21 @@ ensureAptPackages() {
   if hasCmd apt-get; then
     log "ensuring base tools via apt-get"
 
-    run apt-get update -y
-    run apt-get install -y \
-      ca-certificates git wget unzip rsync tmux htop python3-pip python3-venv vim || true
+    need=()
+    for pkg in htop ca-certificates git rsync tmux unzip vim wget python3-pip python3-venv; do
+      dpkg -s "$pkg" >/dev/null 2>&1 || need+=("$pkg")
+    done
 
-  elif hasCmd apt; then
-    log "ensuring base tools via apt"
-
-    run apt update
-    run apt install -y \
-      ca-certificates git wget unzip rsync tmux htop python3-pip python3-venv vim || true
+    if (( ${#need[@]} == 0 )) && [[ "${FORCE:-0}" != "1" ]]; then
+      log "...base tools already present"
+    else
+      log "...installing base tools via apt: ${need[*]}"
+      run apt-get update
+      run apt-get install -y "${need[@]}"
+    fi
 
   else
-    warn "no apt/apt-get available on this pod image, skipping system packages"
+    warn "no apt-get available on this pod image, skipping system packages"
   fi
 
 }

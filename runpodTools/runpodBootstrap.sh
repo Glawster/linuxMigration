@@ -245,21 +245,17 @@ for step in "${ALL_AVAILABLE_STEPS[@]}"; do
         ALL_STEPS+=("$step")
       fi
       ;;
+    70_llava)
+      if [[ "$ENABLE_LLAVA" == "1" ]]; then
+        ALL_STEPS+=("$step")
+      fi
+      ;;
     *)
       # Include all other steps by default
       ALL_STEPS+=("$step")
       ;;
   esac
 done
-
-if [[ "$ENABLE_LLAVA" == "1" ]]; then
-  ALL_STEPS+=("70_llava")
-fi
-
-# Add optional LLaVA install step
-if [[ "$ENABLE_LLAVA" == "1" ]]; then
-  ALL_STEPS+=("70_llava")
-fi
 
 # Filter steps based on --from, --only, --skip
 STEPS_TO_RUN=()

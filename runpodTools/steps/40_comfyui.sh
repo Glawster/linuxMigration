@@ -31,8 +31,10 @@ main() {
   # Ensure repos (remote-safe via ensureGitRepo)
   ensureGitRepo "$COMFY_DIR" "https://github.com/comfyanonymous/ComfyUI.git"
   ensureGitRepo "$COMFY_DIR/custom_nodes/ComfyUI-Manager" "https://github.com/ltdrdata/ComfyUI-Manager.git"
-  ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/ltdrdata/ComfyUI-Impact-Pack.git"     # ComfyuiImactPack
-  ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git"  # ComfyuiImactSubPack
+
+  # the following don't seen to install so commented out
+  #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/ltdrdata/ComfyUI-Impact-Pack.git"     # ComfyuiImactPack
+  #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git"  # ComfyuiImactSubPack
   #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/facebookresearch/sam2"                # ComfyuiImactPack
   # ComfyUI Impact Subpack installed by pip
 
@@ -45,15 +47,59 @@ main() {
   condaEnvRun "$ENV_NAME" python -m pip install --root-user-action=ignore --upgrade pip wheel
   condaEnvRun "$ENV_NAME" pip install --root-user-action=ignore torch torchvision torchaudio --index-url "$torch_index"
 
-  # Combine requirements files for single pip install (more efficient)
-  local req_args=(-r "$COMFY_DIR/requirements.txt")
+  # ------------------------------------------------------------
+  # comfyui requirements install (remote-aware, hash-gated)
+  # ------------------------------------------------------------
 
-  # IMPORTANT: requirements file check must be REMOTE
-  if run test -f "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"; then
-    req_args+=(-r "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt")
+  local hashFile="/workspace/.runpod/reqhash.comfyui"
+  local remoteReqFiles=(
+    "$COMFY_DIR/requirements.txt"
+    "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
+  )
+
+  # Build the actual list of existing req files on REMOTE
+  local reqFiles=()
+  for f in "${remoteReqFiles[@]}"; do
+    if run test -f "$f"; then
+      reqFiles+=("$f")
+    fi
+  done
+
+  # Safety: at least the base requirements must exist
+  if (( ${#reqFiles[@]} == 0 )); then
+    die "no requirements files found under $COMFY_DIR"
   fi
 
-  condaEnvRun "$ENV_NAME" pip install --root-user-action=ignore "${req_args[@]}"
+  # Compute hash on REMOTE from file contents (not filenames)
+  # This avoids local/remote mismatch and handles multiple files correctly.
+  currentHash="$(run sh -lc "cat ${reqFiles[*]} | sha256sum | awk '{print \$1}'")"
+
+  # Read previous hash from REMOTE marker file (empty if missing)
+  lastHash="$(run sh -lc "cat \"$hashFile\" 2>/dev/null || true")"
+
+  if [[ "$currentHash" == "$lastHash" && "${FORCE:-0}" != "1" ]]; then
+    log "...comfyui requirements unchanged; skipping pip install"
+  else
+    log "...comfyui requirements changed; installing dependencies"
+    # Note: condaEnvRun should already be remote-aware in your framework
+    condaEnvRun "$ENV_NAME" pip install --root-user-action=ignore -r "${reqFiles[0]}"
+
+    # If you have more than one requirements file, install them all explicitly:
+    # (pip doesn't accept multiple -r in a single -r; you add multiple -r flags)
+    if (( ${#reqFiles[@]} > 1 )); then
+      local pipArgs=()
+      for rf in "${reqFiles[@]}"; do
+        pipArgs+=("-r" "$rf")
+      done
+      condaEnvRun "$ENV_NAME" pip install --root-user-action=ignore "${pipArgs[@]}"
+    else
+      condaEnvRun "$ENV_NAME" pip install --root-user-action=ignore -r "${reqFiles[0]}"
+    fi
+
+    # Persist marker on REMOTE
+    run sh -lc "mkdir -p \"$(dirname "$hashFile")\" && echo \"$currentHash\" > \"$hashFile\""
+  fi
+
 
   # Verify CUDA
   condaEnvRun "$ENV_NAME" python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
@@ -65,7 +111,7 @@ main() {
 
   generateStartComfyUiScript "$tmpFile"
 
-  runLocal scp "${SSH_OPTS[@]}" "$tmpFile" "${SSH_TARGET}:/workspace/startComfyUI.sh"
+  runLocal scp "${SCP_OPTS[@]}" "$tmpFile" "${SSH_TARGET}:/workspace/startComfyUI.sh"
   run bash -lc "chmod +x /workspace/startComfyUI.sh"
 
   rm -f "$tmpFile"

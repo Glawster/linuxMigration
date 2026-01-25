@@ -1,6 +1,46 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+resolveLlavaRef() {
+  local dir="$1"
+  local desired="$2"
+
+  # Fetch tags first
+  run git -C "$dir" fetch --tags --force
+
+  # If exact ref exists, use it
+  if run git -C "$dir" rev-parse --verify -q "$desired" >/dev/null 2>&1; then
+    echo "$desired"
+    return 0
+  fi
+
+  # Try common alternatives
+  local alt=""
+  alt="$(run bash -lc "git -C \"$dir\" tag -l \"v1.5*\" | sort -V | tail -n 1")"
+  if [[ -n "$alt" ]]; then
+    echo "$alt"
+    return 0
+  fi
+
+  # Fallback: main
+  echo "main"
+}
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="$(dirname "$SCRIPT_DIR")/lib"
+
+# shellcheck disable=SC1091
+source "$LIB_DIR/ssh.sh"
+buildSshOpts
+# shellcheck disable=SC1091
+source "$LIB_DIR/common.sh"
+# shellcheck disable=SC1091
+source "$LIB_DIR/git.sh"
+# shellcheck disable=SC1091
+source "$LIB_DIR/conda.sh"
+# shellcheck disable=SC1091
+source "$LIB_DIR/workspace.sh"
+
 # ============================================================
 # llava install step (no DRY_RUN checks here)
 # ============================================================
@@ -11,62 +51,55 @@ LLAVA_DIR="${LLAVA_DIR:-/workspace/LLaVA}"
 LLAVA_ENV_NAME="${LLAVA_ENV_NAME:-llava}"
 CONDA_DIR="${CONDA_DIR:-/workspace/miniconda3}"
 
-log "...installing llava"
-log "......llava dir: $LLAVA_DIR"
-log "......llava env: $LLAVA_ENV_NAME"
-log "......llava version: $LLAVA_VERSION"
-log "......llava ref: $LLAVA_REF"
+logTask "installing llava"
 
-# ------------------------------------------------------------
+log "llava dir: $LLAVA_DIR"
+log "llava env: $LLAVA_ENV_NAME"
+log "llava version: $LLAVA_VERSION"
+log "llava ref: $LLAVA_REF"
+
 # ensure conda is available (do NOT reconfigure tos/channels)
-# ------------------------------------------------------------
 if ! ensureConda "$CONDA_DIR"; then
   die "conda not available"
 fi
 
-# ------------------------------------------------------------
 # ensure llava conda environment
-# ------------------------------------------------------------
-if conda env list | awk '{print $1}' | grep -qx "$LLAVA_ENV_NAME"; then
-  log "...conda env exists: $LLAVA_ENV_NAME"
-else
-  log "...creating conda environment: $LLAVA_ENV_NAME"
-  run "conda create -y -n \"$LLAVA_ENV_NAME\" python=3.10"
-fi
+ensureCondaEnv "$CONDA_DIR" "$LLAVA_ENV_NAME" "3.10"
 
-# shellcheck disable=SC1091
-run "source \"$CONDA_DIR/etc/profile.d/conda.sh\" && conda activate \"$LLAVA_ENV_NAME\""
+ensureGitRepo "$LLAVA_DIR" "https://github.com/haotian-liu/LLaVA.git"
 
-# ------------------------------------------------------------
-# clone / update llava
-# ------------------------------------------------------------
-if [[ ! -d "$LLAVA_DIR/.git" ]]; then
-  log "...cloning llava repository"
-  run "git clone https://github.com/haotian-liu/LLaVA.git \"$LLAVA_DIR\""
-else
-  log "...updating llava repository"
-  run "cd \"$LLAVA_DIR\" && git fetch --tags"
-fi
+LLAVA_REF="${LLAVA_REF:-v1.5}"
 
-log "...checking out llava ref: $LLAVA_REF"
-run "cd \"$LLAVA_DIR\" && git checkout \"$LLAVA_REF\""
-run "cd \"$LLAVA_DIR\" && git reset --hard \"$LLAVA_REF\""
+log "checking out llava ref: $LLAVA_REF"
+resolvedRef="$(resolveLlavaRef "$LLAVA_DIR" "$LLAVA_REF")"
+log "resolved llava ref: $resolvedRef"
+
+run git -C "$LLAVA_DIR" checkout "$resolvedRef"
+run git -C "$LLAVA_DIR" reset --hard "$resolvedRef"
 
 # ------------------------------------------------------------
 # install llava + deps
 # ------------------------------------------------------------
-log "...installing llava dependencies"
-run "cd \"$LLAVA_DIR\" && pip install --root-user-action=ignore -r requirements.txt"
+#log "installing llava dependencies"
+condaEnvRun "$ENV" "pip install --root-user-action=ignore 'protobuf<5' sentencepiece"
+if run test -f "$LLAVA_DIR/requirements.txt"; then
+  condaEnvRun "$ENV" "cd \"$LLAVA_DIR\" && pip install -r requirements.txt"
+else
+  log "skip (no requirements.txt)"
+fi
 
-log "...installing llava (editable)"
-run "cd \"$LLAVA_DIR\" && pip install --root-user-action=ignore -e ."
+
+#log "installing llava (editable)"
+condaEnvRun "$ENV" "cd \"$LLAVA_DIR\" && pip install -e ."
+condaEnvRun "$ENV" "python -c 'import llava; print(llava.__file__)'"
+
 
 # ------------------------------------------------------------
 # optional: write helper start script
 # ------------------------------------------------------------
-START_SCRIPT="/workspace/startLlavaApi.sh"
+START_SCRIPT="startLlavaApi.sh"
 
-log "...writing llava start helper: $START_SCRIPT"
+log "writing llava start helper: $START_SCRIPT"
 cat > "$START_SCRIPT" <<EOF
 #!/usr/bin/env bash
 set -e
@@ -75,7 +108,8 @@ conda activate "$LLAVA_ENV_NAME"
 echo "llava env active: \$(python -V)"
 EOF
 
-run "chmod +x \"$START_SCRIPT\""
+runLocal scp "${SCP_OPTS[@]}" "$START_SCRIPT" "${SSH_TARGET}:/workspace/startLlavaApi.sh"
+run bash -lc "chmod +x /workspace/$START_SCRIPT"
 
 markStepDone "LLAVA"
 

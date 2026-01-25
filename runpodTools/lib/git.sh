@@ -40,7 +40,7 @@ ensureGitRepo() {
   fi
 
   # Clone the repo
-  log "...cloning: ${url} -> ${dir}"
+  log "cloning: ${url} -> ${dir}"
   run git clone "${url}" "${dir}"
   return 0
 }
