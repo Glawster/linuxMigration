@@ -170,26 +170,24 @@ fi
 declare -a WORKFLOW_FILES=()
 if [[ -f "$KOHYA_CONFIG" ]] && command -v python3 &>/dev/null; then
   # Read all three workflow filenames from config
-  read -r FULLBODY_WF HALFBODY_WF PORTRAIT_WF < <(python3 -c "
+  read -r FULLBODY_WF TEXT2IMG_WF < <(python3 -c "
 import json, sys
 try:
     with open(sys.argv[1], 'r') as f:
         cfg = json.load(f)
         fullbody = cfg.get('comfyFullbodyWorkflow', 'fullbody_api.json')
-        halfbody = cfg.get('comfyHalfbodyWorkflow', 'halfbody_api.json')
-        portrait = cfg.get('comfyPortraitWorkflow', 'portrait_api.json')
-        print(fullbody, halfbody, portrait)
+        text2img = cfg.get('comfyText2ImgWorkflow', 'text2img_api.json')
+        print(fullbody, halfbody, portrait, text2img)
 except:
-    print('fullbody_api.json halfbody_api.json portrait_api.json')
-" "$KOHYA_CONFIG" 2>/dev/null || echo "fullbody_api.json halfbody_api.json portrait_api.json")
+    print('fullbody_api.json text2img_api.json')
+" "$KOHYA_CONFIG" 2>/dev/null || echo "fullbody_api.json text2img_api.json")
   
-  WORKFLOW_FILES=("$FULLBODY_WF" "$HALFBODY_WF" "$PORTRAIT_WF")
+  WORKFLOW_FILES=("$FULLBODY_WF" "$TEXT2IMG_WF")
 else
   # Fallback to defaults if config not available
   WORKFLOW_FILES=(
     "fullbody_api.json"
-    "halfbody_api.json"
-    "portrait_api.json"
+    "text2img_api.json"
   )
 fi
 
