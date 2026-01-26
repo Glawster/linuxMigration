@@ -32,7 +32,7 @@ run mkdir -p "$(dirname "$STATE_FILE")" || true
 isStepDone() {
   local step="$1"
 
-  run bash -lc "set -e; test -f '${STATE_FILE}' || exit 1; \
+  run bash -lc "test -f '${STATE_FILE}' || exit 1; \
     source '${STATE_FILE}'; \
     var='DONE_${step}'; \
     [[ \"\${!var:-0}\" == '1' ]]"
@@ -45,7 +45,7 @@ markStepDone() {
   local step="$1"
   #log "marking step done: ${step}" # Uncomment for debugging
 
-  run bash -lc "set -e; mkdir -p '$(dirname "$STATE_FILE")'; \
+  run bash -lc "mkdir -p '$(dirname "$STATE_FILE")'; \
     if test -f '${STATE_FILE}'; then \
       if grep -q '^DONE_${step}=' '${STATE_FILE}'; then \
         sed -i 's/^DONE_${step}=.*/DONE_${step}=1/' '${STATE_FILE}'; \

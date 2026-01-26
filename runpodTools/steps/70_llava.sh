@@ -92,7 +92,7 @@ condaEnvRun "$LLAVA_ENV_NAME" python -c 'import llava; print(llava.__file__)'
 # ------------------------------------------------------------
 # optional: write helper start script
 # ------------------------------------------------------------
-START_SCRIPT="startLlavaApi.sh"
+START_SCRIPT="llavaStart.sh"
 
 log "writing llava start helper: $START_SCRIPT"
 cat > "$START_SCRIPT" <<EOF
@@ -103,7 +103,7 @@ conda activate "$LLAVA_ENV_NAME"
 echo "llava env active: \$(python -V)"
 EOF
 
-runLocal scp "${SCP_OPTS[@]}" "$START_SCRIPT" "${SSH_TARGET}:/workspace/startLlavaApi.sh"
+runLocal scp "${SCP_OPTS[@]}" "$START_SCRIPT" "${SSH_TARGET}:/workspace/llavaStart.sh"
 run bash -lc "chmod +x /workspace/$START_SCRIPT"
 
 markStepDone "LLAVA"

@@ -133,7 +133,7 @@ def saveConfig(data: Dict[str, Any], prefix: str = "...", dryRun: bool = False) 
         raise IOError(f"Cannot write config file: {e}") from e
 
 
-def getCfgValue(cfg: Dict[str, Any], key: str, defaultValue: Any) -> Any:
+def getCfgValue(cfg: Dict[str, Any], key: str, defaultValue: Any = None) -> Any:
     """
     Get a config value with a default fallback.
     
@@ -166,7 +166,7 @@ def updateConfigFromArgs(cfg: Dict[str, Any], updates: Dict[str, Any], prefix: s
         if value is None:
             continue
         if cfg.get(key) != value:
-            logger.info(f"{prefix} config update: {key}: {cfg.get(key)!r} -> {value!r}")
+            _log("info", f"{prefix} config update: {key}: {cfg.get(key)!r} -> {value!r}")
             cfg[key] = value
             changed = True
             changedKeys.append(key)

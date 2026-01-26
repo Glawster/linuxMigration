@@ -116,25 +116,25 @@ main() {
   # Verify CUDA
   condaEnvRun "$ENV_NAME" python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
 
-  log "generating startComfyUI.sh helper"
+  log "generating comfyStart.sh helper"
 
   local tmpFile
   tmpFile="$(mktemp)"
 
-  generateStartComfyUiScript "$tmpFile"
+  generatecomfyStartScript "$tmpFile"
 
-  runLocal scp "${SCP_OPTS[@]}" "$tmpFile" "${SSH_TARGET}:/workspace/startComfyUI.sh"
-  run bash -lc "chmod +x /workspace/startComfyUI.sh"
+  runLocal scp "${SCP_OPTS[@]}" "$tmpFile" "${SSH_TARGET}:/workspace/comfyStart.sh"
+  run bash -lc "chmod +x /workspace/comfyStart.sh"
 
   rm -f "$tmpFile"
 
-  log "startComfyUI.sh installed to /workspace"
+  log "comfyStart.sh installed to /workspace"
 
   markStepDone "COMFYUI"
   log "comfyui done\n"
 }
 
-generateStartComfyUiScript() {
+generatecomfyStartScript() {
   local outFile="$1"
 
   cat > "$outFile" <<'EOF'

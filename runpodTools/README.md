@@ -24,7 +24,7 @@ runpodTools/
   logs/                     # Bootstrap logs (auto-created)
   runpodBootstrap.sh        # Remote-side step runner
   runpodFromSSH.sh          # Local-side orchestrator
-  startComfyUI.sh           # Start ComfyUI in tmux
+  comfyStart.sh           # Start ComfyUI in tmux
   generateUploadScript.sh   # Generate uploadModels.sh
 ```
 
@@ -120,7 +120,7 @@ Each step is independent and can be:
 After bootstrap completes:
 
 ```bash
-bash /workspace/runpodTools/startComfyUI.sh 8188
+bash /workspace/runpodTools/comfyStart.sh 8188
 ```
 
 Or from the bootstrap scripts (automatic when using `--comfyui`).

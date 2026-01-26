@@ -16,24 +16,15 @@ isCommandRemote() {
   ssh "${SSH_OPTS[@]}" "$target" "command -v '$cmd' >/dev/null 2>&1"
 }
 
+# ssh.sh
+
 runRemote() {
-  if [[ -z "${SSH_TARGET:-}" ]]; then
-    echo "ERROR: SSH_TARGET is not set" >&2
-    return 1
-  fi
+  ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "$@"
+}
 
-  buildSshOpts
-
-  if [[ "${DRY_RUN:-0}" == "1" ]]; then
-    echo "${DRY_PREFIX:-[]} ssh ${SSH_OPTS[*]} ${SSH_TARGET} $*"
-    return 0
-  fi
-
-  # Build ONE remote command string (argv-safe)
-  local remoteCmd=""
-  printf -v remoteCmd "%q " "$@"
-
-  ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "$remoteCmd"
+runRemoteCapture() {
+  local cmd="$1"
+  ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "bash -lc $(printf '%q' "$cmd")"
 }
 
 buildSshOpts() {

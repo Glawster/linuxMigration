@@ -26,7 +26,7 @@ runpodTools/
 ├── logs/                         # Bootstrap logs (auto-created)
 ├── runpodBootstrap.sh            # Remote-side step runner
 ├── runpodFromSSH.sh              # Local-side orchestrator
-├── startComfyUI.sh               # Start ComfyUI helper
+├── comfyStart.sh               # Start ComfyUI helper
 ├── generateUploadScript.sh       # Upload script generator
 └── README.md                     # Full documentation
 ```

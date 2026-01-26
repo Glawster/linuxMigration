@@ -12,6 +12,9 @@ set -euo pipefail
 #   REQUIRE_REMOTE (0/1)  <-- if 1, we refuse to run locally
 #   SSH_TARGET, SSH_PORT, SSH_IDENTITY (for remote)
 
+source "$LIB_DIR/ssh.sh"
+source "$LIB_DIR/run.sh"
+
 DRY_RUN="${DRY_RUN:-0}"
 DRY_PREFIX="${DRY_PREFIX:-[]}"
 REQUIRE_REMOTE="${REQUIRE_REMOTE:-0}"
@@ -33,12 +36,8 @@ error() {
 }
 
 die() {
-  echo "FATALITY: $*" >&2
+  echo -e "FATALITY: $*\n" >&2
   exit 1
-}
-
-dryrun() {
-  echo "${DRY_PREFIX:-...[]} $*"
 }
 
 # Ensure directory exists
@@ -57,57 +56,6 @@ ensureRemoteConfigured() {
     if ! declare -F runRemote >/dev/null 2>&1; then
       die "Remote execution required but runRemote() is not available (did you source lib/ssh.sh?)."
     fi
-  fi
-}
-
-run() {
-  if [[ "${DRY_RUN:-0}" == "1" ]]; then
-    echo "${DRY_PREFIX:-[]} $*"
-    return 0
-  fi
-
-  if [[ "${REQUIRE_REMOTE:-0}" == "1" ]]; then
-    runRemote "$@"
-    return $?
-  fi
-
-  "$@"
-}
-
-runCapture() {
-  if [[ "${DRY_RUN:-0}" == "1" ]]; then
-    echo ""
-    return 0
-  fi
-
-  if [[ "${REQUIRE_REMOTE:-0}" == "1" ]]; then
-    if [[ -z "${SSH_TARGET:-}" ]]; then
-      echo "ERROR: SSH_TARGET not set" >&2
-      return 1
-    fi
-
-    # Ensure SSH_OPTS exists
-    if [[ "${#SSH_OPTS[@]:-0}" == "0" ]]; then
-      buildSshOpts
-    fi
-
-    local remoteCmd=""
-    printf -v remoteCmd "%q " "$@"
-
-    ssh "${SSH_OPTS[@]}" "${SSH_TARGET}" "$remoteCmd"
-    return $?
-  fi
-
-  "$@"
-}
-
-runLocal() {
-  local cmd="$*"
-  if [[ "$DRY_RUN" == "1" ]]; then
-    log "[local] $cmd"
-  else
-    log "[local] running: $cmd"
-    eval "$cmd"
   fi
 }
 

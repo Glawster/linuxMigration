@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# startComfyUI.sh
+# comfyStart.sh
 # Start ComfyUI in tmux session
 
 set -euo pipefail
