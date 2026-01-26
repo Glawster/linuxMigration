@@ -23,8 +23,9 @@ ENV_NAME="${ENV_NAME:-runpod}"
 # State must live on the remote pod (NOT locally)
 STATE_FILE="${RUNPOD_DIR}/state.env"
 
-# Ensure remote directory exists (idempotent)
-run mkdir -p "$(dirname "$STATE_FILE")" || true
+ensureStateDir() {
+  run mkdir -p "$(dirname "$STATE_FILE")"
+}
 
 # ------------------------------------------------------------
 # isStepDone (REMOTE)
@@ -45,7 +46,7 @@ markStepDone() {
   local step="$1"
   #log "marking step done: ${step}" # Uncomment for debugging
 
-  run bash -lc "mkdir -p '$(dirname "$STATE_FILE")'; \
+  if ensureStateDir; then
     if test -f '${STATE_FILE}'; then \
       if grep -q '^DONE_${step}=' '${STATE_FILE}'; then \
         sed -i 's/^DONE_${step}=.*/DONE_${step}=1/' '${STATE_FILE}'; \
@@ -55,6 +56,7 @@ markStepDone() {
     else \
       printf '%s\n' 'DONE_${step}=1' > '${STATE_FILE}'; \
     fi"
+  fi;
 }
 
 # ------------------------------------------------------------
