@@ -77,22 +77,17 @@ log "resolved llava ref: $resolvedRef"
 run git -C "$LLAVA_DIR" checkout "$resolvedRef"
 run git -C "$LLAVA_DIR" reset --hard "$resolvedRef"
 
-# ------------------------------------------------------------
-# install llava + deps
-# ------------------------------------------------------------
 #log "installing llava dependencies"
-condaEnvRun "$ENV" "pip install --root-user-action=ignore 'protobuf<5' sentencepiece"
+condaEnvRun "$LLAVA_ENV_NAME" pip install --root-user-action=ignore 'protobuf<5' sentencepiece
 if run test -f "$LLAVA_DIR/requirements.txt"; then
-  condaEnvRun "$ENV" "cd \"$LLAVA_DIR\" && pip install -r requirements.txt"
+  condaEnvRun "$LLAVA_ENV_NAME" pip install -r "$LLAVA_DIR/requirements.txt"
 else
   log "skip (no requirements.txt)"
 fi
 
-
 #log "installing llava (editable)"
-condaEnvRun "$ENV" "cd \"$LLAVA_DIR\" && pip install -e ."
-condaEnvRun "$ENV" "python -c 'import llava; print(llava.__file__)'"
-
+condaEnvRun "$LLAVA_ENV_NAME" pip install -e "$LLAVA_DIR"
+condaEnvRun "$LLAVA_ENV_NAME" python -c 'import llava; print(llava.__file__)'
 
 # ------------------------------------------------------------
 # optional: write helper start script

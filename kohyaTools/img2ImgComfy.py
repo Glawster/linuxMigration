@@ -61,6 +61,23 @@ from organiseMyProjects.logUtils import getLogger  # type: ignore
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
+def getAvailableNodes(session, baseUrl):
+    r = session.get(f"{baseUrl}/object_info", timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+def validateWorkflowNodes(workflow: dict, availableNodes: dict, logger):
+    missing = set()
+
+    for node in workflow.values():
+        classType = node.get("class_type")
+        if classType and classType not in availableNodes:
+            missing.add(classType)
+
+    if missing:
+        logger.error("Workflow references missing nodes: %s", sorted(missing))
+        raise RuntimeError("missing ComfyUI nodes")
+
 @dataclass(frozen=True)
 class BucketRules:
     name: str
@@ -491,6 +508,26 @@ def main() -> int:
         return 0
 
     client = ComfyClient(baseUrl, args.timeoutseconds, isRemote=(mode == "remote"))
+
+    if not args.dryRun:
+        try:
+            availableNodes = getAvailableNodes(client.session, baseUrl)
+            logger.info("%s fetched available ComfyUI nodes: %d", prefix, len(availableNodes))
+        except Exception as e:
+            logger.error("Failed to fetch ComfyUI node registry: %s", e)
+            return 2
+    else:
+        availableNodes = {}
+    
+    for bucket, wfPath in workflowPaths.items():
+        try:
+            prompt = loadApiPromptJson(wfPath)
+            validateWorkflowNodes(prompt, availableNodes, logger)
+            logger.info("%s workflow validated: %s", prefix, wfPath.name)
+        except Exception as e:
+            logger.error("Workflow validation failed for %s: %s", wfPath, e)
+            return 2
+
 
     # For remote mode, make uploads unique per run
     remoteSubfolder = f"{args.remotesubfolder}/{runStamp}" if mode == "remote" else ""

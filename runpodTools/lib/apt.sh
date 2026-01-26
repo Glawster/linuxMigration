@@ -24,13 +24,15 @@ ensureAptPackages() {
 
     need=()
     for pkg in htop ca-certificates git rsync tmux unzip vim wget python3-pip python3-venv; do
-      dpkg -s "$pkg" >/dev/null 2>&1 || need+=("$pkg")
+      if ! run bash -lc "dpkg -s '$pkg' >/dev/null 2>&1"; then
+        need+=("$pkg")
+      fi
     done
 
     if (( ${#need[@]} == 0 )) && [[ "${FORCE:-0}" != "1" ]]; then
       log "...base tools already present"
     else
-      log "...installing base tools via apt: ${need[*]}"
+      log "...installing base tools via apt-get: ${need[*]}"
       run apt-get update
       run apt-get install -y "${need[@]}"
     fi

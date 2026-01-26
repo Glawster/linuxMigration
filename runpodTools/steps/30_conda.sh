@@ -70,7 +70,6 @@ main() {
     condaDiagnostics
     die "conda tos accept failed"
   else
-    log "conda ToS accepted"
     markStepDone "CONDA_TOS"
   fi
 
@@ -81,7 +80,6 @@ main() {
     condaDiagnostics
     die "conda channel configuration failed"
   else
-    log "conda channels configured" 
     markStepDone "CONDA_CHANNELS"
   fi
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# runpodFromSSH.sh (modular version)
+# createPod.sh (modular version)
 #
 # Local orchestrator that:
 # - Parses SSH connection details
@@ -7,7 +7,7 @@
 # - No files copied to remote (all scripts stay local)
 #
 # Usage:
-#   ./runpodFromSSH.sh [options] ssh user@host -p PORT -i KEY
+#   ./createPod.sh [options] ssh user@host -p PORT -i KEY
 #
 # Options:
 #   --kohya          enable kohya setup
@@ -21,9 +21,9 @@
 #   -h, --help       show this help
 #
 # Example:
-#   ./runpodFromSSH.sh ssh root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
-#   ./runpodFromSSH.sh --kohya ssh root@...
-#   ./runpodFromSSH.sh --only 40_comfyui ssh root@...
+#   ./createPod.sh ssh root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
+#   ./createPod.sh --kohya ssh root@...
+#   ./createPod.sh --only 40_comfyui ssh root@...
 
 set -euo pipefail
 
@@ -46,9 +46,9 @@ Options:
   -h, --help       show this help
 
 Examples:
-  ./runpodFromSSH.sh ssh root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
-  ./runpodFromSSH.sh --kohya ssh root@...
-  ./runpodFromSSH.sh --only 40_comfyui ssh root@...
+  ./createPod.sh ssh root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
+  ./createPod.sh --kohya ssh root@...
+  ./createPod.sh --only 40_comfyui ssh root@...
 EOF
   exit 1
 }

@@ -4,11 +4,10 @@
 # Upload minimal models and workflow files required by ComfyUI to RunPod
 #
 # Usage:
-#   ./uploadModels.sh [--dry-run] [--model-root PATH] [--workflows-dir PATH] ssh user@host -p PORT -i KEY
+#   ./uploadModels.sh [--dry-run] [--model-root PATH] ssh user@host -p PORT -i KEY
 #
 # Defaults:
 #   model-root = $HOME/Source/ComfyUI/models
-#   workflows-dir = ~/.config/kohya/workflows (from kohyaConfig.json)
 #
 # Example:
 #   ./uploadModels.sh ssh root@213.192.2.88 -p 40190 -i ~/.ssh/id_ed25519
@@ -37,14 +36,6 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       MODEL_ROOT="$2"
-      shift 2
-      ;;
-    --workflows-dir)
-      if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
-        echo "ERROR: --workflows-dir requires a PATH argument"
-        exit 1
-      fi
-      WORKFLOWS_DIR="$2"
       shift 2
       ;;
     ssh) shift; break ;;
@@ -122,57 +113,40 @@ if [[ ! -d "$MODEL_ROOT" ]]; then
 fi
 
 # Read workflow configuration from kohyaConfig.json
-KOHYA_CONFIG="$HOME/.config/kohya/kohyaConfig.json"
+KOHYA_CONFIG="${KOHYA_CONFIG:-$HOME/.config/kohya/kohyaConfig.json}"
 
-# Local workflows directory
-if [[ -z "$WORKFLOWS_DIR" ]]; then
-  if [[ -f "$KOHYA_CONFIG" ]] && command -v python3 &>/dev/null; then
-    WORKFLOWS_DIR=$(python3 -c "
-import json, sys
+# Local workflows directory (from kohyaConfig.json)
+WORKFLOWS_DIR=""
+if [[ -f "$KOHYA_CONFIG" ]] && command -v python3 &>/dev/null; then
+  WORKFLOWS_DIR="$(python3 - "$KOHYA_CONFIG" <<'PY'
+import json, sys, os
+p=sys.argv[1]
 try:
-    with open(sys.argv[1], 'r') as f:
-        cfg = json.load(f)
-        print(cfg.get('comfyWorkflowsDir', ''))
-except:
-    pass
-" "$KOHYA_CONFIG" 2>/dev/null || true)
-  fi
-  
-  # Fallback to default if not found
-  if [[ -z "$WORKFLOWS_DIR" ]]; then
-    WORKFLOWS_DIR="$HOME/Source/ComfyUI/user/default/workflows"
-  fi
+    with open(p,'r') as f:
+        cfg=json.load(f)
+except Exception:
+    sys.exit(0)
+
+# Prefer explicit key, but accept older key names too
+val = (
+    cfg.get('workflowsDir')
+    or cfg.get('comfyWorkflowsDir')
+    or ''
+)
+if isinstance(val,str) and val.strip():
+    print(os.path.expanduser(val.strip()))
+PY
+)"
 fi
 
-# Read workflow filenames from kohyaConfig.json
-declare -a WORKFLOW_FILES=()
-if [[ -f "$KOHYA_CONFIG" ]] && command -v python3 &>/dev/null; then
-  # Read all three workflow filenames from config
-  read -r FULLBODY_WF HALFBODY_WF PORTRAIT_WF < <(python3 -c "
-import json, sys
-try:
-    with open(sys.argv[1], 'r') as f:
-        cfg = json.load(f)
-        fullbody = cfg.get('comfyFullbodyWorkflow', 'fullbody_api.json')
-        halfbody = cfg.get('comfyHalfbodyWorkflow', 'halfbody_api.json')
-        portrait = cfg.get('comfyPortraitWorkflow', 'portrait_api.json')
-        print(fullbody, halfbody, portrait)
-except:
-    print('fullbody_api.json halfbody_api.json portrait_api.json')
-" "$KOHYA_CONFIG" 2>/dev/null || echo "fullbody_api.json halfbody_api.json portrait_api.json")
-  
-  WORKFLOW_FILES=("$FULLBODY_WF" "$HALFBODY_WF" "$PORTRAIT_WF")
-else
-  # Fallback to defaults if config not available
-  WORKFLOW_FILES=(
-    "fullbody_api.json"
-    "halfbody_api.json"
-    "portrait_api.json"
-  )
+# Fallback
+if [[ -z "$WORKFLOWS_DIR" ]]; then
+  WORKFLOWS_DIR="$HOME/Source/ComfyUI/user/default/workflows_api"
 fi
 
 # Expand home directory reference
 WORKFLOWS_DIR="${WORKFLOWS_DIR/#\~/$HOME}"
+
 
 # Remote target paths
 REMOTE_BASE="/workspace/ComfyUI/models"
@@ -229,20 +203,12 @@ LOCAL_YOLO="$(findLocalFile "${MODEL_ROOT}/bbox/${YOLO}" "${YOLO}")" || {
   exit 1
 }
 
-# Find and validate workflow files
-declare -a LOCAL_WORKFLOW_PATHS=()
-declare -a MISSING_WORKFLOWS=()
-
+# Workflows directory (sync all files)
+WORKFLOW_COUNT=0
 if [[ -d "$WORKFLOWS_DIR" ]]; then
-  for workflow in "${WORKFLOW_FILES[@]}"; do
-    workflow_path="${WORKFLOWS_DIR}/${workflow}"
-    if [[ -f "$workflow_path" ]]; then
-      LOCAL_WORKFLOW_PATHS+=("$workflow_path")
-    else
-      MISSING_WORKFLOWS+=("$workflow")
-    fi
-  done
+  WORKFLOW_COUNT="$(find "$WORKFLOWS_DIR" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ')"
 fi
+
 
 echo
 echo "=== Models ==="
@@ -253,21 +219,19 @@ echo "bbox model       : ${LOCAL_YOLO}"
 echo
 
 echo "=== Workflows ==="
-if [[ ${#LOCAL_WORKFLOW_PATHS[@]} -gt 0 ]]; then
+if [[ -d "$WORKFLOWS_DIR" ]]; then
   echo "local workflows dir: ${WORKFLOWS_DIR}"
-  echo "workflow files found: ${#LOCAL_WORKFLOW_PATHS[@]}"
-  for path in "${LOCAL_WORKFLOW_PATHS[@]}"; do
-    echo "  - $(basename "$path")"
-  done
-elif [[ -d "$WORKFLOWS_DIR" ]]; then
-  echo "WARNING: workflows directory exists but no workflow files found"
-  echo "         looked in: ${WORKFLOWS_DIR}"
-  for missing in "${MISSING_WORKFLOWS[@]}"; do
-    echo "  - missing: $missing"
-  done
+  echo "workflow files found: ${WORKFLOW_COUNT}"
+  if [[ "${WORKFLOW_COUNT}" -gt 0 ]]; then
+    while IFS= read -r f; do
+      echo "  - $f"
+    done < <(find "$WORKFLOWS_DIR" -maxdepth 1 -type f -printf "%f
+" 2>/dev/null | sort)
+  else
+    echo "WARNING: workflows directory exists but contains no files"
+  fi
 else
   echo "WARNING: workflows directory not found: ${WORKFLOWS_DIR}"
-  echo "         use --workflows-dir to specify location"
 fi
 echo
 
@@ -290,13 +254,11 @@ rsyncOne "$LOCAL_CHECKPOINT" "$REMOTE_CHECKPOINT"
 rsyncOne "$LOCAL_LORA" "$REMOTE_LORA"
 rsyncOne "$LOCAL_YOLO" "$REMOTE_BBOX"
 
-# Upload workflow files if found
-if [[ ${#LOCAL_WORKFLOW_PATHS[@]} -gt 0 ]]; then
+# Upload workflows directory (all files)
+if [[ -d "$WORKFLOWS_DIR" && "${WORKFLOW_COUNT}" -gt 0 ]]; then
   echo
   echo "=== Uploading Workflows ==="
-  for workflow_path in "${LOCAL_WORKFLOW_PATHS[@]}"; do
-    rsyncOne "$workflow_path" "$REMOTE_WORKFLOWS"
-  done
+  run rsync -avP --partial --inplace --no-perms --no-owner --no-group     -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}"     "${WORKFLOWS_DIR}/" "$TARGET:${REMOTE_WORKFLOWS}/"
 fi
 
 echo

@@ -51,13 +51,13 @@ main() {
   # comfyui requirements install (remote-aware, hash-gated)
   # ------------------------------------------------------------
 
-  local hashFile="/workspace/.runpod/reqhash.comfyui"
+
+  local hashFile="/workspace/.runpod/reqhash.comfyui.${ENV_NAME}"
   local remoteReqFiles=(
     "$COMFY_DIR/requirements.txt"
     "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
   )
 
-  # Build the actual list of existing req files on REMOTE
   local reqFiles=()
   for f in "${remoteReqFiles[@]}"; do
     if run test -f "$f"; then
@@ -65,41 +65,53 @@ main() {
     fi
   done
 
-  # Safety: at least the base requirements must exist
   if (( ${#reqFiles[@]} == 0 )); then
     die "no requirements files found under $COMFY_DIR"
   fi
 
-  # Compute hash on REMOTE from file contents (not filenames)
-  # This avoids local/remote mismatch and handles multiple files correctly.
-  currentHash="$(run sh -lc "cat ${reqFiles[*]} | sha256sum | awk '{print \$1}'")"
+  # include python version so a recreated env doesn't incorrectly skip
+  local pyver
+  pyver="$(condaEnvRun "$ENV_NAME" python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")"
 
-  # Read previous hash from REMOTE marker file (empty if missing)
+  currentHash="$(run sh -lc "echo 'py=${pyver}'; cat ${reqFiles[*]} | sha256sum | awk '{print \$1}'")"
   lastHash="$(run sh -lc "cat \"$hashFile\" 2>/dev/null || true")"
 
-  if [[ "$currentHash" == "$lastHash" && "${FORCE:-0}" != "1" ]]; then
-    log "...comfyui requirements unchanged; skipping pip install"
+  needsInstall=0
+  if [[ "$currentHash" != "$lastHash" || "${FORCE:-0}" == "1" ]]; then
+    needsInstall=1
   else
-    log "...comfyui requirements changed; installing dependencies"
-    # Note: condaEnvRun should already be remote-aware in your framework
-    condaEnvRun "$ENV_NAME" pip install --root-user-action=ignore -r "${reqFiles[0]}"
-
-    # If you have more than one requirements file, install them all explicitly:
-    # (pip doesn't accept multiple -r in a single -r; you add multiple -r flags)
-    if (( ${#reqFiles[@]} > 1 )); then
-      local pipArgs=()
-      for rf in "${reqFiles[@]}"; do
-        pipArgs+=("-r" "$rf")
-      done
-      condaEnvRun "$ENV_NAME" pip install --root-user-action=ignore "${pipArgs[@]}"
-    else
-      condaEnvRun "$ENV_NAME" pip install --root-user-action=ignore -r "${reqFiles[0]}"
+    # sanity check: marker may exist but env may be missing deps
+    if ! condaEnvRun "$ENV_NAME" python -c "import sqlalchemy" >/dev/null 2>&1; then
+      warn "sqlalchemy missing despite hash marker; forcing reinstall"
+      needsInstall=1
     fi
-
-    # Persist marker on REMOTE
-    run sh -lc "mkdir -p \"$(dirname "$hashFile")\" && echo \"$currentHash\" > \"$hashFile\""
+    if ! condaEnvRun "$ENV_NAME" python -c "import git" >/dev/null 2>&1; then
+      warn "GitPython missing despite hash marker; forcing reinstall"
+      needsInstall=1
+    fi
   fi
 
+  if [[ "$needsInstall" == "0" ]]; then
+    log "...comfyui requirements unchanged and key imports present; skipping pip install"
+  else
+    log "...installing comfyui requirements"
+
+    # ensure pip exists in the env and python -m pip works
+    condaEnvRun "$ENV_NAME" python -m ensurepip --upgrade || true
+    condaEnvRun "$ENV_NAME" python -m pip install --root-user-action=ignore --upgrade pip wheel
+
+    local pipArgs=()
+    for rf in "${reqFiles[@]}"; do
+      pipArgs+=("-r" "$rf")
+    done
+
+    condaEnvRun "$ENV_NAME" python -m pip install --root-user-action=ignore "${pipArgs[@]}"
+
+    # Manager needs GitPython (imports as "git")
+    condaEnvRun "$ENV_NAME" python -m pip install --root-user-action=ignore --upgrade GitPython
+
+    run sh -lc "mkdir -p \"$(dirname "$hashFile")\" && echo \"$currentHash\" > \"$hashFile\""
+  fi
 
   # Verify CUDA
   condaEnvRun "$ENV_NAME" python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
@@ -136,6 +148,17 @@ ENV_NAME="runpod"
 PORT=8188
 SESSION="comfyui"
 
+if tmux has-session -t "$SESSION" 2>/dev/null; then
+  echo "comfyui already running (tmux session: $SESSION)"
+  exit 0
+fi
+
+if ss -ltn | awk '{print $4}' | grep -q ":${PORT}\$"; then
+  echo "ERROR: port ${PORT} already in use"
+  ss -ltnp | grep ":${PORT}" || true
+  exit 1
+fi
+
 if [[ ! -d "$COMFY_DIR" ]]; then
   echo "ERROR: ComfyUI directory not found: $COMFY_DIR" >&2
   exit 1
@@ -155,10 +178,17 @@ if command -v tmux >/dev/null 2>&1; then
   if tmux has-session -t "$SESSION" 2>/dev/null; then
     echo "ComfyUI already running (tmux session: $SESSION)"
   else
-    tmux new-session -d -s "$SESSION" \
-      "python main.py --listen 0.0.0.0 --port $PORT"
-    echo "Started ComfyUI in tmux session '$SESSION' on port $PORT"
+    LOG_DIR="$WORKSPACE/.runpod/logs"
+    mkdir -p "$LOG_DIR"
+    LOG_FILE="$LOG_DIR/comfyui.${PORT}.log"
+
+    tmux new-session -d -s "$SESSION" bash -lc \
+      "source '$CONDA_DIR/etc/profile.d/conda.sh' \
+      && conda activate '$ENV_NAME' \
+      && cd '$COMFY_DIR' \
+      && python main.py --listen 0.0.0.0 --port '$PORT' 2>&1 | tee -a '$LOG_FILE'"
   fi
+
 else
   echo "tmux not available; starting ComfyUI in foreground"
   exec python main.py --listen 0.0.0.0 --port $PORT

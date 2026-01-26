@@ -317,15 +317,5 @@ for step in "${STEPS_TO_RUN[@]}"; do
   fi
 done
 
-# Create bash aliases
-log "creating /root/.bash_aliases"
-if [[ "$DRY_RUN" == "1" ]]; then
-  dryrun  "echo 'alias d=\"ls -al\"' > ~/.bash_aliases"
-else
-  # create this on the runpod
-  run bash -lc "echo \"alias d='ls -al'\" > ~/.bash_aliases"
-fi
-
-
 log "bootstrap complete"
 log "log file: $LOGFILE"
