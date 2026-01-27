@@ -62,13 +62,13 @@ main() {
     return 0
   fi
 
-  if ! ensureConda "$CONDA_DIR"; then
+  if ! ensureConda ; then
     condaDiagnostics
     die "conda install failed"
   fi
 
   # Accept ToS early to prevent CondaToSNonInteractiveError during any subsequent ops
-  if ! acceptCondaTos "$CONDA_DIR"; then
+  if ! acceptCondaTos ; then
     condaDiagnostics
     die "conda tos accept failed"
   else
@@ -76,21 +76,21 @@ main() {
   fi
 
   # Now safe to update base conda if you still want it
-  updateCondaBase "$CONDA_DIR" || true
+  updateCondaBase || true
 
-  if ! ensureCondaChannels "$CONDA_DIR"; then
+  if ! ensureCondaChannels ; then
     condaDiagnostics
     die "conda channel configuration failed"
   else
     markStepDone "CONDA_CHANNELS"
   fi
 
-  if ! ensureCondaEnv "$CONDA_DIR" "$ENV_NAME" "3.10"; then
+  if ! ensureCondaEnv "$ENV_NAME" "3.10"; then
     condaDiagnostics
     die "conda env setup failed"
   fi
 
-  if ! ensureCondaConfiguration "$CONDA_DIR" "$ENV_NAME"; then
+  if ! ensureCondaConfiguration "$ENV_NAME"; then
     condaDiagnostics
     die "conda configuration failed"
   fi  

@@ -181,7 +181,7 @@ snapshotProject() {
   if [[ "$HAS_RSYNC" == "1" ]]; then
     rsync -a \
       --exclude '.git/' \
-      --include 'logs/' \
+      --include 'logs/***' \
       --exclude '**/logs/' \
       --exclude 'state.env' \
       --exclude '__pycache__/' \

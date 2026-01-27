@@ -2,6 +2,8 @@
 # lib/conda.sh
 # Conda environment management helpers (remote-safe)
 
+: "${CONDA_DIR:?CONDA_DIR must be set}"
+
 resolveCondaExe() {
   local condaDir="$1"
 
@@ -28,14 +30,11 @@ resolveCondaExe() {
 # (works for pipelines because it executes under bash -lc)
 # ------------------------------------------------------------
 _condaExec() {
-  local conda_dir="$1"
-  shift
-
   local condaExe
-  condaExe="$(resolveCondaExe "$conda_dir" 2>/dev/null || true)"
+  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
 
   if [[ -z "${condaExe:-}" ]]; then
-    error "conda executable not found in ${conda_dir}"
+    error "conda executable not found in ${CONDA_DIR}"
     return 1
   fi
 
@@ -48,66 +47,58 @@ _condaExec() {
 # IMPORTANT: do NOT run conda update here (ToS may not be accepted yet)
 # ------------------------------------------------------------
 ensureConda() {
+  logTask "ensuring conda installation at ${CONDA_DIR}"
 
-  local conda_dir="${1:-${CONDA_DIR}}"
-
-  if [[ -z "${conda_dir:-}" ]]; then
-    error "CONDA_DIR not set"
-    return 1
-  fi
-
-  logTask "ensuring conda installation at ${conda_dir}"
-
-  local conda_bin=""
-  conda_bin="$(resolveCondaExe "$conda_dir" 2>/dev/null || true)"
+  local condaExe=""
+  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
 
   local installer="/tmp/miniconda.sh"
   local url="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
 
   # if conda exists but is missing exec bit, fix it once
-  if [[ -n "${conda_bin:-}" ]] && run bash -lc "test -f '${conda_bin}' && ! test -x '${conda_bin}'"; then
+  if [[ -n "${condaExe:-}" ]] && run bash -lc "test -f '${condaExe}' && ! test -x '${condaExe}'"; then
     warn "conda exists but is not executable; chmod +x"
-    run bash -lc "chmod +x '${conda_bin}' || true"
+    run bash -lc "chmod +x '${condaExe}' || true"
   fi
 
   # healthy?
-  if [[ -n "${conda_bin:-}" ]] && run "$conda_bin" --version >/dev/null 2>&1; then
-    log "conda already installed: ${conda_dir}"
+  if [[ -n "${condaExe:-}" ]] && run "$condaExe" --version >/dev/null 2>&1; then
+    log "conda already installed: ${CONDA_DIR}"
     return 0
   fi
 
   # partial?
-  if run bash -lc "test -e '${conda_dir}'"; then
-    warn "conda directory exists but install looks incomplete: ${conda_dir}"
+  if run bash -lc "test -e '${CONDA_DIR}'"; then
+    warn "conda directory exists but install looks incomplete: ${CONDA_DIR}"
   fi
 
   log "downloading miniconda installer"
   run wget -q "$url" -O "$installer"
 
   log "installing/updating miniconda (-u)"
-  if run bash "$installer" -b -u -p "${conda_dir}"; then
+  if run bash "$installer" -b -u -p "${CONDA_DIR}"; then
     :
   else
     warn "conda update-in-place failed, wiping and reinstalling..."
-    run rm -rf "${conda_dir}"
-    run bash "$installer" -b -p "${conda_dir}"
+    run rm -rf "${CONDA_DIR}"
+    run bash "$installer" -b -p "${CONDA_DIR}"
   fi
 
   run rm -f "$installer"
 
   # refresh conda path after installation
-  conda_bin="$(resolveCondaExe "$conda_dir" 2>/dev/null || true)"
+  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
 
   # verify
-  if [[ -z "${conda_bin:-}" ]] || ! run "$conda_bin" --version >/dev/null 2>&1; then
-    run bash -lc "ls -la '${conda_dir}' || true"
-    run bash -lc "ls -la '${conda_dir}/bin' || true"
-    run bash -lc "ls -la '${conda_dir}/condabin' || true"
-    error "conda install failed: ${conda_dir}"
+  if [[ -z "${condaExe:-}" ]] || ! run "$condaExe" --version >/dev/null 2>&1; then
+    run bash -lc "ls -la '${CONDA_DIR}' || true"
+    run bash -lc "ls -la '${CONDA_DIR}/bin' || true"
+    run bash -lc "ls -la '${CONDA_DIR}/condabin' || true"
+    error "conda install failed: ${CONDA_DIR}"
     return 1
   fi
 
-  log "conda installed at: ${conda_dir}"
+  log "conda installed at: ${CONDA_DIR}"
   return 0
 }
 
@@ -115,19 +106,12 @@ ensureConda() {
 # configure conda channels (remote-safe)
 # ------------------------------------------------------------
 ensureCondaChannels() {
-
-  local conda_dir="${1:-${CONDA_DIR}}"
-  if [[ -z "${conda_dir:-}" ]]; then
-    error "CONDA_DIR not set"
-    return 1
-  fi
-
   log "configuring conda channels"
 
   # remove-key returns non-zero if missing; keep behaviour
-  _condaExec "$conda_dir" "config --remove-key channels 2>/dev/null || true"
-  _condaExec "$conda_dir" "config --add channels conda-forge"
-  _condaExec "$conda_dir" "config --set channel_priority strict"
+  _condaExec  "config --remove-key channels 2>/dev/null || true"
+  _condaExec  "config --add channels conda-forge"
+  _condaExec  "config --set channel_priority strict"
 
   log "channels configured"
   return 0
@@ -137,17 +121,11 @@ ensureCondaChannels() {
 # accept conda ToS (remote-safe)
 # ------------------------------------------------------------
 acceptCondaTos() {
-  local conda_dir="${1:-${CONDA_DIR}}"
-  if [[ -z "${conda_dir:-}" ]]; then
-    error "CONDA_DIR not set"
-    return 1
-  fi
-
   log "accepting conda terms of service"
 
   # keep these as single-line strings
-  _condaExec "$conda_dir" "tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main 2>/dev/null || true"
-  _condaExec "$conda_dir" "tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 2>/dev/null || true"
+  _condaExec  "tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main 2>/dev/null || true"
+  _condaExec  "tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 2>/dev/null || true"
   return 0
 }
 
@@ -155,14 +133,8 @@ acceptCondaTos() {
 # update base conda (safe to call AFTER ToS acceptance)
 # ------------------------------------------------------------
 updateCondaBase() {
-  local conda_dir="${1:-${CONDA_DIR}}"
-  if [[ -z "${conda_dir:-}" ]]; then
-    error "CONDA_DIR not set"
-    return 1
-  fi
-
   log "updating conda base"
-  _condaExec "$conda_dir" "update -y -n base -c defaults conda || true"
+  _condaExec "update -y -n base -c defaults conda || true"
   return 0
 }
 
@@ -170,15 +142,9 @@ updateCondaBase() {
 # ensure conda configuration (remote-safe)
 # ------------------------------------------------------------
 ensureCondaConfiguration() {
-  local conda_dir="${1:-${CONDA_DIR}}"
-  if [[ -z "${conda_dir:-}" ]]; then
-    error "CONDA_DIR not set"
-    return 1
-  fi
-
   log "conda configuration"
-  _condaExec "$conda_dir" "info"
-  _condaExec "$conda_dir" "config --show channels"
+  _condaExec "info"
+  _condaExec "config --show channels"
   return 0
 }
 
@@ -186,23 +152,17 @@ ensureCondaConfiguration() {
 # ensure env exists (remote-safe, idempotent)
 # ------------------------------------------------------------
 ensureCondaEnv() {
-  local conda_dir="${1:-${CONDA_DIR}}"
-  local env_name="${2:-runpod}"
-  local python_version="${3:-3.10}"
-
-  if [[ -z "${conda_dir:-}" ]]; then
-    error "CONDA_DIR not set"
-    return 1
-  fi
+  local env_name="${1:-runpod}"
+  local python_version="${2:-3.10}"
 
   # Check if env exists (pipeline is ok because _condaExec uses bash -lc)
-  if _condaExec "$conda_dir" "env list | awk '{print \$1}' | grep -qx '${env_name}'"; then
+  if _condaExec "env list | awk '{print \$1}' | grep -qx '${env_name}'"; then
     log "conda environment exists: ${env_name}"
     return 0
   fi
 
   log "creating conda environment: ${env_name}"
-  _condaExec "$conda_dir" "create -n '${env_name}' python='${python_version}' -y"
+  _condaExec "create -n '${env_name}' python='${python_version}' -y"
   log "environment created"
   return 0
 }
@@ -214,10 +174,18 @@ condaEnvRun() {
   local env="$1"
   shift
 
+  local condaExe=""
+  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
+
   # Build a safely-quoted command string for the remote shell
   local cmd=""
   printf -v cmd "%q " "$@"
 
-  run bash -lc "source '${CONDA_DIR}/etc/profile.d/conda.sh' && conda activate '${env}' && ${cmd}"
+  run bash -lc "$(cat <<EOF
+source '${CONDA_DIR}/etc/profile.d/conda.sh' # this isn't present so we have to do conda init
+${condaExe} activate ${env}
+${cmd}
+EOF
+)"
 }
 

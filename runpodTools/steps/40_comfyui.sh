@@ -51,7 +51,7 @@ main() {
   # comfyui requirements install (remote-aware, hash-gated)
   # ------------------------------------------------------------
 
-
+echo here
   local hashFile="/workspace/.runpod/reqhash.comfyui.${ENV_NAME}"
   local remoteReqFiles=(
     "$COMFY_DIR/requirements.txt"

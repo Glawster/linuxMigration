@@ -59,12 +59,12 @@ log "llava version: $LLAVA_VERSION"
 log "llava ref: $LLAVA_REF"
 
 # ensure conda is available (do NOT reconfigure tos/channels)
-if ! ensureConda "$CONDA_DIR"; then
+if ! ensureConda ; then
   die "conda not available"
 fi
 
 # ensure llava conda environment
-ensureCondaEnv "$CONDA_DIR" "$LLAVA_ENV_NAME" "3.10"
+ensureCondaEnv "$LLAVA_ENV_NAME" "3.10"
 
 ensureGitRepo "$LLAVA_DIR" "https://github.com/haotian-liu/LLaVA.git"
 

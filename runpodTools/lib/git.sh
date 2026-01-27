@@ -61,7 +61,7 @@ ensureGitRepo() {
       warn "WARNING: unusable git repo detected: ${dir}"
       if [[ "${FORCE:-0}" == "1" ]]; then
         warn "forcing removal of unusable repo: ${dir}"
-        run rm -rf "${dira
+        run rm -rf "${dir}"
       else
         moveAside "${dir}"
       fi
@@ -72,7 +72,7 @@ ensureGitRepo() {
 
       # Determine upstream default branch via origin/HEAD
       local defaultRef
-      defaultRef="$(runCapture git -C '${dir}' symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null || true")"
+      defaultRef="$(runCapture git -C "${dir}" symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null || true)"
 
       if [[ -z "${defaultRef}" ]]; then
         # Fallbacks if origin/HEAD missing
