@@ -2,8 +2,6 @@
 # lib/conda.sh
 # Conda environment management helpers (remote-safe)
 
-set -euo pipefail
-
 resolveCondaExe() {
   local condaDir="$1"
 
@@ -42,7 +40,7 @@ _condaExec() {
   fi
 
   # NOTE: keep this as a single line to avoid SSH newline/quoting edge cases
-  run bash -lc "'${condaExe}' $*"
+  run ${condaExe} $*
 }
 
 # ------------------------------------------------------------
@@ -165,6 +163,22 @@ updateCondaBase() {
 
   log "updating conda base"
   _condaExec "$conda_dir" "update -y -n base -c defaults conda || true"
+  return 0
+}
+
+# ------------------------------------------------------------
+# ensure conda configuration (remote-safe)
+# ------------------------------------------------------------
+ensureCondaConfiguration() {
+  local conda_dir="${1:-${CONDA_DIR}}"
+  if [[ -z "${conda_dir:-}" ]]; then
+    error "CONDA_DIR not set"
+    return 1
+  fi
+
+  log "conda configuration"
+  _condaExec "$conda_dir" "info"
+  _condaExec "$conda_dir" "config --show channels"
   return 0
 }
 

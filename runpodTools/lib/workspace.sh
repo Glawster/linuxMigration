@@ -2,8 +2,6 @@
 # lib/workspace.sh
 # Common workspace paths and inventory helpers
 
-set -euo pipefail
-
 # ============================================================
 # Workspace paths
 # ============================================================
@@ -42,57 +40,66 @@ isStepDone() {
 # ------------------------------------------------------------
 # markStepDone (REMOTE)
 # ------------------------------------------------------------
+
 markStepDone() {
   local step="$1"
-  #log "marking step done: ${step}" # Uncomment for debugging
+  ensureStateDir || true
 
-  if ensureStateDir; then
-    if test -f '${STATE_FILE}'; then \
-      if grep -q '^DONE_${step}=' '${STATE_FILE}'; then \
-        sed -i 's/^DONE_${step}=.*/DONE_${step}=1/' '${STATE_FILE}'; \
-      else \
-        printf '%s\n' 'DONE_${step}=1' >> '${STATE_FILE}'; \
-      fi; \
-    else \
-      printf '%s\n' 'DONE_${step}=1' > '${STATE_FILE}'; \
-    fi"
-  fi;
+  local step_q state_q
+  step_q=$(printf '%q' "$step")
+  state_q=$(printf '%q' "$STATE_FILE")
+
+  run bash -lc "$(cat <<EOF
+STEP=${step_q}
+STATE_FILE=${state_q}
+
+if test -f "\$STATE_FILE"; then
+  if grep -q "^DONE_\${STEP}=" "\$STATE_FILE"; then
+    sed -i "s/^DONE_\${STEP}=.*/DONE_\${STEP}=1/" "\$STATE_FILE"
+  else
+    printf '%s\n' "DONE_\${STEP}=1" >> "\$STATE_FILE"
+  fi
+else
+  printf '%s\n' "DONE_\${STEP}=1" > "\$STATE_FILE"
+fi
+EOF
+)"
 }
+
 
 # ------------------------------------------------------------
 # showInventory (REMOTE)
 # ------------------------------------------------------------
+
 showInventory() {
   log "workspace inventory"
 
-  run bash -lc "
-    echo '--- Directories ---'
-    ls -ld \
-      '${WORKSPACE_ROOT}' \
-      '${RUNPOD_DIR}' \
-      '${CONDA_DIR}' \
-      '${COMFY_DIR}' \
-      '${KOHYA_DIR}' \
-      '${WORKFLOWS_DIR}' \
-      2>/dev/null || true
-    echo
+  run bash -lc "$(cat <<'EOF'
+echo "--- Directories ---"
+ls -ld \
+  "'${WORKSPACE_ROOT}'" \
+  "'${RUNPOD_DIR}'" \
+  "'${CONDA_DIR}'" \
+  "'${COMFY_DIR}'" \
+  "'${KOHYA_DIR}'" \
+  "'${WORKFLOWS_DIR}'" \
+  2>/dev/null || true
 
-    echo '--- Conda Environments ---'
-    if test -x '${CONDA_DIR}/condabin/conda'; then
-      '${CONDA_DIR}/condabin/conda' env list 2>/dev/null || true
-    elif test -x '${CONDA_DIR}/bin/conda'; then
-      '${CONDA_DIR}/bin/conda' env list 2>/dev/null || true
-    else
-      echo 'Miniconda not installed'
-    fi
-    echo
+echo "--- Conda Environments ---"
+if test -x "'${CONDA_DIR}'/condabin/conda"; then
+  "'${CONDA_DIR}'/condabin/conda" env list 2>/dev/null || true
+elif test -x "'${CONDA_DIR}'/bin/conda"; then
+  "'${CONDA_DIR}'/bin/conda" env list 2>/dev/null || true
+else
+  echo "Miniconda not installed"
+fi
 
-    echo '--- State File ---'
-    if test -f '${STATE_FILE}'; then
-      cat '${STATE_FILE}'
-    else
-      echo 'No state file'
-    fi
-    echo
-  "
+echo "--- State File ---"
+if test -f "'${STATE_FILE}'"; then
+  cat "'${STATE_FILE}'"
+else
+  echo "No state file"
+fi
+EOF
+  )" 
 }

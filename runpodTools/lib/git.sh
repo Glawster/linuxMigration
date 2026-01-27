@@ -2,8 +2,6 @@
 # lib/git.sh
 # Git repository management helpers
 
-set -euo pipefail
-
 # Move an existing directory aside on the REMOTE host
 # Result: <dir>.bak.<timestamp>
 moveAside() {

@@ -23,12 +23,18 @@
 
 set -euo pipefail
 
+# RunPod defaults (used unless overridden)
+POD_ROOT="${POD_ROOT:-/workspace}"
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-$POD_ROOT/workspace}"
+POD_HOME="${POD_HOME:-$POD_ROOT/root}"
+
 # Script location
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNPOD_DIR="$SCRIPT_DIR"
 LIB_DIR="$RUNPOD_DIR/lib"
 STEPS_DIR="$RUNPOD_DIR/steps"
 LOGDIR="$RUNPOD_DIR/logs"
+TESTDIR="$RUNPOD_DIR/test"
 
 # Defaults (respect env from runpodFromSSH.sh)
 ENABLE_COMFYUI="${ENABLE_COMFYUI:-1}"

@@ -16,6 +16,8 @@ source "$LIB_DIR/common.sh"
 source "$LIB_DIR/workspace.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/conda.sh"
+# shellcheck disable=SC1091
+source "$LIB_DIR/run.sh"
 
 condaDiagnostics() {
   log "conda diagnostics"
@@ -88,9 +90,10 @@ main() {
     die "conda env setup failed"
   fi
 
-  log "conda configuration"
-  run bash -lc "source '${CONDA_DIR}/etc/profile.d/conda.sh' && conda info"
-  run bash -lc "source '${CONDA_DIR}/etc/profile.d/conda.sh' && conda config --show channels"
+  if ! ensureCondaConfiguration "$CONDA_DIR" "$ENV_NAME"; then
+    condaDiagnostics
+    die "conda configuration failed"
+  fi  
 
   markStepDone "CONDA"
   log "Conda done\n"

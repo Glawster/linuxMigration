@@ -4,8 +4,6 @@
 # common helpers used by steps
 # IMPORTANT: steps should only call `run` and `isCommand`
 
-set -euo pipefail
-
 # expected env:
 #   DRY_RUN (0/1)
 #   DRY_PREFIX (e.g. "[]")
