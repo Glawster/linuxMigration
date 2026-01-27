@@ -32,4 +32,4 @@ runs/
 runpodTools/logs/
 runpodTools/state.env
 runpodTools/uploadModels.sh
-runpodTools/support.*.zip
+support.*.zip

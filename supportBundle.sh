@@ -164,10 +164,24 @@ snapshotProject() {
   # Copy selected content (avoid huge/noisy dirs)
   mkdir -p "${out}/code"
 
+  # ------------------------------------------------------------
+  # External configs
+  # ------------------------------------------------------------
+  CONFIG_ROOT="${TMPDIR}/configs"
+  mkdir -p "${CONFIG_ROOT}/kohya"
+
+  KOHYA_CONFIG="${HOME}/.config/kohya/kohyaConfig.json"
+
+  if [[ -f "${KOHYA_CONFIG}" ]]; then
+    cp -a "${KOHYA_CONFIG}" "${CONFIG_ROOT}/kohya/"
+  else
+    echo "missing: ${KOHYA_CONFIG}" > "${CONFIG_ROOT}/kohya/MISSING.txt"
+  fi
+
   if [[ "$HAS_RSYNC" == "1" ]]; then
     rsync -a \
       --exclude '.git/' \
-      --exclude 'logs/' \
+      --include 'logs/' \
       --exclude '**/logs/' \
       --exclude 'state.env' \
       --exclude '__pycache__/' \
@@ -188,6 +202,16 @@ snapshotProject() {
       --include '*.sh' \
       --include '*.md' \
       --include '*.json' \
+      --include '*.sh' \
+      --include '*.py' \
+      --include '*.md' \
+      --include '*.json' \
+      --include '*.txt' \
+      --include '*.toml' \
+      --include '*.yml' \
+      --include '*.yaml' \
+      --include 'requirements*.txt' \
+      --include 'pyproject.toml' \
       --exclude '*' \
       "${src}/" "${out}/code/" \
       >/dev/null 2>&1 || true
