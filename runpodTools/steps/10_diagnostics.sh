@@ -26,7 +26,7 @@ main() {
   
   # Create bash aliases
   log "creating /root/.bash_aliases"
-  run bash -lc "echo \"alias d='ls -al'\" >> ~/.bash_aliases"
+  runSh "echo \"alias d='ls -al'\" >> ~/.bash_aliases"
 
   logTask "running runpod diagnostics"
   runDiagnostics

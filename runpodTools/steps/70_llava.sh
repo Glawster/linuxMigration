@@ -6,17 +6,17 @@ resolveLlavaRef() {
   local desired="$2"
 
   # Fetch tags first
-  run git -C "$dir" fetch --tags --force
+  runCmd git -C "$dir" fetch --tags --force
 
   # If exact ref exists, use it
-  if run git -C "$dir" rev-parse --verify -q "$desired" >/dev/null 2>&1; then
+  if runCmd git -C "$dir" rev-parse --verify -q "$desired" >/dev/null 2>&1; then
     echo "$desired"
     return 0
   fi
 
   # Try common alternatives
   local alt=""
-  alt="$(run bash -lc "git -C \"$dir\" tag -l \"v1.5*\" | sort -V | tail -n 1")"
+  alt="$(runSh "git -C \"$dir\" tag -l \"v1.5*\" | sort -V | tail -n 1")"
   if [[ -n "$alt" ]]; then
     echo "$alt"
     return 0
@@ -47,9 +47,9 @@ source "$LIB_DIR/workspace.sh"
 
 LLAVA_VERSION="${LLAVA_VERSION:-1.5}"
 LLAVA_REF="${LLAVA_REF:-v1.5}"
-LLAVA_DIR="${LLAVA_DIR:-/workspace/LLaVA}"
+LLAVA_DIR="${LLAVA_DIR:-${WORKSPACE_ROOT}/LLaVA}"
 LLAVA_ENV_NAME="${LLAVA_ENV_NAME:-llava}"
-CONDA_DIR="${CONDA_DIR:-/workspace/miniconda3}"
+CONDA_DIR="${CONDA_DIR:-${WORKSPACE_ROOT}/miniconda3}"
 
 logTask "installing llava"
 
@@ -74,20 +74,20 @@ log "checking out llava ref: $LLAVA_REF"
 resolvedRef="$(resolveLlavaRef "$LLAVA_DIR" "$LLAVA_REF")"
 log "resolved llava ref: $resolvedRef"
 
-run git -C "$LLAVA_DIR" checkout "$resolvedRef"
-run git -C "$LLAVA_DIR" reset --hard "$resolvedRef"
+runCmd git -C "$LLAVA_DIR" checkout "$resolvedRef"
+runCmd git -C "$LLAVA_DIR" reset --hard "$resolvedRef"
 
 #log "installing llava dependencies"
-condaEnvRun "$LLAVA_ENV_NAME" pip install --root-user-action=ignore 'protobuf<5' sentencepiece
+condaRunCmd "$LLAVA_ENV_NAME" pip install --root-user-action=ignore 'protobuf<5' sentencepiece
 if run test -f "$LLAVA_DIR/requirements.txt"; then
-  condaEnvRun "$LLAVA_ENV_NAME" pip install -r "$LLAVA_DIR/requirements.txt"
+  condaRunCmd "$LLAVA_ENV_NAME" pip install -r "$LLAVA_DIR/requirements.txt"
 else
   log "skip (no requirements.txt)"
 fi
 
 #log "installing llava (editable)"
-condaEnvRun "$LLAVA_ENV_NAME" pip install -e "$LLAVA_DIR"
-condaEnvRun "$LLAVA_ENV_NAME" python -c 'import llava; print(llava.__file__)'
+condaRunCmd "$LLAVA_ENV_NAME" pip install -e "$LLAVA_DIR"
+condaRunCmd "$LLAVA_ENV_NAME" python -c 'import llava; print(llava.__file__)'
 
 # ------------------------------------------------------------
 # optional: write helper start script
@@ -99,8 +99,7 @@ cat > "$START_SCRIPT" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 
-WORKSPACE="/workspace"
-CONDA_DIR="$WORKSPACE/miniconda3"
+CONDA_DIR="$WORKSPACE_ROOT/miniconda3"
 CONDA_EXE="$CONDA_DIR/bin/conda"
 ENV_NAME="$LLAVA_ENV_NAME"
 
@@ -113,7 +112,7 @@ exec "$CONDA_EXE" run -n "$ENV_NAME" --no-capture-output python -V
 EOF
 
 runLocal scp "${SCP_OPTS[@]}" "$START_SCRIPT" "${SSH_TARGET}:/workspace/llavaStart.sh"
-run bash -lc "chmod +x /workspace/$START_SCRIPT"
+runSh "chmod +x /workspace/$START_SCRIPT"
 
 markStepDone "LLAVA"
 

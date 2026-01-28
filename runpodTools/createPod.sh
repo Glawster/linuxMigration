@@ -156,5 +156,5 @@ else
 fi
 echo
 
-# run modular bootstrap (steps must use run/isCommand only)
+# run modular bootstrap (steps must use runSh / runCmd from common.sh)
 exec bash "${SCRIPT_DIR}/runpodBootstrap.sh" "${BOOTSTRAP_ARGS[@]}"

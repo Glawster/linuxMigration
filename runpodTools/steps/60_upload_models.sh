@@ -265,7 +265,7 @@ rsyncOne() {
   local src="$1"
   local dst="$2"
 
-  run rsync -avP --partial --inplace --no-perms --no-owner --no-group \
+  runCmd rsync -avP --partial --inplace --no-perms --no-owner --no-group \
     -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}" \
     "$src" "$TARGET:$dst/"
 }
@@ -280,7 +280,7 @@ rsyncOne "$LOCAL_YOLO" "$REMOTE_BBOX"
 if [[ -d "$WORKFLOWS_DIR" && "${WORKFLOW_COUNT}" -gt 0 ]]; then
   echo
   echo "=== Uploading Workflows ==="
-  run rsync -avP --partial --inplace --no-perms --no-owner --no-group     -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}"     "${WORKFLOWS_DIR}/" "$TARGET:${REMOTE_WORKFLOWS}/"
+  runCmd rsync -avP --partial --inplace --no-perms --no-owner --no-group     -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}"     "${WORKFLOWS_DIR}/" "$TARGET:${REMOTE_WORKFLOWS}/"
 fi
 
 echo

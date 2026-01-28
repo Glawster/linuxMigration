@@ -43,15 +43,15 @@ main() {
 
   local torch_index="${TORCH_CUDA_INDEX_URL:-https://download.pytorch.org/whl/cu121}"
 
-  condaEnvRun "${ENV_NAME}" python --version
-  condaEnvRun "${ENV_NAME}" python -m pip install --root-user-action=ignore --upgrade pip wheel
+  condaRunCmd "${ENV_NAME}" python --version
+  condaRunCmd "${ENV_NAME}" python -m pip install --root-user-action=ignore --upgrade pip wheel
 
   log "installing comfyui requirements"
-  condaEnvRun "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/requirements.txt"
-  condaEnvRun "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
+  condaRunCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/requirements.txt"
+  condaRunCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
 
   # Verify CUDA
-  condaEnvRun "$ENV_NAME" python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
+  condaRunCmd "$ENV_NAME" python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
 
   log "generating comfyStart.sh helper"
 

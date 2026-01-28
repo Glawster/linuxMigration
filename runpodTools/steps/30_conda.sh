@@ -23,33 +23,33 @@ condaDiagnostics() {
   log "conda diagnostics"
 
   log "who am i / id / hostname / pwd"
-  run bash -lc "whoami; id; hostname; pwd" || true
+  runSh "whoami; id; hostname; pwd" || true
 
   log "disk usage"
-  run bash -lc "df -h / /workspace 2>/dev/null || true" || true
+  runSh "df -h / /workspace 2>/dev/null || true" || true
 
   log "mounts"
-  run bash -lc "mount | grep -E ' /workspace | / ' || true" || true
+  runSh "mount | grep -E ' /workspace | / ' || true" || true
 
   log "conda directory listing"
-  run bash -lc "echo 'CONDA_DIR=${CONDA_DIR:-}'" || true
+  runSh "echo 'CONDA_DIR=${CONDA_DIR:-}'" || true
 
   log "listing conda directory contents"
-  run bash -lc "ls -la '${CONDA_DIR}' || true" || true
+  runSh "ls -la '${CONDA_DIR}' || true" || true
 
   log "listing conda subdirectories"
-  run bash -lc "ls -la '${CONDA_DIR}/bin' || true" || true
+  runSh "ls -la '${CONDA_DIR}/bin' || true" || true
 
   log "listing condabin"
-  run bash -lc "ls -la '${CONDA_DIR}/condabin' || true" || true
+  runSh "ls -la '${CONDA_DIR}/condabin' || true" || true
 
   log "checking for conda executables"
-  run bash -lc "test -x '${CONDA_DIR}/condabin/conda' && '${CONDA_DIR}/condabin/conda' --version || true" || true
-  run bash -lc "test -x '${CONDA_DIR}/bin/conda' && '${CONDA_DIR}/bin/conda' --version || true" || true
-  run bash -lc "test -x '${CONDA_DIR}/_conda' && '${CONDA_DIR}/_conda' --version || true" || true
+  runSh "test -x '${CONDA_DIR}/condabin/conda' && '${CONDA_DIR}/condabin/conda' --version || true" || true
+  runSh "test -x '${CONDA_DIR}/bin/conda' && '${CONDA_DIR}/bin/conda' --version || true" || true
+  runSh "test -x '${CONDA_DIR}/_conda' && '${CONDA_DIR}/_conda' --version || true" || true
 
   log "scanning for conda binaries under CONDA_DIR"
-  run bash -lc "find '${CONDA_DIR}' -maxdepth 4 -type f -name conda -print 2>/dev/null | head -n 50 || true" || true
+  runSh "find '${CONDA_DIR}' -maxdepth 4 -type f -name conda -print 2>/dev/null | head -n 50 || true" || true
 }
 
 main() {

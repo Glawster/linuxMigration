@@ -2,7 +2,7 @@
 # lib/common.sh
 #
 # common helpers used by steps
-# IMPORTANT: steps should only call `run` and `isCommand`
+# IMPORTANT: steps should only call `runCmd` and `runSh` from here
 
 # expected env:
 #   DRY_RUN (0/1)
@@ -42,7 +42,7 @@ die() {
 ensureDir() {
   local dir="$1"
   if [[ ! -d "$dir" ]]; then
-    run mkdir -p "$dir"
+    runCmd mkdir -p "$dir"
   fi
 }
 
@@ -51,37 +51,8 @@ ensureRemoteConfigured() {
     if [[ -z "${SSH_TARGET:-}" ]]; then
       die "Remote execution required but SSH_TARGET is not set."
     fi
-    if ! declare -F runRemote >/dev/null 2>&1; then
-      die "Remote execution required but runRemote() is not available (did you source lib/ssh.sh?)."
+    if ! declare -F runCmd >/dev/null 2>&1; then
+      die "Remote execution required but runCmd() is not available (did you source lib/run.sh?)."
     fi
   fi
-}
-
-isCommand() {
-  # usage: isCommand <cmd>
-  ensureRemoteConfigured
-  local cmd="$1"
-
-  if [[ -n "${SSH_TARGET:-}" ]] && declare -F isCommandRemote >/dev/null 2>&1; then
-    isCommandRemote "${SSH_TARGET}" "$cmd"
-    return $?
-  fi
-
-  if [[ "${REQUIRE_REMOTE}" == "1" ]]; then
-    die "Remote execution required but isCommandRemote not active."
-  fi
-
-  command -v "$cmd" >/dev/null 2>&1
-}
-
-hasCmd() {
-  # usage: hasCmd <command>
-  local cmd="$1"
-  run bash -lc "
-    command -v '${cmd}' >/dev/null 2>&1 || \
-    test -x '/usr/bin/${cmd}' || \
-    test -x '/bin/${cmd}' || \
-    test -x '/usr/sbin/${cmd}' || \
-    test -x '/sbin/${cmd}'
-  "
 }

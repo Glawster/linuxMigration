@@ -15,13 +15,51 @@ resolveCondaExe() {
 
   local c
   for c in "${candidates[@]}"; do
-    if run /usr/bin/test -x "$c"; then
+    if runCmd /usr/bin/test -x "$c"; then
       echo "$c"
       return 0
     fi
   done
 
   return 1
+}
+
+# ------------------------------------------------------------
+# Conda execution helpers
+#   condaRunCmd <env> <argv...>   : argument-safe
+#   condaRunSh  <env> "<script>"  : shell snippet (cd/&&/pipes/redirs)
+# ------------------------------------------------------------
+condaRunCmd() {
+  local env="$1"
+  shift
+
+  local condaExe=""
+  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
+  if [[ -z "${condaExe:-}" ]]; then
+    error "conda executable not found in ${CONDA_DIR}"
+    return 1
+  fi
+
+  runCmd "${condaExe}" run -n "${env}" --no-capture-output "$@"
+}
+
+condaRunSh() {
+  local env="$1"
+  shift
+  local script="$*"
+
+  local condaExe=""
+  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
+  if [[ -z "${condaExe:-}" ]]; then
+    error "conda executable not found in ${CONDA_DIR}"
+    return 1
+  fi
+
+  runSh "$(printf "%q " "${condaExe}" run -n "${env}" --no-capture-output bash -lc "${script}")"
+}
+
+condaEnvRun() {
+  condaRunCmd "$@"
 }
 
 
@@ -193,5 +231,6 @@ condaEnvRun() {
 
   # Run command inside env without relying on conda.sh / activate
   printf -v cmd "%q " "$@"
+  echo "Running in conda env '${env}': ${cmd}"
   run "${condaExe}" run -n "${env}" --no-capture-output "${cmd}"
 }

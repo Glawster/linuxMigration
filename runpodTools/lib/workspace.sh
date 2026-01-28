@@ -22,7 +22,7 @@ ENV_NAME="${ENV_NAME:-runpod}"
 STATE_FILE="${RUNPOD_DIR}/state.env"
 
 ensureStateDir() {
-  run mkdir -p "$(dirname "$STATE_FILE")"
+  runCmd mkdir -p "$(dirname "$STATE_FILE")"
 }
 
 # ------------------------------------------------------------
@@ -31,7 +31,7 @@ ensureStateDir() {
 isStepDone() {
   local step="$1"
 
-  run bash -lc "test -f '${STATE_FILE}' || exit 1; \
+  runSh "test -f '${STATE_FILE}' || exit 1; \
     source '${STATE_FILE}'; \
     var='DONE_${step}'; \
     [[ \"\${!var:-0}\" == '1' ]]"
@@ -49,7 +49,7 @@ markStepDone() {
   step_q=$(printf '%q' "$step")
   state_q=$(printf '%q' "$STATE_FILE")
 
-  run bash -lc "$(cat <<EOF
+  runSh "$(cat <<EOF
 STEP=${step_q}
 STATE_FILE=${state_q}
 
@@ -74,7 +74,7 @@ EOF
 showInventory() {
   log "workspace inventory"
 
-  run bash -lc "$(cat <<'EOF'
+  runSh "$(cat <<'EOF'
 echo "--- Directories ---"
 ls -ld \
   "'${WORKSPACE_ROOT}'" \

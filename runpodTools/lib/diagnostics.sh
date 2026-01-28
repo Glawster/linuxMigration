@@ -6,37 +6,38 @@ runDiagnostics() {
   logTask "evaluating template drift diagnostics"
   
   echo "--- System Info ---"
-  run uname -a
+  runCmd uname -a
   
   echo "--- User Info ---"
-  run whoami
-  run id
-  run hostname
+  runCmd whoami
+  runCmd id
+  runCmd hostname
 
   echo "--- OS Release ---"
-  run cat /etc/os-release 2>/dev/null || true
+  runSh "cat /etc/os-release 2>/dev/null || true"
   
   echo "--- GPU Info ---"
-  run nvidia-smi 2>/dev/null || echo "nvidia-smi not available"
+  runSh "nvidia-smi 2>/dev/null || echo \"nvidia-smi not available\""
   
   echo "--- Shell ---"
-  run echo "shell=$SHELL"
+  runSh echo "shell=$SHELL"
   
   echo "--- Conda Environment Variables ---"
-  run env | grep -i conda || echo "No conda environment variables"
+  runSh env | grep -i conda || echo "No conda environment variables"
   
   echo "--- Conda Config Files ---"
-  run ls -la /root/.condarc /etc/conda/.condarc 2>/dev/null || echo "No conda config files"
+  runSh ls -la /root/.condarc /etc/conda/.condarc 2>/dev/null || echo "No conda config files"
   
   echo "--- Python Info ---"
-  if isCommand python3; then
-    run python3 --version
-    run which python3
+  
+  if runSh "command -v python3 >/dev/null 2>&1"; then
+    runCmd python3 --version
+    runCmd which python3
   else
     echo "python3 not found"
   fi
   
   echo "--- Disk Usage ---"
-  run df -h /workspace 2>/dev/null || run df -h / || true
+  runCmd df -h /workspace 2>/dev/null || runCmd df -h / || true
   echo
 }

@@ -11,7 +11,7 @@ moveAside() {
 
   local bak="${dir}.bak.${ts}"
   warn "moving aside: ${dir} -> ${bak}"
-  run mv "$dir" "$bak"
+  runCmd mv "$dir" "$bak"
 }
 
 # Ensure a git repository is cloned and up to date (idempotent, remote-safe)
@@ -22,8 +22,8 @@ ensureGitRepo-old() {
   # If it's a valid git repo, update and return
   if run test -d "${dir}/.git"; then
     log "repo exists, pulling: ${dir}"
-    run git -C "${dir}" fetch --all --prune
-    run git -C "${dir}" pull --ff-only
+    runCmd git -C "${dir}" fetch --all --prune
+    runCmd git -C "${dir}" pull --ff-only
     return 0
   fi
 
@@ -31,7 +31,7 @@ ensureGitRepo-old() {
   if run test -d "${dir}"; then
     if [[ "${FORCE:-0}" == "1" ]]; then
       warn "forcing removal of existing directory: ${dir}"
-      run rm -rf "${dir}"
+      runCmd rm -rf "${dir}"
     else
       moveAside "${dir}"
     fi
@@ -57,18 +57,18 @@ ensureGitRepo() {
     log "repo exists, syncing snapshot: ${dir}"
 
     # Sanity check: is this a usable work-tree?
-    if ! run git -C "${dir}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if ! runCmd git -C "${dir}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       warn "WARNING: unusable git repo detected: ${dir}"
       if [[ "${FORCE:-0}" == "1" ]]; then
         warn "forcing removal of unusable repo: ${dir}"
-        run rm -rf "${dir}"
+        runCmd rm -rf "${dir}"
       else
         moveAside "${dir}"
       fi
       # fall through to clone
     else
       # Fetch repairs most partial-clone states
-      run git -C "${dir}" fetch --all --prune
+      runCmd git -C "${dir}" fetch --all --prune
 
       # Determine upstream default branch via origin/HEAD
       local defaultRef
@@ -76,9 +76,9 @@ ensureGitRepo() {
 
       if [[ -z "${defaultRef}" ]]; then
         # Fallbacks if origin/HEAD missing
-        if run git -C "${dir}" show-ref --verify --quiet refs/remotes/origin/master; then
+        if runCmd git -C "${dir}" show-ref --verify --quiet refs/remotes/origin/master; then
           defaultRef="refs/remotes/origin/master"
-        elif run git -C "${dir}" show-ref --verify --quiet refs/remotes/origin/main; then
+        elif runCmd git -C "${dir}" show-ref --verify --quiet refs/remotes/origin/main; then
           defaultRef="refs/remotes/origin/main"
         else
           warn "WARNING: cannot determine upstream branch, skipping update: ${dir}"
@@ -91,9 +91,9 @@ ensureGitRepo() {
       log "...resetting to upstream snapshot: origin/${branch}"
 
       # Snapshot update (no merge, no pull)
-      run git -C "${dir}" checkout -B "${branch}" "origin/${branch}"
-      run git -C "${dir}" reset --hard "origin/${branch}"
-      run git -C "${dir}" clean -fd
+      runCmd git -C "${dir}" checkout -B "${branch}" "origin/${branch}"
+      runCmd git -C "${dir}" reset --hard "origin/${branch}"
+      runCmd git -C "${dir}" clean -fd
 
       return 0
     fi
@@ -103,7 +103,7 @@ ensureGitRepo() {
   if run test -d "${dir}"; then
     if [[ "${FORCE:-0}" == "1" ]]; then
       warn "forcing removal of existing directory: ${dir}"
-      run rm -rf "${dir}"
+      runCmd rm -rf "${dir}"
     else
       moveAside "${dir}"
     fi
