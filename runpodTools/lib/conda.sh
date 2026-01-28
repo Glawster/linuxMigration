@@ -174,18 +174,23 @@ condaEnvRun() {
   local env="$1"
   shift
 
+  if [[ -z "${CONDA_DIR:-}" ]]; then
+    error "CONDA_DIR not set"
+    return 1
+  fi
+
   local condaExe=""
   condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
+  if [[ -z "${condaExe:-}" ]]; then
+    error "conda executable not found in ${CONDA_DIR}"
+    return 1
+  fi
 
-  # Build a safely-quoted command string for the remote shell
-  local cmd=""
-  printf -v cmd "%q " "$@"
+  if [[ $# -lt 1 ]]; then
+    error "condaEnvRun called without a command"
+    return 1
+  fi
 
-  run bash -lc "$(cat <<EOF
-source '${CONDA_DIR}/etc/profile.d/conda.sh' # this isn't present so we have to do conda init
-${condaExe} activate ${env}
-${cmd}
-EOF
-)"
+  # Run command inside env without relying on conda.sh / activate
+  run "${condaExe}" run -n "${env}" --no-capture-output "$@"
 }
-

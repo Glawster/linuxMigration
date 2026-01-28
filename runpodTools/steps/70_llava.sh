@@ -97,10 +97,19 @@ START_SCRIPT="llavaStart.sh"
 log "writing llava start helper: $START_SCRIPT"
 cat > "$START_SCRIPT" <<EOF
 #!/usr/bin/env bash
-set -e
-source "$CONDA_DIR/etc/profile.d/conda.sh"
-conda activate "$LLAVA_ENV_NAME"
-echo "llava env active: \$(python -V)"
+set -euo pipefail
+
+WORKSPACE="/workspace"
+CONDA_DIR="$WORKSPACE/miniconda3"
+CONDA_EXE="$CONDA_DIR/bin/conda"
+ENV_NAME="$LLAVA_ENV_NAME"
+
+if [[ ! -x "$CONDA_EXE" ]]; then
+  echo "ERROR: conda not found/executable at $CONDA_EXE" >&2
+  exit 1
+fi
+
+exec "$CONDA_EXE" run -n "$ENV_NAME" --no-capture-output python -V
 EOF
 
 runLocal scp "${SCP_OPTS[@]}" "$START_SCRIPT" "${SSH_TARGET}:/workspace/llavaStart.sh"

@@ -43,15 +43,14 @@ main() {
 
   local torch_index="${TORCH_CUDA_INDEX_URL:-https://download.pytorch.org/whl/cu121}"
 
-  condaEnvRun "$ENV_NAME" python --version
-  condaEnvRun "$ENV_NAME" python -m pip install --root-user-action=ignore --upgrade pip wheel
-  condaEnvRun "$ENV_NAME" pip install --root-user-action=ignore torch torchvision torchaudio --index-url "$torch_index"
+  condaEnvRun "${ENV_NAME}" python --version
+  condaEnvRun "${ENV_NAME}" python -m pip install --root-user-action=ignore --upgrade pip wheel
+  condaEnvRun "${ENV_NAME}" python -c "import sys; print('{}.{}'.format(sys.version_info.major, sys.version_info.minor))"
 
   # ------------------------------------------------------------
   # comfyui requirements install (remote-aware, hash-gated)
   # ------------------------------------------------------------
 
-echo here
   local hashFile="/workspace/.runpod/reqhash.comfyui.${ENV_NAME}"
   local remoteReqFiles=(
     "$COMFY_DIR/requirements.txt"
@@ -144,13 +143,14 @@ set -euo pipefail
 WORKSPACE="/workspace"
 COMFY_DIR="$WORKSPACE/ComfyUI"
 CONDA_DIR="$WORKSPACE/miniconda3"
+CONDA_EXE="$CONDA_DIR/bin/conda"
 ENV_NAME="runpod"
 PORT=8188
 SESSION="comfyui"
 
-if tmux has-session -t "$SESSION" 2>/dev/null; then
-  echo "comfyui already running (tmux session: $SESSION)"
-  exit 0
+if ! command -v ss >/dev/null 2>&1; then
+  echo "ERROR: ss not available; cannot check port usage" >&2
+  exit 1
 fi
 
 if ss -ltn | awk '{print $4}' | grep -q ":${PORT}\$"; then
@@ -164,35 +164,30 @@ if [[ ! -d "$COMFY_DIR" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$CONDA_DIR/etc/profile.d/conda.sh" ]]; then
-  echo "ERROR: conda not found at $CONDA_DIR" >&2
+if [[ ! -x "$CONDA_EXE" ]]; then
+  echo "ERROR: conda not found/executable at $CONDA_EXE" >&2
   exit 1
 fi
 
-source "$CONDA_DIR/etc/profile.d/conda.sh"
-conda activate "$ENV_NAME"
-
-cd "$COMFY_DIR"
-
-if command -v tmux >/dev/null 2>&1; then
-  if tmux has-session -t "$SESSION" 2>/dev/null; then
-    echo "ComfyUI already running (tmux session: $SESSION)"
-  else
-    LOG_DIR="$WORKSPACE/.runpod/logs"
-    mkdir -p "$LOG_DIR"
-    LOG_FILE="$LOG_DIR/comfyui.${PORT}.log"
-
-    tmux new-session -d -s "$SESSION" bash -lc \
-      "source '$CONDA_DIR/etc/profile.d/conda.sh' \
-      && conda activate '$ENV_NAME' \
-      && cd '$COMFY_DIR' \
-      && python main.py --listen 0.0.0.0 --port '$PORT' 2>&1 | tee -a '$LOG_FILE'"
-  fi
-
-else
+if ! command -v tmux >/dev/null 2>&1; then
   echo "tmux not available; starting ComfyUI in foreground"
-  exec python main.py --listen 0.0.0.0 --port $PORT
+  exec "$CONDA_EXE" run -n "$ENV_NAME" --no-capture-output     bash -lc "cd '$COMFY_DIR' && python main.py --listen 0.0.0.0 --port '$PORT'"
 fi
+
+if tmux has-session -t "$SESSION" 2>/dev/null; then
+  echo "comfyui already running (tmux session: $SESSION)"
+  exit 0
+fi
+
+LOG_DIR="$WORKSPACE/.runpod/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/comfyui.${PORT}.log"
+
+tmux new-session -d -s "$SESSION" bash -lc   "'$CONDA_EXE' run -n '$ENV_NAME' --no-capture-output bash -lc "cd '$COMFY_DIR' && python main.py --listen 0.0.0.0 --port '$PORT'" 2>&1 | tee -a '$LOG_FILE'"
+
+echo "comfyui started (tmux session: $SESSION)"
+echo "log: $LOG_FILE"
+
 EOF
 
   chmod +x "$outFile"

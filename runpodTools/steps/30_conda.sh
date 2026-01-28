@@ -40,11 +40,8 @@ condaDiagnostics() {
   log "listing conda subdirectories"
   run bash -lc "ls -la '${CONDA_DIR}/bin' || true" || true
 
-  log "listing condabin and profile.d"
+  log "listing condabin"
   run bash -lc "ls -la '${CONDA_DIR}/condabin' || true" || true
-
-  log "listing profile.d"
-  run bash -lc "ls -la '${CONDA_DIR}/etc/profile.d' || true" || true
 
   log "checking for conda executables"
   run bash -lc "test -x '${CONDA_DIR}/condabin/conda' && '${CONDA_DIR}/condabin/conda' --version || true" || true
