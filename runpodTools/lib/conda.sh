@@ -192,5 +192,6 @@ condaEnvRun() {
   fi
 
   # Run command inside env without relying on conda.sh / activate
-  run "${condaExe}" run -n "${env}" --no-capture-output "$@"
+  printf -v cmd "%q " "$@"
+  run "${condaExe}" run -n "${env}" --no-capture-output "${cmd}"
 }

@@ -45,72 +45,10 @@ main() {
 
   condaEnvRun "${ENV_NAME}" python --version
   condaEnvRun "${ENV_NAME}" python -m pip install --root-user-action=ignore --upgrade pip wheel
-  condaEnvRun "${ENV_NAME}" python -c "import sys; print('{}.{}'.format(sys.version_info.major, sys.version_info.minor))"
 
-  # ------------------------------------------------------------
-  # comfyui requirements install (remote-aware, hash-gated)
-  # ------------------------------------------------------------
-
-  local hashFile="/workspace/.runpod/reqhash.comfyui.${ENV_NAME}"
-  local remoteReqFiles=(
-    "$COMFY_DIR/requirements.txt"
-    "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
-  )
-
-  local reqFiles=()
-  for f in "${remoteReqFiles[@]}"; do
-    if run test -f "$f"; then
-      reqFiles+=("$f")
-    fi
-  done
-
-  if (( ${#reqFiles[@]} == 0 )); then
-    die "no requirements files found under $COMFY_DIR"
-  fi
-
-  # include python version so a recreated env doesn't incorrectly skip
-  local pyver
-  pyver="$(condaEnvRun "$ENV_NAME" python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")"
-
-  currentHash="$(run sh -lc "echo 'py=${pyver}'; cat ${reqFiles[*]} | sha256sum | awk '{print \$1}'")"
-  lastHash="$(run sh -lc "cat \"$hashFile\" 2>/dev/null || true")"
-
-  needsInstall=0
-  if [[ "$currentHash" != "$lastHash" || "${FORCE:-0}" == "1" ]]; then
-    needsInstall=1
-  else
-    # sanity check: marker may exist but env may be missing deps
-    if ! condaEnvRun "$ENV_NAME" python -c "import sqlalchemy" >/dev/null 2>&1; then
-      warn "sqlalchemy missing despite hash marker; forcing reinstall"
-      needsInstall=1
-    fi
-    if ! condaEnvRun "$ENV_NAME" python -c "import git" >/dev/null 2>&1; then
-      warn "GitPython missing despite hash marker; forcing reinstall"
-      needsInstall=1
-    fi
-  fi
-
-  if [[ "$needsInstall" == "0" ]]; then
-    log "...comfyui requirements unchanged and key imports present; skipping pip install"
-  else
-    log "...installing comfyui requirements"
-
-    # ensure pip exists in the env and python -m pip works
-    condaEnvRun "$ENV_NAME" python -m ensurepip --upgrade || true
-    condaEnvRun "$ENV_NAME" python -m pip install --root-user-action=ignore --upgrade pip wheel
-
-    local pipArgs=()
-    for rf in "${reqFiles[@]}"; do
-      pipArgs+=("-r" "$rf")
-    done
-
-    condaEnvRun "$ENV_NAME" python -m pip install --root-user-action=ignore "${pipArgs[@]}"
-
-    # Manager needs GitPython (imports as "git")
-    condaEnvRun "$ENV_NAME" python -m pip install --root-user-action=ignore --upgrade GitPython
-
-    run sh -lc "mkdir -p \"$(dirname "$hashFile")\" && echo \"$currentHash\" > \"$hashFile\""
-  fi
+  log "installing comfyui requirements"
+  condaEnvRun "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/requirements.txt"
+  condaEnvRun "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
 
   # Verify CUDA
   condaEnvRun "$ENV_NAME" python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
@@ -122,8 +60,8 @@ main() {
 
   generatecomfyStartScript "$tmpFile"
 
-  runLocal scp "${SCP_OPTS[@]}" "$tmpFile" "${SSH_TARGET}:/workspace/comfyStart.sh"
-  run bash -lc "chmod +x /workspace/comfyStart.sh"
+  runLocal scp "${SCP_OPTS[@]}" "$tmpFile" "${SSH_TARGET}:${WORKSPACE_ROOT}/comfyStart.sh"
+  run "chmod +x ${WORKSPACE_ROOT}/comfyStart.sh"
 
   rm -f "$tmpFile"
 

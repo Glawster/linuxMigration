@@ -181,8 +181,7 @@ snapshotProject() {
   if [[ "$HAS_RSYNC" == "1" ]]; then
     rsync -a \
       --exclude '.git/' \
-      --include 'logs/***' \
-      --exclude '**/logs/' \
+      --exclude 'logs/' \
       --exclude 'state.env' \
       --exclude '__pycache__/' \
       --exclude '*.pyc' \
@@ -224,12 +223,48 @@ snapshotProject() {
   fi
 }
 
+
+# ------------------------------------------------------------
+# Collect latest log per project (logs/*.log)
+# Copies into TMPDIR/logs (flat) to keep bundle small.
+# ------------------------------------------------------------
+collectLatestLogs() {
+  mkdir -p "${TMPDIR}/logs"
+
+  local rel
+  for rel in "${PROJECTS[@]}"; do
+    local src="${CODE_ROOT}/${rel}"
+    local safeName="${rel//\//_}"
+
+    if [[ ! -d "${src}" ]]; then
+      continue
+    fi
+
+    # Prefer bootstrap logs if present, otherwise any .log
+    local latest=""
+    mapfile -t latest < <(ls -t "${src}/logs/bootstrap."*.log 2>/dev/null | head -n 2)
+
+    if [[ ${#latest[@]} -eq 0 ]]; then
+      mapfile -t latest < <(ls -t "${src}/logs/"*.log 2>/dev/null | head -n 2)
+    fi
+
+    for logFile in "${latest[@]}"; do
+      [[ -f "$logFile" ]] || continue
+      cp -a "$logFile" "${TMPDIR}/logs/${safeName}__$(basename "$logFile")" 2>/dev/null || true
+    done
+
+  done
+}
+
+
 # ------------------------------------------------------------
 # Snapshot each project
 # ------------------------------------------------------------
 for p in "${PROJECTS[@]}"; do
   snapshotProject "$p"
 done
+
+collectLatestLogs
 
 # ------------------------------------------------------------
 # Create zip in CODE_ROOT
