@@ -1,145 +1,221 @@
 #!/usr/bin/env bash
-# ------------------------------------------------------------
-# conda helpers (modular: runCmd/runSh only)
-# ------------------------------------------------------------
+# lib/conda.sh
+# Conda environment management helpers (remote-safe)
 
-set -euo pipefail
+: "${CONDA_DIR:?CONDA_DIR must be set}"
 
-# expects these to be available from your standard sourcing chain:
-# - log, warn, error
-# - runCmd, runSh
-# - CONDA_DIR
-# - ENV_NAME (optional usage)
-# - WORKSPACE_ROOT (optional usage)
+resolveCondaExe() {
+  local condaDir="$1"
 
-# cache
-_CONDA_EXE=""
+  local candidates=(
+    "${condaDir}/condabin/conda"
+    "${condaDir}/bin/conda"
+    "${condaDir}/_conda"
+  )
 
-condaExe() {
-  if [[ -n "${_CONDA_EXE}" ]]; then
-    printf '%s' "${_CONDA_EXE}"
-    return 0
-  fi
-
-  # prefer configured CONDA_DIR
-  if [[ -n "${CONDA_DIR:-}" ]]; then
-    if [[ -x "${CONDA_DIR}/bin/conda" ]]; then
-      _CONDA_EXE="${CONDA_DIR}/bin/conda"
-      printf '%s' "${_CONDA_EXE}"
+  local c
+  for c in "${candidates[@]}"; do
+    if runCmd /usr/bin/test -x "$c"; then
+      echo "$c"
       return 0
     fi
-  fi
-
-  # fallback to PATH
-  if command -v conda >/dev/null 2>&1; then
-    _CONDA_EXE="$(command -v conda)"
-    printf '%s' "${_CONDA_EXE}"
-    return 0
-  fi
+  done
 
   return 1
 }
 
+# ------------------------------------------------------------
+# internal helper: run conda in a single remote shell
+# (works for pipelines because it executes under bash -lc)
+# ------------------------------------------------------------
+_condaExec() {
+  local condaExe
+  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
+
+  if [[ -z "${condaExe:-}" ]]; then
+    error "conda executable not found in ${CONDA_DIR}"
+    return 1
+  fi
+
+  # _condaExec expects a conda *fragment* (string) so pipelines work.
+  # Example:
+  #   _condaExec "env list | awk '{print \$1}' | grep -qx 'runpod'"
+  local fragment="$*"
+  runSh "$(printf "%q " "${condaExe}") ${fragment}"
+}
+
+# ------------------------------------------------------------
+# ensure conda is installed at conda_dir (idempotent)
+# IMPORTANT: do NOT run conda update here (ToS may not be accepted yet)
+# ------------------------------------------------------------
 ensureConda() {
-  local conda_path=""
+  logTask "ensuring conda installation at ${CONDA_DIR}"
 
-  # already available?
-  if conda_path="$(condaExe 2>/dev/null)"; then
-    # If file exists but isn’t executable, fix it (rare but happens after copy)
-    if runSh "test -f '${conda_path}' && ! test -x '${conda_path}'"; then
-      warn "conda exists but is not executable; chmod +x"
-      runSh "chmod +x '${conda_path}' || true"
-    fi
+  local condaExe=""
+  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
 
-    if runCmd "${conda_path}" --version >/dev/null 2>&1; then
-      log "conda already installed: ${conda_path}"
-      return 0
-    fi
+  local installer="/tmp/miniconda.sh"
+  local url="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
+
+  # if conda exists but is missing exec bit, fix it once
+  if [[ -n "${condaExe:-}" ]] && runSh "test -f '${condaExe}' && ! test -x '${condaExe}'"; then
+    warn "conda exists but is not executable; chmod +x"
+    runSh "chmod +x '${condaExe}' || true"
   fi
 
-  # if you have an installer path in your project, call it here.
-  # keeping this conservative because your repo structure can vary.
-  error "Conda not found. Expected CONDA_DIR/bin/conda or conda in PATH."
-  return 1
+  # healthy?
+  if [[ -n "${condaExe:-}" ]] && runCmd "$condaExe" --version >/dev/null 2>&1; then
+    log "conda already installed: ${CONDA_DIR}"
+    return 0
+  fi
+
+  # partial?
+  if runSh "test -e '${CONDA_DIR}'"; then
+    warn "conda directory exists but install looks incomplete: ${CONDA_DIR}"
+  fi
+
+  log "downloading miniconda installer"
+  runCmd wget -q "$url" -O "$installer"
+
+  log "installing/updating miniconda (-u)"
+  if runCmd bash "$installer" -b -p "${CONDA_DIR}" -u; then
+    log "conda update-in-place succeeded"
+    :
+  else
+    warn "conda update-in-place failed, wiping and reinstalling..."
+    runCmd rm -rf "${CONDA_DIR}"
+    runCmd bash "$installer" -b -p "${CONDA_DIR}"
+  fi
+  runCmd rm -f "$installer"
+
+  # refresh conda path after installation
+  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
+
+  # verify
+  if [[ -z "${condaExe:-}" ]] || ! runCmd "$condaExe" --version >/dev/null 2>&1; then
+    runSh "ls -la '${CONDA_DIR}' || true"
+    runSh "ls -la '${CONDA_DIR}/bin' || true"
+    runSh "ls -la '${CONDA_DIR}/condabin' || true"
+    error "conda install failed: ${CONDA_DIR}"
+    return 1
+  fi
+
+  log "conda installed at: ${CONDA_DIR}"
+  return 0
 }
 
 # ------------------------------------------------------------
-# conda environment execution
+# configure conda channels (remote-safe)
 # ------------------------------------------------------------
+ensureCondaChannels() {
+  log "configuring conda channels"
 
-condaEnvCmd() {
-  # Executes a command by argv inside a conda env.
-  # Usage: condaEnvCmd myenv python -V
-  local env="$1"
-  shift || true
+  # remove-key returns non-zero if missing; keep behaviour
+  _condaExec "config --remove-key channels 2>/dev/null || true"
+  _condaExec "config --add channels conda-forge"
+  _condaExec "config --set channel_priority strict"
 
-  if [[ -z "${env}" ]]; then
-    error "condaEnvCmd called without env"
-    return 1
-  fi
-  if [[ $# -lt 1 ]]; then
-    error "condaEnvCmd called without command"
-    return 1
-  fi
-
-  ensureConda
-  local conda_path
-  conda_path="$(condaExe)"
-
-  log "Running in conda env '${env}': $*"
-  runCmd "${conda_path}" run -n "${env}" --no-capture-output "$@"
+  log "channels configured"
+  return 0
 }
 
+# ------------------------------------------------------------
+# accept conda ToS (remote-safe)
+# ------------------------------------------------------------
+acceptCondaTos() {
+  log "accepting conda terms of service"
+
+  # keep these as single-line strings
+  _condaExec "tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main 2>/dev/null || true"
+  _condaExec "tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 2>/dev/null || true"
+  return 0
+}
+
+# ------------------------------------------------------------
+# update base conda (safe to call AFTER ToS acceptance)
+# ------------------------------------------------------------
+updateCondaBase() {
+  log "updating conda base"
+  _condaExec "update -y -n base -c defaults conda || true"
+  return 0
+}
+
+# ------------------------------------------------------------
+# ensure conda configuration (remote-safe)
+# ------------------------------------------------------------
+ensureCondaConfiguration() {
+  log "conda configuration"
+  _condaExec "info"
+  _condaExec "config --show channels"
+  return 0
+}
+
+# ------------------------------------------------------------
+# ensure env exists (remote-safe, idempotent)
+# ------------------------------------------------------------
+ensureCondaEnv() {
+  local env_name="${1:-runpod}"
+  local python_version="${2:-3.10}"
+
+  # Check if env exists (pipeline is ok because _condaExec uses bash -lc)
+  if _condaExec "env list | awk '{print \$1}' | grep -qx '${env_name}'"; then
+    log "conda environment exists: ${env_name}"
+    return 0
+  fi
+
+  log "creating conda environment: ${env_name}"
+  _condaExec "create -n '${env_name}' python='${python_version}' -y"
+  log "environment created"
+  return 0
+}
+
+# ------------------------------------------------------------
+# run a command inside a conda env (remote-safe)
+# ------------------------------------------------------------
 condaEnvSh() {
-  # Executes a *shell script* inside a conda env (so cd/&& works).
-  # Usage: condaEnvSh myenv "cd /x && python -m pip install -r requirements.txt"
   local env="$1"
-  shift || true
-  local script="${1:-}"
+  shift
+  local script="$1"
 
-  if [[ -z "${env}" ]]; then
+  if [[ -z "${env:-}" ]]; then
     error "condaEnvSh called without env"
     return 1
   fi
-  if [[ -z "${script}" ]]; then
-    error "condaEnvSh called without script"
+  if [[ -z "${script:-}" ]]; then
+    error "condaEnvSh called without a script"
     return 1
   fi
 
-  ensureConda
-  local conda_path
-  conda_path="$(condaExe)"
+  local condaExe
+  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
+  if [[ -z "${condaExe:-}" ]]; then
+    error "conda executable not found in ${CONDA_DIR}"
+    return 1
+  fi
 
-  log "Running in conda env '${env}': ${script}"
-  runCmd "${conda_path}" run -n "${env}" --no-capture-output bash -lc "${script}"
+  echo "Running in conda env '${env}': ${script}"
+  runCmd "${condaExe}" run -n "${env}" --no-capture-output bash -lc "${script}"
 }
 
-# ------------------------------------------------------------
-# env management helpers
-# ------------------------------------------------------------
+condaEnvCmd() {
+  local envName="$1"
+  shift
 
-condaEnsureEnv() {
-  # Creates env if missing (idempotent)
-  # Usage: condaEnsureEnv myenv python=3.10
-  local env="$1"
-  shift || true
-  local spec=("$@")
-
-  ensureConda
-  local conda_path
-  conda_path="$(condaExe)"
-
-  if runCmd "${conda_path}" env list | awk '{print $1}' | grep -qx "${env}"; then
-    log "conda env exists: ${env}"
-    return 0
+  if [[ -z "${envName:-}" ]]; then
+    error "condaEnvCmd: environment name not provided"
+    return 1
   fi
 
-  if [[ ${#spec[@]} -eq 0 ]]; then
-    # default if you don’t pass anything
-    spec=("python=3.10")
+  local condaExe
+  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
+
+  if [[ -z "${condaExe:-}" ]]; then
+    error "conda executable not found in ${CONDA_DIR}"
+    return 1
   fi
 
-  log "...creating conda env: ${env} (${spec[*]})"
-  runCmd "${conda_path}" create -y -n "${env}" "${spec[@]}"
-  log "conda env created: ${env}"
+  log "Running in conda env '${envName}': $*"
+
+  # argv-safe: no shell, no temp scripts, no quoting games
+  runCmd "${condaExe}" run -n "${envName}" --no-capture-output "$@"
 }
