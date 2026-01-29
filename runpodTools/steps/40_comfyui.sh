@@ -29,7 +29,9 @@ main() {
   fi
 
   # Ensure repos (remote-safe via ensureGitRepo)
+  log "ensuring comfyui git repositories"
   ensureGitRepo "$COMFY_DIR" "https://github.com/comfyanonymous/ComfyUI.git"
+  log "ensuring comfyui custom nodes"
   ensureGitRepo "$COMFY_DIR/custom_nodes/ComfyUI-Manager" "https://github.com/ltdrdata/ComfyUI-Manager.git"
 
   # the following don't seen to install so commented out
@@ -60,8 +62,8 @@ main() {
 
   generatecomfyStartScript "$tmpFile"
 
-  runLocal scp "${SCP_OPTS[@]}" "$tmpFile" "${SSH_TARGET}:${WORKSPACE_ROOT}/comfyStart.sh"
-  run "chmod +x ${WORKSPACE_ROOT}/comfyStart.sh"
+  runHostCmd scp "${SCP_OPTS[@]}" "$tmpFile" "${SSH_TARGET}:${WORKSPACE_ROOT}/comfyStart.sh"
+  runSh "chmod +x ${WORKSPACE_ROOT}/comfyStart.sh"
 
   rm -f "$tmpFile"
 

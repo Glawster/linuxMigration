@@ -24,44 +24,6 @@ resolveCondaExe() {
   return 1
 }
 
-# ------------------------------------------------------------
-# Conda execution helpers
-#   condaRunCmd <env> <argv...>   : argument-safe
-#   condaRunSh  <env> "<script>"  : shell snippet (cd/&&/pipes/redirs)
-# ------------------------------------------------------------
-condaRunCmd() {
-  local env="$1"
-  shift
-
-  local condaExe=""
-  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
-  if [[ -z "${condaExe:-}" ]]; then
-    error "conda executable not found in ${CONDA_DIR}"
-    return 1
-  fi
-
-  runCmd "${condaExe}" run -n "${env}" --no-capture-output "$@"
-}
-
-condaRunSh() {
-  local env="$1"
-  shift
-  local script="$*"
-
-  local condaExe=""
-  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
-  if [[ -z "${condaExe:-}" ]]; then
-    error "conda executable not found in ${CONDA_DIR}"
-    return 1
-  fi
-
-  runSh "$(printf "%q " "${condaExe}" run -n "${env}" --no-capture-output bash -lc "${script}")"
-}
-
-condaEnvRun() {
-  condaRunCmd "$@"
-}
-
 
 # ------------------------------------------------------------
 # internal helper: run conda in a single remote shell
@@ -76,8 +38,11 @@ _condaExec() {
     return 1
   fi
 
-  # NOTE: keep this as a single line to avoid SSH newline/quoting edge cases
-  run ${condaExe} $*
+  # _condaExec expects a conda *fragment* (string) so pipelines work.
+  # Example:
+  #   _condaExec "env list | awk '{print \$1}' | grep -qx 'runpod'"
+  local fragment="$*"
+  runSh "$(printf "%q " "${condaExe}") ${fragment}"
 }
 
 # ------------------------------------------------------------
@@ -96,7 +61,7 @@ ensureConda() {
   # if conda exists but is missing exec bit, fix it once
   if [[ -n "${condaExe:-}" ]] && run bash -lc "test -f '${condaExe}' && ! test -x '${condaExe}'"; then
     warn "conda exists but is not executable; chmod +x"
-    run bash -lc "chmod +x '${condaExe}' || true"
+  runSh "chmod +x '${condaExe}' || true"
   fi
 
   # healthy?
@@ -106,32 +71,32 @@ ensureConda() {
   fi
 
   # partial?
-  if run bash -lc "test -e '${CONDA_DIR}'"; then
+  if runSh "test -e '${CONDA_DIR}'"; then
     warn "conda directory exists but install looks incomplete: ${CONDA_DIR}"
   fi
 
   log "downloading miniconda installer"
-  run wget -q "$url" -O "$installer"
+  runCmd wget -q "$url" -O "$installer"
 
   log "installing/updating miniconda (-u)"
-  if run bash "$installer" -b -u -p "${CONDA_DIR}"; then
+  if runCmd bash "$installer" -b -p "${CONDA_DIR}" -u; then
+    log "conda update-in-place succeeded"
     :
   else
     warn "conda update-in-place failed, wiping and reinstalling..."
-    run rm -rf "${CONDA_DIR}"
-    run bash "$installer" -b -p "${CONDA_DIR}"
+  runCmd rm -rf "${CONDA_DIR}"
+  runCmd bash "$installer" -b -p "${CONDA_DIR}"
   fi
-
-  run rm -f "$installer"
+  runCmd rm -f "$installer"
 
   # refresh conda path after installation
   condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
 
   # verify
-  if [[ -z "${condaExe:-}" ]] || ! run "$condaExe" --version >/dev/null 2>&1; then
-    run bash -lc "ls -la '${CONDA_DIR}' || true"
-    run bash -lc "ls -la '${CONDA_DIR}/bin' || true"
-    run bash -lc "ls -la '${CONDA_DIR}/condabin' || true"
+  if [[ -z "${condaExe:-}" ]] || ! runCmd "$condaExe" --version >/dev/null 2>&1; then
+  runSh "ls -la '${CONDA_DIR}' || true"
+  runSh "ls -la '${CONDA_DIR}/bin' || true"
+  runSh "ls -la '${CONDA_DIR}/condabin' || true"
     error "conda install failed: ${CONDA_DIR}"
     return 1
   fi
@@ -208,7 +173,7 @@ ensureCondaEnv() {
 # ------------------------------------------------------------
 # run a command inside a conda env (remote-safe)
 # ------------------------------------------------------------
-condaEnvRun() {
+condaEnvSh() {
   local env="$1"
   shift
 
@@ -232,5 +197,28 @@ condaEnvRun() {
   # Run command inside env without relying on conda.sh / activate
   printf -v cmd "%q " "$@"
   echo "Running in conda env '${env}': ${cmd}"
-  run "${condaExe}" run -n "${env}" --no-capture-output "${cmd}"
+  runCmd "${condaExe}" run -n "${env}" --no-capture-output "${cmd}"
+}
+
+condaEnvCmd() {
+  local envName="$1"
+  shift
+
+  if [[ -z "${envName:-}" ]]; then
+    error "condaEnvCmd: environment name not provided"
+    return 1
+  fi
+
+  local condaExe
+  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
+
+  if [[ -z "${condaExe:-}" ]]; then
+    error "conda executable not found in ${CONDA_DIR}"
+    return 1
+  fi
+
+  log "Running in conda env '${envName}': $*"
+
+  # argv-safe: no shell, no temp scripts, no quoting games
+  runCmd "${condaExe}" run -n "${envName}" --no-capture-output "$@"
 }

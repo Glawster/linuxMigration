@@ -5,9 +5,6 @@
 #   - runCmd <argv...>  : argument-safe command execution
 #   - runSh  "<script>" : shell snippet execution (pipes/redirs/cd/&& etc.)
 #
-# Back-compat:
-#   - run is an alias of runCmd
-#   - runCapture is an alias of runShCapture
 
 DRY_RUN="${DRY_RUN:-0}"
 DRY_PREFIX="${DRY_PREFIX:-[]}"
@@ -39,7 +36,9 @@ runCmd() {
     "$@"
   else
     ensureSshOpts
-    ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "$@"
+    local cmd=""
+    printf -v cmd "%q " "$@"
+    ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "bash -lc $(printf '%q' "$cmd")"
   fi
 }
 
@@ -54,7 +53,9 @@ runCmdCapture() {
     "$@" 2>&1
   else
     ensureSshOpts
-    ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "$@" 2>&1
+    local cmd=""
+    printf -v cmd "%q " "$@"
+    ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "bash -lc $(printf '%q' "$cmd")" 2>&1
   fi
 }
 
@@ -88,4 +89,12 @@ runShCapture() {
     ensureSshOpts
     ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "bash -lc $(printf '%q' "$script")" 2>&1
   fi
+}
+
+runHostCmd() {
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    dryrun "$@"
+    return 0
+  fi
+  "$@"
 }

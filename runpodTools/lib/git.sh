@@ -20,7 +20,7 @@ ensureGitRepo-old() {
   local url="$2"
 
   # If it's a valid git repo, update and return
-  if run test -d "${dir}/.git"; then
+  if runSh test -d "${dir}/.git"; then
     log "repo exists, pulling: ${dir}"
     runCmd git -C "${dir}" fetch --all --prune
     runCmd git -C "${dir}" pull --ff-only
@@ -28,10 +28,10 @@ ensureGitRepo-old() {
   fi
 
   # If directory exists but not a git repo
-  if run test -d "${dir}"; then
+  if runSh test -d "${dir}"; then
     if [[ "${FORCE:-0}" == "1" ]]; then
       warn "forcing removal of existing directory: ${dir}"
-      runCmd rm -rf "${dir}"
+      runSh "rm -rf '${dir}'"
     else
       moveAside "${dir}"
     fi
@@ -39,7 +39,7 @@ ensureGitRepo-old() {
 
   # Clone the repo
   log "cloning: ${url} -> ${dir}"
-  run git clone "${url}" "${dir}"
+  runSh "git clone '${url}' '${dir}'"
   return 0
 }
 
@@ -53,11 +53,13 @@ ensureGitRepo() {
   local url="$2"
 
   # Repo exists
-  if run test -d "${dir}/.git"; then
+  
+  if runCmd test -d "${dir}/.git"; then
     log "repo exists, syncing snapshot: ${dir}"
 
     # Sanity check: is this a usable work-tree?
-    if ! runCmd git -C "${dir}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if ! runSh git -C "${dir}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    #if ! runCmd git -C "${dir}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       warn "WARNING: unusable git repo detected: ${dir}"
       if [[ "${FORCE:-0}" == "1" ]]; then
         warn "forcing removal of unusable repo: ${dir}"
@@ -68,12 +70,14 @@ ensureGitRepo() {
       # fall through to clone
     else
       # Fetch repairs most partial-clone states
-      runCmd git -C "${dir}" fetch --all --prune
+      log "fetching updates"
+      runCmd "git -C '${dir}' fetch --all --prune"
 
       # Determine upstream default branch via origin/HEAD
       local defaultRef
       defaultRef="$(runCapture git -C "${dir}" symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null || true)"
 
+      log "upstream default ref: ${defaultRef:-<unknown>}"
       if [[ -z "${defaultRef}" ]]; then
         # Fallbacks if origin/HEAD missing
         if runCmd git -C "${dir}" show-ref --verify --quiet refs/remotes/origin/master; then
@@ -100,7 +104,7 @@ ensureGitRepo() {
   fi
 
   # Directory exists but is not a git repo
-  if run test -d "${dir}"; then
+  if runSh test -d "${dir}"; then
     if [[ "${FORCE:-0}" == "1" ]]; then
       warn "forcing removal of existing directory: ${dir}"
       runCmd rm -rf "${dir}"
@@ -111,6 +115,6 @@ ensureGitRepo() {
 
   # Clone fresh
   log "cloning: ${url} -> ${dir}"
-  run git clone "${url}" "${dir}"
+  runSh "git clone '${url}' '${dir}'"
   return 0
 }

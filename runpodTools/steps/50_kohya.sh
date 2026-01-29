@@ -41,7 +41,7 @@ main() {
   fi
 
   log "installing kohya_ss dependencies"
-  condaRunCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$KOHYA_DIR/sd-scripts/requirements.txt"
+  condaRunSh "$ENV_NAME" "cd '$KOHYA_DIR' && python -m pip install --root-user-action=ignore -r requirements.txt"
 
   markStepDone "KOHYA"
   log "kohya done\n"

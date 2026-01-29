@@ -78,16 +78,16 @@ runCmd git -C "$LLAVA_DIR" checkout "$resolvedRef"
 runCmd git -C "$LLAVA_DIR" reset --hard "$resolvedRef"
 
 #log "installing llava dependencies"
-condaRunCmd "$LLAVA_ENV_NAME" pip install --root-user-action=ignore 'protobuf<5' sentencepiece
+condaEnvCmd "$LLAVA_ENV_NAME" pip install --root-user-action=ignore 'protobuf<5' sentencepiece
 if run test -f "$LLAVA_DIR/requirements.txt"; then
-  condaRunCmd "$LLAVA_ENV_NAME" pip install -r "$LLAVA_DIR/requirements.txt"
+  condaEnvCmd "$LLAVA_ENV_NAME" pip install -r "$LLAVA_DIR/requirements.txt"
 else
   log "skip (no requirements.txt)"
 fi
 
 #log "installing llava (editable)"
-condaRunCmd "$LLAVA_ENV_NAME" pip install -e "$LLAVA_DIR"
-condaRunCmd "$LLAVA_ENV_NAME" python -c 'import llava; print(llava.__file__)'
+condaEnvCmd "$LLAVA_ENV_NAME" pip install -e "$LLAVA_DIR"
+condaEnvCmd "$LLAVA_ENV_NAME" python -c 'import llava; print(llava.__file__)'
 
 # ------------------------------------------------------------
 # optional: write helper start script
@@ -111,8 +111,9 @@ fi
 exec "$CONDA_EXE" run -n "$ENV_NAME" --no-capture-output python -V
 EOF
 
-runLocal scp "${SCP_OPTS[@]}" "$START_SCRIPT" "${SSH_TARGET}:/workspace/llavaStart.sh"
-runSh "chmod +x /workspace/$START_SCRIPT"
+runHostCmd scp "${SCP_OPTS[@]}" "$START_SCRIPT" "${SSH_TARGET}:${WORKSPACE_ROOT}/llavaStart.sh"
+runSh "chmod +x \"${WORKSPACE_ROOT}/llavaStart.sh\""
+
 
 markStepDone "LLAVA"
 
