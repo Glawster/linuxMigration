@@ -79,7 +79,7 @@ runCmd git -C "$LLAVA_DIR" reset --hard "$resolvedRef"
 
 #log "installing llava dependencies"
 condaEnvCmd "$LLAVA_ENV_NAME" pip install --root-user-action=ignore 'protobuf<5' sentencepiece
-if run test -f "$LLAVA_DIR/requirements.txt"; then
+if runSh test -f "$LLAVA_DIR/requirements.txt"; then
   condaEnvCmd "$LLAVA_ENV_NAME" pip install -r "$LLAVA_DIR/requirements.txt"
 else
   log "skip (no requirements.txt)"
