@@ -32,3 +32,6 @@ runs/
 runpodTools/logs/
 runpodTools/state.env
 runpodTools/uploadModels.sh
+support.*.zip
+llavaStart.sh
+startLlavaApi.sh

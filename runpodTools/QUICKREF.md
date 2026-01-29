@@ -93,7 +93,7 @@ bash /workspace/runpodTools/runpodBootstrap.sh
 ### Start ComfyUI
 ```bash
 # On remote pod:
-bash /workspace/runpodTools/startComfyUI.sh 8188
+bash /workspace/runpodTools/comfyStart.sh 8188
 tmux attach -t comfyui
 ```
 

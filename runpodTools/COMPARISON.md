@@ -39,7 +39,7 @@ runpodTools/
 │   └── 60_upload_models.sh (43 lines)
 ├── runpodBootstrap.sh      (180 lines - step runner)
 ├── runpodFromSSH.sh        (202 lines - orchestrator)
-├── startComfyUI.sh         (44 lines)
+├── comfyStart.sh         (44 lines)
 ├── generateUploadScript.sh (153 lines)
 ├── README.md               (5,225 chars)
 ├── SUMMARY.md              (6,012 chars)

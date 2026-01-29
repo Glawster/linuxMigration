@@ -31,7 +31,11 @@ main() {
     log "gpu already checked"
   else
     log "checking gpu"
-    run nvidia-smi
+    if command -v nvidia-smi >/dev/null 2>&1; then
+      nvidia-smi
+    else
+      log "...nvidia-smi not available"
+    fi
     markStepDone "GPU_CHECK"
   fi
 
@@ -39,7 +43,7 @@ main() {
   ensureAptPackages
   
   markStepDone "BASE_TOOLS"
-  log "base tools done"
+  log "base tools done\n"
 }
 
 # Run if executed directly

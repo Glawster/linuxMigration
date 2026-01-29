@@ -31,25 +31,20 @@ main() {
   # Ensure repo (remote-safe ensureGitRepo required)
   ensureGitRepo "$KOHYA_DIR" "https://github.com/bmaltais/kohya_ss.git"
 
-  log "installing kohya_ss dependencies"
+  log "ensuring kohya submodules"
+  runCmd git -C "${KOHYA_DIR}" submodule sync --recursive
+  runCmd git -C "${KOHYA_DIR}" submodule update --init --recursive --force
 
-  # ensure sd-scripts exists where kohya expects it
-  if ! run test -d "$KOHYA_DIR/sd-scripts"; then
-    log "cloning sd-scripts into kohya_ss"
-    ensureGitRepo "$KOHYA_DIR/sd-scripts" "https://github.com/kohya-ss/sd-scripts.git"
+  if [[ ! -f "${KOHYA_DIR}/sd-scripts/pyproject.toml" && ! -f "${KOHYA_DIR}/sd-scripts/setup.py" ]]; then
+    error "sd-scripts submodule not initialized correctly: ${KOHYA_DIR}/sd-scripts"
+    return 1
   fi
 
   log "installing kohya_ss dependencies"
-
-  # IMPORTANT: requirements.txt existence must be checked REMOTELY
-  if run test -f "$KOHYA_DIR/requirements.txt"; then
-    condaEnvRun "$ENV_NAME" bash -lc "cd '$KOHYA_DIR' && python -m pip install -r requirements.txt --root-user-action=ignore"
-  else
-    warn "requirements.txt not found: $KOHYA_DIR/requirements.txt"
-  fi
+  condaEnvSh "$ENV_NAME" "cd '$KOHYA_DIR' && python -m pip install --root-user-action=ignore -r requirements.txt"
 
   markStepDone "KOHYA"
-  log "kohya done"
+  log "kohya done\n"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

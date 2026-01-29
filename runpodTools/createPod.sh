@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# runpodFromSSH.sh (modular version)
+# createPod.sh (modular version)
 #
 # Local orchestrator that:
 # - Parses SSH connection details
@@ -7,7 +7,7 @@
 # - No files copied to remote (all scripts stay local)
 #
 # Usage:
-#   ./runpodFromSSH.sh [options] ssh user@host -p PORT -i KEY
+#   ./createPod.sh [options] ssh user@host -p PORT -i KEY
 #
 # Options:
 #   --kohya          enable kohya setup
@@ -21,9 +21,9 @@
 #   -h, --help       show this help
 #
 # Example:
-#   ./runpodFromSSH.sh ssh root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
-#   ./runpodFromSSH.sh --kohya ssh root@...
-#   ./runpodFromSSH.sh --only 40_comfyui ssh root@...
+#   ./createPod.sh ssh root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
+#   ./createPod.sh --kohya ssh root@...
+#   ./createPod.sh --only 40_comfyui ssh root@...
 
 set -euo pipefail
 
@@ -35,6 +35,7 @@ Usage: $(basename "$0") [options] ssh user@host -p PORT -i KEY
 
 Options:
   --kohya          enable kohya setup
+  --llava          enable llava setup
   --no-comfyui     disable comfyui setup
   --dry-run        dry run mode (show what would be done)
   --force          force rerun of all steps
@@ -45,9 +46,9 @@ Options:
   -h, --help       show this help
 
 Examples:
-  ./runpodFromSSH.sh ssh root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
-  ./runpodFromSSH.sh --kohya ssh root@...
-  ./runpodFromSSH.sh --only 40_comfyui ssh root@...
+  ./createPod.sh ssh root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
+  ./createPod.sh --kohya ssh root@...
+  ./createPod.sh --only 40_comfyui ssh root@...
 EOF
   exit 1
 }
@@ -67,6 +68,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --kohya)
       BOOTSTRAP_ARGS+=(--kohya)
+      shift
+      ;;
+    --llava)
+      BOOTSTRAP_ARGS+=(--llava)
       shift
       ;;
     --no-comfyui)
@@ -151,5 +156,5 @@ else
 fi
 echo
 
-# run modular bootstrap (steps must use run/isCommand only)
+# run modular bootstrap (steps must use runSh / runCmd from common.sh)
 exec bash "${SCRIPT_DIR}/runpodBootstrap.sh" "${BOOTSTRAP_ARGS[@]}"

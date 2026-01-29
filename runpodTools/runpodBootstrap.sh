@@ -12,6 +12,7 @@
 #   --comfyui        enable ComfyUI setup (default)
 #   --no-comfyui     disable ComfyUI setup
 #   --kohya          enable kohya setup (default off)
+#   --llava          enable LLaVA setup (default off)
 #   --dry-run        print actions only, don't execute
 #   --force          force rerun of all steps (ignore state)
 #   --from STEP      start from specific step (e.g., 30_conda)
@@ -22,23 +23,30 @@
 
 set -euo pipefail
 
+# RunPod defaults (used unless overridden)
+POD_ROOT="${POD_ROOT:-/workspace}"
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-$POD_ROOT/workspace}"
+POD_HOME="${POD_HOME:-$POD_ROOT/root}"
+
 # Script location
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNPOD_DIR="$SCRIPT_DIR"
 LIB_DIR="$RUNPOD_DIR/lib"
 STEPS_DIR="$RUNPOD_DIR/steps"
 LOGDIR="$RUNPOD_DIR/logs"
+TESTDIR="$RUNPOD_DIR/test"
 
 # Defaults (respect env from runpodFromSSH.sh)
 ENABLE_COMFYUI="${ENABLE_COMFYUI:-1}"
 ENABLE_KOHYA="${ENABLE_KOHYA:-0}"
+ENABLE_LLAVA="${ENABLE_LLAVA:-0}"
 
 DRY_RUN="${DRY_RUN:-0}"
 DRY_PREFIX="${DRY_PREFIX:-[]}"
 
 FORCE="${FORCE:-0}"
 
-export DRY_RUN DRY_PREFIX FORCE ENABLE_COMFYUI ENABLE_KOHYA
+export DRY_RUN DRY_PREFIX FORCE ENABLE_COMFYUI ENABLE_KOHYA ENABLE_LLAVA
 
 FROM_STEP=""
 ONLY_STEP=""
@@ -141,6 +149,7 @@ while [[ $# -gt 0 ]]; do
     --comfyui) ENABLE_COMFYUI=1; shift ;;
     --no-comfyui) ENABLE_COMFYUI=0; shift ;;
     --kohya) ENABLE_KOHYA=1; shift ;;
+    --llava) ENABLE_LLAVA=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --force) FORCE=1; shift ;;
     --from)
@@ -217,6 +226,7 @@ export ENV_NAME STATE_FILE
 log "runpod bootstrap (modular)"
 echo "comfyui   : $ENABLE_COMFYUI"
 echo "kohya     : $ENABLE_KOHYA"
+echo "llava     : $ENABLE_LLAVA"
 echo "dry run   : $DRY_RUN"
 echo "force     : $FORCE"
 echo "state file: $STATE_FILE"
@@ -238,6 +248,11 @@ for step in "${ALL_AVAILABLE_STEPS[@]}"; do
       ;;
     50_kohya)
       if [[ "$ENABLE_KOHYA" == "1" ]]; then
+        ALL_STEPS+=("$step")
+      fi
+      ;;
+    70_llava)
+      if [[ "$ENABLE_LLAVA" == "1" ]]; then
         ALL_STEPS+=("$step")
       fi
       ;;
@@ -307,16 +322,6 @@ for step in "${STEPS_TO_RUN[@]}"; do
     die "step failed: $step"
   fi
 done
-
-# Create bash aliases
-log "creating /root/.bash_aliases"
-if [[ "$DRY_RUN" == "1" ]]; then
-  dryrun  "echo 'alias d=\"ls -al\"' > ~/.bash_aliases"
-else
-  # create this on the runpod
-  run bash -lc "echo \"alias d='ls -al'\" > ~/.bash_aliases"
-fi
-
 
 log "bootstrap complete"
 log "log file: $LOGFILE"

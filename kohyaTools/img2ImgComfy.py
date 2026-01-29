@@ -4,11 +4,10 @@
 Unified runner for ComfyUI img2img workflows with image classification support.
 
 Modes:
-- Local mode:   use --comfyurl (e.g. http://127.0.0.1:8188)
-- Remote mode:  use --remoteurl (e.g. https://<pod>-8188.proxy.runpod.net)
-
+- Local mode:   use --local (e.g. http://127.0.0.1:8188)
+- Remote mode:  use --remote (e.g. https://<pod>-8188.proxy.runpod.net)
 Selection rules:
-- Provide exactly one of --comfyurl or --remoteurl.
+- Provide exactly one of --local or --remote.
 
 Workflow:
 - Classifies images into fullbody, halfbody, or portrait based on folder names and filename patterns.
@@ -61,6 +60,23 @@ from organiseMyProjects.logUtils import getLogger  # type: ignore
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 
+
+def getAvailableNodes(session, baseUrl):
+    r = session.get(f"{baseUrl}/object_info", timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+def validateWorkflowNodes(workflow: dict, availableNodes: dict, logger):
+    missing = set()
+
+    for node in workflow.values():
+        classType = node.get("class_type")
+        if classType and classType not in availableNodes:
+            missing.add(classType)
+
+    if missing:
+        logger.error("Workflow references missing nodes: %s", sorted(missing))
+        raise RuntimeError("missing ComfyUI nodes")
 
 @dataclass(frozen=True)
 class BucketRules:
@@ -276,8 +292,8 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=0, help="process at most N images (0 = no limit)")
 
     # Mode selection
-    parser.add_argument("--comfyurl", default=None, help="local ComfyUI base url (e.g. http://127.0.0.1:8188)")
-    parser.add_argument("--remoteurl", default=None, help="remote ComfyUI base url (e.g. RunPod proxy url)")
+    parser.add_argument("--local", default=None, help="local ComfyUI base url (e.g. http://127.0.0.1:8188)")
+    parser.add_argument("--remote", default=None, help="remote ComfyUI base url (e.g. RunPod proxy url)")
 
     # Folders (local filesystem)
     parser.add_argument("--comfyin", type=Path, default=Path(getCfgValue(cfg, "comfyInput", "./input")))
@@ -304,23 +320,23 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
 def resolveMode(args: argparse.Namespace, cfg: Dict[str, Any]) -> Tuple[str, str]:
     """Return (mode, baseUrl)."""
 
-    # Backward compatible: if user didn't pass --comfyurl/--remoteurl, fall back to config comfyUrl as local.
+    # Backward compatible: if user didn't pass --local/--remote, fall back to config comfyUrl as local.
     # But still require explicit intent if neither is provided AND cfg has no comfyUrl.
     cfgComfyUrl = str(getCfgValue(cfg, "comfyUrl", "")).strip()
 
-    if args.comfyurl and args.remoteurl:
-        raise ValueError("use either --comfyurl OR --remoteurl, not both")
+    if args.local and args.remote:
+        raise ValueError("use either --local OR --remote, not both")
 
-    if args.remoteurl:
-        return ("remote", str(args.remoteurl))
+    if args.remote:
+        return ("remote", str(args.remote))
 
-    if args.comfyurl:
-        return ("local", str(args.comfyurl))
+    if args.local:
+        return ("local", str(args.local))
 
     if cfgComfyUrl:
         return ("local", cfgComfyUrl)
 
-    raise ValueError("one of --comfyurl or --remoteurl is required")
+    raise ValueError("one of --local or --remote is required")
 
 
 def getWorkflowPaths(cfg: Dict[str, Any], workflowsDir: Path) -> Dict[str, Path]:
@@ -492,6 +508,26 @@ def main() -> int:
         return 0
 
     client = ComfyClient(baseUrl, args.timeoutseconds, isRemote=(mode == "remote"))
+
+    if not args.dryRun:
+        try:
+            availableNodes = getAvailableNodes(client.session, baseUrl)
+            logger.info("%s fetched available ComfyUI nodes: %d", prefix, len(availableNodes))
+        except Exception as e:
+            logger.error("Failed to fetch ComfyUI node registry: %s", e)
+            return 2
+    else:
+        availableNodes = {}
+    
+    for bucket, wfPath in workflowPaths.items():
+        try:
+            prompt = loadApiPromptJson(wfPath)
+            validateWorkflowNodes(prompt, availableNodes, logger)
+            logger.info("%s workflow validated: %s", prefix, wfPath.name)
+        except Exception as e:
+            logger.error("Workflow validation failed for %s: %s", wfPath, e)
+            return 2
+
 
     # For remote mode, make uploads unique per run
     remoteSubfolder = f"{args.remotesubfolder}/{runStamp}" if mode == "remote" else ""

@@ -24,12 +24,16 @@ main() {
     return 0
   fi
   
+  # Create bash aliases
+  log "creating /root/.bash_aliases"
+  runSh "echo \"alias d='ls -al'\" >> ~/.bash_aliases"
+
   logTask "running runpod diagnostics"
   runDiagnostics
   
   markStepDone "DIAGNOSTICS"
   markStepDone "GPU_CHECK"
-  log "diagnostics done"
+  log "diagnostics done\n"
 }
 
 # Run if executed directly

@@ -6,7 +6,7 @@
 ensureAptPackages() {
   log "checking package manager"
 
-  if ! isCommand apt-get; then
+  if ! runSh "command -v apt-get >/dev/null 2>&1"; then
     warn "apt-get not found. Assuming base image has required tools."
     return 0
   fi
@@ -19,22 +19,26 @@ ensureAptPackages() {
   export LANG=C.UTF-8
   export LC_ALL=C.UTF-8
   
-  if hasCmd apt-get; then
+  if runSh "command -v apt-get >/dev/null 2>&1"; then
     log "ensuring base tools via apt-get"
 
-    run apt-get update -y
-    run apt-get install -y \
-      ca-certificates git wget unzip rsync tmux htop python3-pip python3-venv vim || true
+    need=()
+    for pkg in htop ca-certificates git rsync tmux unzip vim wget python3-pip python3-venv; do
+      if ! runSh "dpkg -s \"$pkg\" >/dev/null 2>&1"; then
+        need+=("$pkg")
+      fi
+    done
 
-  elif hasCmd apt; then
-    log "ensuring base tools via apt"
-
-    run apt update
-    run apt install -y \
-      ca-certificates git wget unzip rsync tmux htop python3-pip python3-venv vim || true
+    if (( ${#need[@]} == 0 )) && [[ "${FORCE:-0}" != "1" ]]; then
+      log "...base tools already present"
+    else
+      log "...installing base tools via apt-get: ${need[*]}"
+      runCmd apt-get update
+      runCmd apt-get install -y "${need[@]}"
+    fi
 
   else
-    warn "no apt/apt-get available on this pod image, skipping system packages"
+    warn "no apt-get available on this pod image, skipping system packages"
   fi
 
 }

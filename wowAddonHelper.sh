@@ -216,10 +216,10 @@ Commands:
   tsm-install [installer.exe]     Run TSM Desktop installer in the WoW prefix
   tsm-client                      Launch installed TSM Desktop app in the WoW prefix
 
-  wineboot                         Run wineboot -u for this prefix (safe)
-  kill-wine                        Stop wineserver + clean leftover wine procs for this prefix
-  status                           Show config + processes tied to this prefix
-  env                              Show config only
+  wineboot                        Run wineboot -u for this prefix (safe)
+  kill                            Stop wineserver + clean leftover wine procs for this prefix
+  status                          Show config + processes tied to this prefix
+  env                             Show config only
 
 Notes:
   - This script ONLY uses:
@@ -241,7 +241,7 @@ case "$cmd" in
   tsm-install)   cmd_tsm_install "$@" ;;
   tsm-client)    cmd_tsm_client "$@" ;;
   wineboot)      cmd_wineboot "$@" ;;
-  kill-wine)     cmd_kill_wine "$@" ;;
+  kill)          cmd_kill_wine "$@" ;;
   status)        cmd_status "$@" ;;
   env)           assert_config_ok; show_env ;;
   help|-h|--help|"") usage ;;
