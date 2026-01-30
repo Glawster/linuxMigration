@@ -82,7 +82,7 @@ ensureConda() {
     log "conda update-in-place succeeded"
     :
   else
-    warn "conda update-in-place failed, wiping and reinstalling..."
+    warn "conda update-in-place failed, wiping and reinstalling"
     runCmd rm -rf "${CONDA_DIR}"
     runCmd bash "$installer" -b -p "${CONDA_DIR}"
   fi

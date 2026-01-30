@@ -30,9 +30,9 @@ ensureAptPackages() {
     done
 
     if (( ${#need[@]} == 0 )) && [[ "${FORCE:-0}" != "1" ]]; then
-      log "...base tools already present"
+      log "base tools already present"
     else
-      log "...installing base tools via apt-get: ${need[*]}"
+      log "installing base tools via apt-get: ${need[*]}"
       runCmd apt-get update
       runCmd apt-get install -y "${need[@]}"
     fi

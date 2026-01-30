@@ -14,7 +14,7 @@ isLocalMode() {
 }
 
 dryrun() {
-  echo "${DRY_PREFIX:-...[]} $*"
+  echo "${DRY_PREFIX:-[]} $*"
 }
 
 ensureSshOpts() {
@@ -92,6 +92,7 @@ runShCapture() {
 }
 
 runHostCmd() {
+  echo "Host command: $*"
   if [[ "${DRY_RUN:-0}" == "1" ]]; then
     dryrun "$@"
     return 0

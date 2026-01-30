@@ -6,7 +6,8 @@
 # Uses the step runner pattern to execute modular steps.
 #
 # Usage:
-#   ./runpodBootstrap.sh [options]
+#   ./runpodBootstrap.sh [options] [ssh user@host -p PORT -i KEY]
+#   ./runpodBootstrap.sh [options] user@host -p PORT -i KEY
 #
 # Options:
 #   --comfyui        enable ComfyUI setup (default)
@@ -24,8 +25,19 @@
 set -euo pipefail
 
 # RunPod defaults (used unless overridden)
-POD_ROOT="${POD_ROOT:-/workspace}"
-WORKSPACE_ROOT="${WORKSPACE_ROOT:-$POD_ROOT/workspace}"
+POD_ROOT="${POD_ROOT:-/}"   # remote-ish default; local can override
+
+# If user explicitly set WORKSPACE_ROOT, respect it.
+# Otherwise choose a default depending on POD_ROOT:
+if [[ -z "${WORKSPACE_ROOT:-}" ]]; then
+  if [[ "$POD_ROOT" == "/" ]]; then
+    # remote RunPod convention
+    WORKSPACE_ROOT="/workspace"
+  else
+    # local test convention (your Path A)
+    WORKSPACE_ROOT="$POD_ROOT/workspace"
+  fi
+fi
 POD_HOME="${POD_HOME:-$POD_ROOT/root}"
 
 # Script location
@@ -55,8 +67,6 @@ LIST_STEPS=0
 
 # Load common libraries
 # shellcheck disable=SC1091
-source "$LIB_DIR/ssh.sh"
-buildSshOpts
 # shellcheck disable=SC1091
 source "$LIB_DIR/common.sh"
 # shellcheck disable=SC1091
@@ -144,6 +154,8 @@ listSteps() {
 }
 
 # Parse arguments
+CONN_ARGS=()
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --comfyui) ENABLE_COMFYUI=1; shift ;;
@@ -166,8 +178,20 @@ while [[ $# -gt 0 ]]; do
       ;;
     --list) LIST_STEPS=1; shift ;;
     -h|--help) usage ;;
+    ssh)
+      shift
+      CONN_ARGS=("$@")
+      set -- # clear remaining args (we've captured them)
+      break
+      ;;
+    *@*)
+      # allow: ./runpodBootstrap.sh --only 40 root@1.2.3.4 -p 123 -i key
+      CONN_ARGS=("$@")
+      set --
+      break
+      ;;
     *)
-      echo "ERROR: unknown option: $1"
+      echo "ERROR: unknown option: $1" >&2
       usage
       ;;
   esac
@@ -177,6 +201,68 @@ done
 if [[ "$LIST_STEPS" == "1" ]]; then
   listSteps
 fi
+
+# ------------------------------------------------------------
+# Connection handling
+# ------------------------------------------------------------
+# Supports:
+#   ./runpodBootstrap.sh ... ssh user@host -p PORT -i KEY
+#   ./runpodBootstrap.sh ... user@host -p PORT -i KEY
+#   SSH_TARGET=... ./runpodBootstrap.sh ...
+#
+# If CONN_ARGS were provided, they override env vars.
+if [[ ${#CONN_ARGS[@]} -gt 0 ]]; then
+  SSH_TARGET_ARG=""
+  SSH_PORT_ARG=""
+  SSH_IDENTITY_ARG=""
+
+  # allow optional leading "ssh"
+  if [[ "${CONN_ARGS[0]}" == "ssh" ]]; then
+    CONN_ARGS=("${CONN_ARGS[@]:1}")
+  fi
+
+  while [[ ${#CONN_ARGS[@]} -gt 0 ]]; do
+    case "${CONN_ARGS[0]}" in
+      -p)
+        SSH_PORT_ARG="${CONN_ARGS[1]:-}"
+        CONN_ARGS=("${CONN_ARGS[@]:2}")
+        ;;
+      -i)
+        SSH_IDENTITY_ARG="${CONN_ARGS[1]:-}"
+        CONN_ARGS=("${CONN_ARGS[@]:2}")
+        ;;
+      *)
+        if [[ -z "$SSH_TARGET_ARG" ]]; then
+          SSH_TARGET_ARG="${CONN_ARGS[0]}"
+          CONN_ARGS=("${CONN_ARGS[@]:1}")
+        else
+          die "unexpected connection arg: ${CONN_ARGS[0]}"
+        fi
+        ;;
+    esac
+  done
+
+  if [[ -z "$SSH_TARGET_ARG" ]]; then
+    die "missing ssh user@host"
+  fi
+
+  export SSH_TARGET="$SSH_TARGET_ARG"
+  export SSH_PORT="$SSH_PORT_ARG"
+  export SSH_IDENTITY="$SSH_IDENTITY_ARG"
+fi
+
+# If we're doing any remote work, we require SSH_TARGET to be set (either env or args)
+if [[ -z "${SSH_TARGET:-}" ]]; then
+  die "missing target. use: ... ssh user@host -p PORT -i KEY  (or set SSH_TARGET=...)"
+fi
+
+export REQUIRE_REMOTE=1
+export DRY_RUN
+
+# Now SSH variables are final, build ssh options
+# shellcheck disable=SC1091
+source "$LIB_DIR/ssh.sh"
+buildSshOpts
 
 # Cache discovered steps for efficiency
 DISCOVERED_STEPS_CACHE=()

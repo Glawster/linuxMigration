@@ -20,6 +20,10 @@ source "$LIB_DIR/workspace.sh"
 main() {
   log "base tools context"
  
+  # Create bash aliases
+  log "creating /root/.bash_aliases"
+  runSh "echo \"alias d='ls -al'\" >> ~/.bash_aliases"
+
   # Check if already done and not forcing
   if isStepDone "BASE_TOOLS" && [[ "${FORCE:-0}" != "1" ]]; then
     log "base tools already installed (use --force to rerun)"
@@ -34,7 +38,7 @@ main() {
     if command -v nvidia-smi >/dev/null 2>&1; then
       nvidia-smi
     else
-      log "...nvidia-smi not available"
+      log "nvidia-smi not available"
     fi
     markStepDone "GPU_CHECK"
   fi

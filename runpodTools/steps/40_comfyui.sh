@@ -30,14 +30,14 @@ main() {
 
   # Ensure repos (remote-safe via ensureGitRepo)
   log "ensuring comfyui git repositories"
-  ensureGitRepo "$COMFY_DIR" "https://github.com/comfyanonymous/ComfyUI.git"
+  ensureGitRepo "$COMFY_DIR" "https://github.com/comfyanonymous/ComfyUI.git" "ComfyUI"
   log "ensuring comfyui custom nodes"
-  ensureGitRepo "$COMFY_DIR/custom_nodes/ComfyUI-Manager" "https://github.com/ltdrdata/ComfyUI-Manager.git"
+  ensureGitRepo "$COMFY_DIR/custom_nodes/ComfyUI-Manager" "https://github.com/ltdrdata/ComfyUI-Manager.git" "ComfyUI-Manager"
 
   # the following don't seen to install so commented out
-  #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/ltdrdata/ComfyUI-Impact-Pack.git"     # ComfyuiImactPack
-  #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git"  # ComfyuiImactSubPack
-  #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/facebookresearch/sam2"                # ComfyuiImactPack
+  #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/ltdrdata/ComfyUI-Impact-Pack.git"     "ComfyuiImactPack"
+  #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git"  "ComfyuiImactSubPack"
+  #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/facebookresearch/sam2"                "ComfyuiImactPack"
   # ComfyUI Impact Subpack installed by pip
 
   # Install dependencies
@@ -57,15 +57,12 @@ main() {
 
   log "generating comfyStart.sh helper"
 
-  local tmpFile
-  tmpFile="$(mktemp)"
+  START_SCRIPT="comfyStart.sh"
 
-  generatecomfyStartScript "$tmpFile"
+  generatecomfyStartScript "$START_SCRIPT"
 
-  runHostCmd scp "${SCP_OPTS[@]}" "$tmpFile" "${SSH_TARGET}:${WORKSPACE_ROOT}/comfyStart.sh"
+  runHostCmd scp "${SCP_OPTS[@]}" "$START_SCRIPT" "${SSH_TARGET}:${WORKSPACE_ROOT}/comfyStart.sh"
   runSh "chmod +x ${WORKSPACE_ROOT}/comfyStart.sh"
-
-  rm -f "$tmpFile"
 
   log "comfyStart.sh installed to /workspace"
 
@@ -76,16 +73,16 @@ main() {
 generatecomfyStartScript() {
   local outFile="$1"
 
-  cat > "$outFile" <<'EOF'
+  cat > "$outFile" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 
-WORKSPACE="/workspace"
-COMFY_DIR="$WORKSPACE/ComfyUI"
-CONDA_DIR="$WORKSPACE/miniconda3"
-CONDA_EXE="$CONDA_DIR/bin/conda"
-ENV_NAME="runpod"
-PORT=8188
+WORKSPACE="${WORKSPACE_ROOT:-/workspace}"
+COMFY_DIR="\$WORKSPACE/ComfyUI"
+CONDA_DIR="\$WORKSPACE/miniconda3"
+CONDA_EXE="\$CONDA_DIR/bin/conda"
+ENV_NAME="${ENV_NAME:-runpod}"
+PORT="${COMFYUI_PORT:-8188}"
 SESSION="comfyui"
 
 if ! command -v ss >/dev/null 2>&1; then
@@ -93,46 +90,48 @@ if ! command -v ss >/dev/null 2>&1; then
   exit 1
 fi
 
-if ss -ltn | awk '{print $4}' | grep -q ":${PORT}\$"; then
-  echo "ERROR: port ${PORT} already in use"
-  ss -ltnp | grep ":${PORT}" || true
+if ss -ltn | awk '{print \$4}' | grep -q ":\${PORT}\$"; then
+  echo "ERROR: port \${PORT} already in use"
+  ss -ltnp | grep ":\${PORT}" || true
   exit 1
 fi
 
-if [[ ! -d "$COMFY_DIR" ]]; then
-  echo "ERROR: ComfyUI directory not found: $COMFY_DIR" >&2
+if [[ ! -d "\$COMFY_DIR" ]]; then
+  echo "ERROR: ComfyUI directory not found: \$COMFY_DIR" >&2
   exit 1
 fi
 
-if [[ ! -x "$CONDA_EXE" ]]; then
-  echo "ERROR: conda not found/executable at $CONDA_EXE" >&2
+if [[ ! -x "\$CONDA_EXE" ]]; then
+  echo "ERROR: conda not found/executable at \$CONDA_EXE" >&2
   exit 1
 fi
+
+LOG_DIR="\$WORKSPACE/.runpod/logs"
+mkdir -p "\$LOG_DIR"
+LOG_FILE="\$LOG_DIR/comfyui.\${PORT}.log"
 
 if ! command -v tmux >/dev/null 2>&1; then
   echo "tmux not available; starting ComfyUI in foreground"
-  exec "$CONDA_EXE" run -n "$ENV_NAME" --no-capture-output     bash -lc "cd '$COMFY_DIR' && python main.py --listen 0.0.0.0 --port '$PORT'"
+  exec "\$CONDA_EXE" run -n "\$ENV_NAME" --no-capture-output \\
+    bash -lc "cd '\$COMFY_DIR' && python main.py --listen 0.0.0.0 --port '\$PORT'" \\
+    2>&1 | tee -a "\$LOG_FILE"
 fi
 
-if tmux has-session -t "$SESSION" 2>/dev/null; then
-  echo "comfyui already running (tmux session: $SESSION)"
+if tmux has-session -t "\$SESSION" 2>/dev/null; then
+  echo "comfyui already running (tmux session: \$SESSION)"
+  echo "log: \$LOG_FILE"
   exit 0
 fi
 
-LOG_DIR="$WORKSPACE/.runpod/logs"
-mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/comfyui.${PORT}.log"
+tmux new-session -d -s "\$SESSION" \\
+  "bash -lc 'set -euo pipefail; cd \"\$COMFY_DIR\"; \"\$CONDA_EXE\" run -n \"\$ENV_NAME\" --no-capture-output python main.py --listen 0.0.0.0 --port \"\$PORT\" 2>&1 | tee -a \"\$LOG_FILE\"'"
 
-tmux new-session -d -s "$SESSION" bash -lc   "'$CONDA_EXE' run -n '$ENV_NAME' --no-capture-output bash -lc "cd '$COMFY_DIR' && python main.py --listen 0.0.0.0 --port '$PORT'" 2>&1 | tee -a '$LOG_FILE'"
-
-echo "comfyui started (tmux session: $SESSION)"
-echo "log: $LOG_FILE"
-
+echo "comfyui started (tmux session: \$SESSION)"
+echo "log: \$LOG_FILE"
 EOF
 
   chmod +x "$outFile"
 }
-
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   main "$@"

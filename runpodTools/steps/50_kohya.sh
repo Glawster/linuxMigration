@@ -29,7 +29,7 @@ main() {
   fi
 
   # Ensure repo (remote-safe ensureGitRepo required)
-  ensureGitRepo "$KOHYA_DIR" "https://github.com/bmaltais/kohya_ss.git"
+  ensureGitRepo "$KOHYA_DIR" "https://github.com/bmaltais/kohya_ss.git" "kohya_ss"
 
   log "ensuring kohya submodules"
   runCmd git -C "${KOHYA_DIR}" submodule sync --recursive

@@ -5,7 +5,9 @@
 # ============================================================
 # Workspace paths
 # ============================================================
-WORKSPACE_ROOT="${WORKSPACE_ROOT:-/workspace}"
+
+: "${WORKSPACE_ROOT:?WORKSPACE_ROOT must be set by bootstrap}"
+
 RUNPOD_DIR="${RUNPOD_DIR:-${WORKSPACE_ROOT}/runpodTools}"
 CONDA_DIR="${CONDA_DIR:-${WORKSPACE_ROOT}/miniconda3}"
 COMFY_DIR="${COMFY_DIR:-${WORKSPACE_ROOT}/ComfyUI}"

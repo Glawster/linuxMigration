@@ -14,107 +14,53 @@ moveAside() {
   runCmd mv "$dir" "$bak"
 }
 
-# Ensure a git repository is cloned and up to date (idempotent, remote-safe)
-ensureGitRepo-old() {
-  local dir="$1"
-  local url="$2"
-
-  # If it's a valid git repo, update and return
-  if runSh test -d "${dir}/.git"; then
-    log "repo exists, pulling: ${dir}"
-    runCmd git -C "${dir}" fetch --all --prune
-    runCmd git -C "${dir}" pull --ff-only
-    return 0
-  fi
-
-  # If directory exists but not a git repo
-  if runSh test -d "${dir}"; then
-    if [[ "${FORCE:-0}" == "1" ]]; then
-      warn "forcing removal of existing directory: ${dir}"
-      runSh "rm -rf '${dir}'"
-    else
-      moveAside "${dir}"
-    fi
-  fi
-
-  # Clone the repo
-  log "cloning: ${url} -> ${dir}"
-  runSh "git clone '${url}' '${dir}'"
-  return 0
-}
-
-# Ensure a git repository is present and updated to upstream snapshot
-# - Never reclones if .git exists
-# - Detached-HEAD safe
-# - No merges, no pull
-# - Idempotent and remote-safe
 ensureGitRepo() {
   local dir="$1"
   local url="$2"
+  local name="$3"
 
-  # Repo exists
-  
+  # If it's already a git repo, update in place
   if runCmd test -d "${dir}/.git"; then
-    log "repo exists, syncing snapshot: ${dir}"
+    log "updating: ${name}: ${dir}"
+    runSh "$(cat <<EOF
+set -euo pipefail
+cd '$dir'
 
-    # Sanity check: is this a usable work-tree?
-    if ! runSh git -C "${dir}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    #if ! runCmd git -C "${dir}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-      warn "WARNING: unusable git repo detected: ${dir}"
-      if [[ "${FORCE:-0}" == "1" ]]; then
-        warn "forcing removal of unusable repo: ${dir}"
-        runCmd rm -rf "${dir}"
-      else
-        moveAside "${dir}"
-      fi
-      # fall through to clone
-    else
-      # Fetch repairs most partial-clone states
-      log "fetching updates"
-      runCmd "git -C '${dir}' fetch --all --prune"
+# Make sure origin is correct (handles repos that were copied in)
+current="\$(git remote get-url origin 2>/dev/null || true)"
+if [[ -z "\$current" ]]; then
+  git remote add origin '$url'
+elif [[ "\$current" != '$url' ]]; then
+  git remote set-url origin '$url'
+fi
 
-      # Determine upstream default branch via origin/HEAD
-      local defaultRef
-      defaultRef="$(runCapture git -C "${dir}" symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null || true)"
+git fetch --all --prune
 
-      log "upstream default ref: ${defaultRef:-<unknown>}"
-      if [[ -z "${defaultRef}" ]]; then
-        # Fallbacks if origin/HEAD missing
-        if runCmd git -C "${dir}" show-ref --verify --quiet refs/remotes/origin/master; then
-          defaultRef="refs/remotes/origin/master"
-        elif runCmd git -C "${dir}" show-ref --verify --quiet refs/remotes/origin/main; then
-          defaultRef="refs/remotes/origin/main"
-        else
-          warn "WARNING: cannot determine upstream branch, skipping update: ${dir}"
-          return 0
-        fi
-      fi
+# Pull the currently checked-out branch if possible; otherwise try main/master
+branch="\$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+if [[ -z "\$branch" || "\$branch" == "HEAD" ]]; then
+  branch="main"
+fi
 
-      local branch="${defaultRef##refs/remotes/origin/}"
-
-      log "...resetting to upstream snapshot: origin/${branch}"
-
-      # Snapshot update (no merge, no pull)
-      runCmd git -C "${dir}" checkout -B "${branch}" "origin/${branch}"
-      runCmd git -C "${dir}" reset --hard "origin/${branch}"
-      runCmd git -C "${dir}" clean -fd
-
-      return 0
-    fi
+git pull --ff-only origin "\$branch" \
+  || git pull --ff-only origin main \
+  || git pull --ff-only origin master
+EOF
+)"
+    return 0
   fi
 
-  # Directory exists but is not a git repo
-  if runSh test -d "${dir}"; then
-    if [[ "${FORCE:-0}" == "1" ]]; then
-      warn "forcing removal of existing directory: ${dir}"
-      runCmd rm -rf "${dir}"
-    else
-      moveAside "${dir}"
-    fi
+  # If the directory exists but isn't a git repo, move it aside safely
+  if runCmd test -e "$dir"; then
+    local ts
+    ts="$(date +%Y%m%d_%H%M%S)"
+    log "ERROR destination exists and is not a git repo: ${dir}"
+    log "moving aside: ${dir} -> ${dir}.bak_${ts}"
+    runCmd mv "$dir" "${dir}.bak_${ts}"
   fi
 
-  # Clone fresh
+  # Fresh clone
   log "cloning: ${url} -> ${dir}"
-  runSh "git clone '${url}' '${dir}'"
-  return 0
+  runCmd git clone "$url" "$dir"
 }
+
