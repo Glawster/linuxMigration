@@ -69,14 +69,16 @@ Dry run mode connects to the pod and shows what would happen:
 **What happens in dry run:**
 - ✅ Connects to pod via SSH
 - ✅ Runs diagnostics and checks directory state
-- ✅ Shows what operations would be performed with `[]` prefix
+- ✅ All messages show `[]` prefix (log, warn, error functions are dry-run aware)
+- ✅ Shows what operations would be performed
 - ❌ Does NOT execute: git clone, apt install, conda create, etc.
 
 **Example output:**
 ```
-[] ensuring comfyui git repositories
-[] cloning: https://github.com/comfyanonymous/ComfyUI.git -> /workspace/ComfyUI
-[] installing base tools via apt-get: git rsync tmux
+[] ...ensuring comfyui git repositories
+[] ...cloning: https://github.com/comfyanonymous/ComfyUI.git -> /workspace/ComfyUI
+[] ...installing base tools via apt-get: git rsync tmux
+[] git clone 'https://github.com/comfyanonymous/ComfyUI.git' '/workspace/ComfyUI'
 ```
 
 ## Common Scenarios

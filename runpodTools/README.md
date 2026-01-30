@@ -49,12 +49,14 @@ Dry run mode (`--dry-run`) is designed to show what would happen during installa
 
 - **Connects to the pod** via SSH to check actual state
 - **Executes read-only operations**: checks directories, reads state files, runs diagnostics
-- **Shows destructive operations** with `[]` prefix but doesn't execute them
+- **Shows all operations** with `[]` prefix but doesn't execute write operations
+- **All logging functions are dry-run aware**: `log()`, `warn()`, and `error()` automatically add the `[]` prefix in dry run mode
 - **Example output**:
   ```
-  [] ensuring comfyui git repositories
-  [] cloning: https://github.com/comfyanonymous/ComfyUI.git -> /workspace/ComfyUI
-  [] installing base tools via apt-get: git rsync tmux
+  [] ...ensuring comfyui git repositories
+  [] ...cloning: https://github.com/comfyanonymous/ComfyUI.git -> /workspace/ComfyUI
+  [] ...installing base tools via apt-get: git rsync tmux
+  [] git clone 'https://github.com/comfyanonymous/ComfyUI.git' '/workspace/ComfyUI'
   ```
 - **Use cases**:
   - Preview what will be installed before committing
