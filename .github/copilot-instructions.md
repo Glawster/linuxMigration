@@ -54,8 +54,8 @@ linuxMigration is a collection of shell scripts and Python utilities for managin
 ### Naming Conventions
 - **Shell Scripts**: Use descriptive names with `.sh` extension (e.g., `organiseHome.sh`)
 - **Python Scripts**: Use snake_case with `.py` extension (e.g., `dedupe_images.py`)
-- **Functions**: camelCase for bash functions, snake_case for Python functions
-- **Variables**: lowercase with underscores for multi-word names
+- **Functions**: camelCase for both bash and Python functions (e.g., `makeDir`, `processFiles`)
+- **Variables**: camelCase for multi-word names (e.g., `sourceDir`, `imgPath`, `startTime`)
 - **Constants**: UPPERCASE_WITH_UNDERSCORES
 
 ### Script Organization
@@ -78,7 +78,7 @@ linuxMigration is a collection of shell scripts and Python utilities for managin
 set -euo pipefail
 
 # Helper function example
-make_dir() {
+makeDir() {
     local dir="$1"
     if [ ! -d "$dir" ]; then
         echo "creating directory: $dir"
@@ -87,7 +87,7 @@ make_dir() {
 }
 
 # Safe file operation
-move_if_exists() {
+moveIfExists() {
     local src="$1"
     local dest="$2"
     if [ -e "$src" ]; then
@@ -130,12 +130,12 @@ def main():
     args = parser.parse_args()
     
     try:
-        source_dir = Path(args.source).expanduser().resolve()
+        sourceDir = Path(args.source).expanduser().resolve()
     except (OSError, RuntimeError, ValueError) as e:
         raise SystemExit(f"Error resolving path: {e}")
     
-    if not source_dir.is_dir():
-        raise SystemExit(f"Directory does not exist: {source_dir}")
+    if not sourceDir.is_dir():
+        raise SystemExit(f"Directory does not exist: {sourceDir}")
     
     # Process files...
 
@@ -193,7 +193,7 @@ if __name__ == "__main__":
 
 ### Home Organization Pattern
 Scripts like `organiseHome.sh` follow a consistent pattern:
-1. Define helper functions (`make_dir`, `move_into_if_exists`)
+1. Define helper functions (`makeDir`, `moveIntoIfExists`)
 2. Create top-level directory structure
 3. Move items into appropriate categories
 4. Provide feedback on each operation
@@ -235,14 +235,14 @@ Scripts like `organiseHome.sh` follow a consistent pattern:
 ### Example Patterns
 ```bash
 # Bash
-if [ ! -d "$target_dir" ]; then
-    echo "Error: Directory does not exist: $target_dir"
+if [ ! -d "$targetDir" ]; then
+    echo "Error: Directory does not exist: $targetDir"
     exit 1
 fi
 
 # Python
-if not source_dir.is_dir():
-    raise SystemExit(f"Error: Source directory does not exist: {source_dir}")
+if not sourceDir.is_dir():
+    raise SystemExit(f"Error: Source directory does not exist: {sourceDir}")
 ```
 
 ## Code Examples
@@ -253,7 +253,7 @@ if not source_dir.is_dir():
 set -euo pipefail
 
 # Make directory if it doesn't exist
-make_dir() {
+makeDir() {
     local dir="$1"
     if [ ! -d "$dir" ]; then
         echo "creating directory: $dir"
@@ -264,11 +264,11 @@ make_dir() {
 }
 
 # Move file/directory if it exists
-move_if_exists() {
+moveIfExists() {
     local src="$1"
     local dest="$2"
     if [ -e "$src" ]; then
-        make_dir "$dest"
+        makeDir "$dest"
         echo "moving $src -> $dest"
         mv -i "$src" "$dest/"
     else
@@ -282,10 +282,10 @@ move_if_exists() {
 import argparse
 from pathlib import Path
 
-def validate_directory(path_str):
+def validateDirectory(pathStr):
     """Validate and resolve a directory path."""
     try:
-        path = Path(path_str).expanduser().resolve()
+        path = Path(pathStr).expanduser().resolve()
     except (OSError, RuntimeError, ValueError) as e:
         raise SystemExit(f"Error resolving path: {e}")
     
@@ -298,7 +298,7 @@ def validate_directory(path_str):
 parser = argparse.ArgumentParser()
 parser.add_argument("--source", required=True, help="Source directory")
 args = parser.parse_args()
-source_dir = validate_directory(args.source)
+sourceDir = validateDirectory(args.source)
 ```
 
 ### Recovery Tool Pattern
@@ -310,14 +310,14 @@ Tool description and purpose.
 import argparse
 from pathlib import Path
 
-def process_files(source_dir, dry_run=False):
+def processFiles(sourceDir, dryRun=False):
     """Process files in the source directory."""
-    for img_file in source_dir.rglob("*.jpg"):
-        if dry_run:
-            print(f"Would process: {img_file}")
+    for imgFile in sourceDir.rglob("*.jpg"):
+        if dryRun:
+            print(f"Would process: {imgFile}")
         else:
             # Actual processing
-            print(f"Processing: {img_file}")
+            print(f"Processing: {imgFile}")
 
 def main():
     parser = argparse.ArgumentParser(description="Tool description")
@@ -325,8 +325,8 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Show actions without executing")
     args = parser.parse_args()
     
-    source_dir = validate_directory(args.source)
-    process_files(source_dir, args.dry_run)
+    sourceDir = validateDirectory(args.source)
+    processFiles(sourceDir, args.dry_run)
 
 if __name__ == "__main__":
     main()
