@@ -98,10 +98,10 @@ ensureConda() {
     warn "conda directory exists but install looks incomplete: ${CONDA_DIR}"
   fi
 
-  logAction "downloading miniconda installer"
+  log "downloading miniconda installer"
   runCmd wget -q "$url" -O "$installer"
 
-  logAction "installing/updating miniconda (-u)"
+  log "installing/updating miniconda (-u)"
   if runCmd bash "$installer" -b -p "${CONDA_DIR}" -u; then
     log "conda update-in-place succeeded"
     :
@@ -187,7 +187,7 @@ ensureCondaEnv() {
     return 0
   fi
 
-  logAction "creating conda environment: ${env_name}"
+  log "creating conda environment: ${env_name}"
   _condaExec "create -n '${env_name}' python='${python_version}' -y"
   log "environment created"
   return 0
