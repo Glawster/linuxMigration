@@ -53,7 +53,8 @@ echo
 echo "Test 3: State file naming (local mode)"
 STATE_FILE=$(getStateFileName)
 echo "State file: $STATE_FILE"
-if [[ "$STATE_FILE" == *"state.env"* ]]; then
+# In local mode, basename should be exactly "state.env"
+if [[ "$(basename "$STATE_FILE")" == "state.env" ]]; then
     echo "✓ State file uses correct naming"
 else
     echo "✗ State file naming incorrect"

@@ -44,6 +44,19 @@ _condaExec() {
   runSh "$(printf "%q " "${condaExe}") ${fragment}"
 }
 
+# Read-only conda execution for dry run mode
+_condaExecReadOnly() {
+  local condaExe
+  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
+
+  if [[ -z "${condaExe:-}" ]]; then
+    return 1
+  fi
+
+  local fragment="$*"
+  runShReadOnly "$(printf "%q " "${condaExe}") ${fragment}"
+}
+
 # ------------------------------------------------------------
 # ensure conda is installed at conda_dir (idempotent)
 # IMPORTANT: do NOT run conda update here (ToS may not be accepted yet)
@@ -168,8 +181,8 @@ ensureCondaEnv() {
   local env_name="${1:-runpod}"
   local python_version="${2:-3.10}"
 
-  # Check if env exists (pipeline is ok because _condaExec uses bash -lc)
-  if _condaExec "env list | awk '{print \$1}' | grep -qx '${env_name}'"; then
+  # Check if env exists (use read-only exec for dry run compatibility)
+  if _condaExecReadOnly "env list | awk '{print \$1}' | grep -qx '${env_name}'"; then
     log "conda environment exists: ${env_name}"
     return 0
   fi

@@ -171,9 +171,13 @@ Or with custom model root:
 State files track completed steps to enable idempotent reruns. The state file is automatically made unique per deployment target:
 
 ### Remote Mode (SSH)
-When connecting to a remote pod, the state file includes the target host and port:
+When connecting to a remote pod, the state file includes the target host and optionally the port:
 ```
+# With custom port
 /workspace/runpodTools/state_root_192_168_1_100_40023.env
+
+# With default SSH port (22)
+/workspace/runpodTools/state_root_192_168_1_100.env
 ```
 
 This ensures that state from a local test setup doesn't interfere with a real pod deployment.

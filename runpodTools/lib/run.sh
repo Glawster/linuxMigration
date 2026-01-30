@@ -6,7 +6,7 @@
 #   - runSh  "<script>" : shell snippet execution (pipes/redirs/cd/&& etc.)
 #
 # Dry run mode:
-#   - Read-only operations (isReadOnlyCmd/isReadOnlySh) execute even in dry run
+#   - Read-only operations (runCmdReadOnly/runShReadOnly) execute even in dry run
 #   - Write operations print but don't execute
 #
 
@@ -106,20 +106,8 @@ runHostCmd() {
 # ------------------------------------------------------------
 # Read-only operations that execute even in dry run mode
 # Used for checking state, listing directories, etc.
+# Note: Currently doesn't validate commands, so use responsibly
 # ------------------------------------------------------------
-
-# Determine if a command is read-only (safe to run in dry run)
-isReadOnlyCmd() {
-  local cmd="$1"
-  case "$cmd" in
-    test|[|[[|ls|cat|grep|awk|sed|head|tail|find|which|command|echo|printf|whoami|id|hostname|uname|df|du|stat|file)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
 
 # Run a read-only command (executes even in dry run mode)
 runCmdReadOnly() {

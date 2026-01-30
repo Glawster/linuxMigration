@@ -31,7 +31,8 @@ source "$LIB_DIR/workspace.sh"
 
 STATE_FILE=$(getStateFileName)
 echo "State file (local): $STATE_FILE"
-if [[ "$STATE_FILE" == *"state.env"* ]] && [[ "$STATE_FILE" != *"_root"* ]]; then
+# Basename should be exactly "state.env" in local mode
+if [[ "$(basename "$STATE_FILE")" == "state.env" ]]; then
     echo "✓ Local mode uses simple state file"
 else
     echo "✗ Local mode state file naming incorrect"
@@ -110,13 +111,17 @@ echo
 # Test 6: Write operations blocked in dry run
 echo "Test 6: Write Operations (Should Show [] Prefix)"
 echo "------------------------------"
-TEST_DIR="$WORKSPACE_ROOT/test_write_blocked"
+TEST_DIR="$WORKSPACE_ROOT/test_write_blocked_$(date +%s)"
 output=$(runCmd mkdir -p "$TEST_DIR" 2>&1)
-if [[ "$output" == *"[]"* ]] && [[ ! -d "$TEST_DIR" ]]; then
-    echo "✓ Write operations show [] prefix and don't execute"
-    echo "  Output: $output"
+if [[ "$output" == *"[]"* ]]; then
+    if [[ ! -d "$TEST_DIR" ]]; then
+        echo "✓ Write operations show [] prefix and don't execute"
+        echo "  Output: $output"
+    else
+        echo "✗ Write operations not properly blocked - directory was created"
+    fi
 else
-    echo "✗ Write operations not properly blocked"
+    echo "✗ Write operations not showing [] prefix"
 fi
 echo
 

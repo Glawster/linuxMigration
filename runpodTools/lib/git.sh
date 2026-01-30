@@ -70,7 +70,7 @@ ensureGitRepo() {
     else
       # Fetch repairs most partial-clone states
       log "fetching updates"
-      runCmd "git -C '${dir}' fetch --all --prune"
+      runSh "git -C '${dir}' fetch --all --prune"
 
       # Determine upstream default branch via origin/HEAD
       local defaultRef
