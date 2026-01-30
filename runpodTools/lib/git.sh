@@ -113,7 +113,7 @@ ensureGitRepo() {
   fi
 
   # Clone fresh
-  log "cloning: ${url} -> ${dir}"
+  logAction "cloning: ${url} -> ${dir}"
   runSh "git clone '${url}' '${dir}'"
   return 0
 }

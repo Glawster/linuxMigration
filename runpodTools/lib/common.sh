@@ -25,6 +25,15 @@ log() { # used to giva an update to a task being actioned
 logTask() { # used to say "am starting this task"
   echo -e "$*...\n"
 }
+
+logAction() { # used to log an action that would be taken (with dry run prefix if applicable)
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo -e "${DRY_PREFIX} $*"
+  else
+    log "$*"
+  fi
+}
+
 warn() {
   echo -e "WARNING: $*\n" >&2
 }
