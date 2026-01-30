@@ -18,19 +18,32 @@ DRY_PREFIX="${DRY_PREFIX:-[]}"
 REQUIRE_REMOTE="${REQUIRE_REMOTE:-0}"
 
 # Logging functions
-log() { # used to giva an update to a task being actioned
-  echo -e "...$*"
+log() { # used to give an update to a task being actioned (dry run aware)
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo -e "${DRY_PREFIX} ...$*"
+  else
+    echo -e "...$*"
+  fi
 }
 
 logTask() { # used to say "am starting this task"
   echo -e "$*...\n"
 }
+
 warn() {
-  echo -e "WARNING: $*\n" >&2
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo -e "${DRY_PREFIX} WARNING: $*\n" >&2
+  else
+    echo -e "WARNING: $*\n" >&2
+  fi
 }
 
 error() {
-  echo -e "ERROR: $*\n" >&2
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo -e "${DRY_PREFIX} ERROR: $*\n" >&2
+  else
+    echo -e "ERROR: $*\n" >&2
+  fi
 }
 
 die() {

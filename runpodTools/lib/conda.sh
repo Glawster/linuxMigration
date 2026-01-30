@@ -15,7 +15,7 @@ resolveCondaExe() {
 
   local c
   for c in "${candidates[@]}"; do
-    if runCmd /usr/bin/test -x "$c"; then
+    if runCmdReadOnly /usr/bin/test -x "$c"; then
       echo "$c"
       return 0
     fi
@@ -44,6 +44,19 @@ _condaExec() {
   runSh "$(printf "%q " "${condaExe}") ${fragment}"
 }
 
+# Read-only conda execution for dry run mode
+_condaExecReadOnly() {
+  local condaExe
+  condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
+
+  if [[ -z "${condaExe:-}" ]]; then
+    return 1
+  fi
+
+  local fragment="$*"
+  runShReadOnly "$(printf "%q " "${condaExe}") ${fragment}"
+}
+
 # ------------------------------------------------------------
 # ensure conda is installed at conda_dir (idempotent)
 # IMPORTANT: do NOT run conda update here (ToS may not be accepted yet)
@@ -58,19 +71,30 @@ ensureConda() {
   local url="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
 
   # if conda exists but is missing exec bit, fix it once
-  if [[ -n "${condaExe:-}" ]] && runSh "test -f '${condaExe}' && ! test -x '${condaExe}'"; then
+  if [[ -n "${condaExe:-}" ]] && runShReadOnly "test -f '${condaExe}' && ! test -x '${condaExe}'"; then
     warn "conda exists but is not executable; chmod +x"
     runSh "chmod +x '${condaExe}' || true"
   fi
 
-  # healthy?
-  if [[ -n "${condaExe:-}" ]] && runCmd "$condaExe" --version >/dev/null 2>&1; then
-    log "conda already installed: ${CONDA_DIR}"
-    return 0
+  # healthy? Check using read-only in dry run
+  if [[ -n "${condaExe:-}" ]]; then
+    if [[ "${DRY_RUN:-0}" == "1" ]]; then
+      # In dry run, just check if file exists
+      if runCmdReadOnly test -x "$condaExe"; then
+        log "conda already installed: ${CONDA_DIR}"
+        return 0
+      fi
+    else
+      # Normal check with version command
+      if runCmd "$condaExe" --version >/dev/null 2>&1; then
+        log "conda already installed: ${CONDA_DIR}"
+        return 0
+      fi
+    fi
   fi
 
   # partial?
-  if runSh "test -e '${CONDA_DIR}'"; then
+  if runShReadOnly "test -e '${CONDA_DIR}'"; then
     warn "conda directory exists but install looks incomplete: ${CONDA_DIR}"
   fi
 
@@ -157,8 +181,8 @@ ensureCondaEnv() {
   local env_name="${1:-runpod}"
   local python_version="${2:-3.10}"
 
-  # Check if env exists (pipeline is ok because _condaExec uses bash -lc)
-  if _condaExec "env list | awk '{print \$1}' | grep -qx '${env_name}'"; then
+  # Check if env exists (use read-only exec for dry run compatibility)
+  if _condaExecReadOnly "env list | awk '{print \$1}' | grep -qx '${env_name}'"; then
     log "conda environment exists: ${env_name}"
     return 0
   fi
