@@ -52,14 +52,13 @@ ensureGitRepo() {
   local dir="$1"
   local url="$2"
 
-  # Repo exists
+  # Repo exists - use read-only check
   
-  if runCmd test -d "${dir}/.git"; then
+  if runCmdReadOnly test -d "${dir}/.git"; then
     log "repo exists, syncing snapshot: ${dir}"
 
     # Sanity check: is this a usable work-tree?
-    if ! runSh git -C "${dir}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    #if ! runCmd git -C "${dir}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if ! runShReadOnly "git -C '${dir}' rev-parse --is-inside-work-tree >/dev/null 2>&1"; then
       warn "WARNING: unusable git repo detected: ${dir}"
       if [[ "${FORCE:-0}" == "1" ]]; then
         warn "forcing removal of unusable repo: ${dir}"
@@ -75,14 +74,14 @@ ensureGitRepo() {
 
       # Determine upstream default branch via origin/HEAD
       local defaultRef
-      defaultRef="$(runCapture git -C "${dir}" symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null || true)"
+      defaultRef="$(runShCapture "git -C '${dir}' symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null || true")"
 
       log "upstream default ref: ${defaultRef:-<unknown>}"
       if [[ -z "${defaultRef}" ]]; then
         # Fallbacks if origin/HEAD missing
-        if runCmd git -C "${dir}" show-ref --verify --quiet refs/remotes/origin/master; then
+        if runCmdReadOnly git -C "${dir}" show-ref --verify --quiet refs/remotes/origin/master; then
           defaultRef="refs/remotes/origin/master"
-        elif runCmd git -C "${dir}" show-ref --verify --quiet refs/remotes/origin/main; then
+        elif runCmdReadOnly git -C "${dir}" show-ref --verify --quiet refs/remotes/origin/main; then
           defaultRef="refs/remotes/origin/main"
         else
           warn "WARNING: cannot determine upstream branch, skipping update: ${dir}"
@@ -104,7 +103,7 @@ ensureGitRepo() {
   fi
 
   # Directory exists but is not a git repo
-  if runSh test -d "${dir}"; then
+  if runShReadOnly "test -d '${dir}'"; then
     if [[ "${FORCE:-0}" == "1" ]]; then
       warn "forcing removal of existing directory: ${dir}"
       runCmd rm -rf "${dir}"

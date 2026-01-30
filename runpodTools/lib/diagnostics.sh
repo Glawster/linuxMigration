@@ -1,43 +1,44 @@
 #!/usr/bin/env bash
 # lib/diagnostics.sh
 # Template drift diagnostics
+# All operations are read-only and safe for dry run mode
 
 runDiagnostics() {
   logTask "evaluating template drift diagnostics"
   
   echo "--- System Info ---"
-  runCmd uname -a
+  runCmdReadOnly uname -a
   
   echo "--- User Info ---"
-  runCmd whoami
-  runCmd id
-  runCmd hostname
+  runCmdReadOnly whoami
+  runCmdReadOnly id
+  runCmdReadOnly hostname
 
   echo "--- OS Release ---"
-  runSh "cat /etc/os-release 2>/dev/null || true"
+  runShReadOnly "cat /etc/os-release 2>/dev/null || true"
   
   echo "--- GPU Info ---"
-  runSh "nvidia-smi 2>/dev/null || echo \"nvidia-smi not available\""
+  runShReadOnly "nvidia-smi 2>/dev/null || echo \"nvidia-smi not available\""
   
   echo "--- Shell ---"
-  runSh echo "shell=$SHELL"
+  runShReadOnly echo "shell=$SHELL"
   
   echo "--- Conda Environment Variables ---"
-  runSh env | grep -i conda || echo "No conda environment variables"
+  runShReadOnly "env | grep -i conda || echo \"No conda environment variables\""
   
   echo "--- Conda Config Files ---"
-  runSh ls -la /root/.condarc /etc/conda/.condarc 2>/dev/null || echo "No conda config files"
+  runShReadOnly "ls -la /root/.condarc /etc/conda/.condarc 2>/dev/null || echo \"No conda config files\""
   
   echo "--- Python Info ---"
   
-  if runSh "command -v python3 >/dev/null 2>&1"; then
-    runCmd python3 --version
-    runCmd which python3
+  if runShReadOnly "command -v python3 >/dev/null 2>&1"; then
+    runCmdReadOnly python3 --version
+    runCmdReadOnly which python3
   else
     echo "python3 not found"
   fi
   
   echo "--- Disk Usage ---"
-  runCmd df -h /workspace 2>/dev/null || runCmd df -h / || true
+  runCmdReadOnly df -h /workspace 2>/dev/null || runCmdReadOnly df -h / || true
   echo
 }

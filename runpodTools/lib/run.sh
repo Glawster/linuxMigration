@@ -5,6 +5,10 @@
 #   - runCmd <argv...>  : argument-safe command execution
 #   - runSh  "<script>" : shell snippet execution (pipes/redirs/cd/&& etc.)
 #
+# Dry run mode:
+#   - Read-only operations (isReadOnlyCmd/isReadOnlySh) execute even in dry run
+#   - Write operations print but don't execute
+#
 
 DRY_RUN="${DRY_RUN:-0}"
 DRY_PREFIX="${DRY_PREFIX:-[]}"
@@ -97,4 +101,47 @@ runHostCmd() {
     return 0
   fi
   "$@"
+}
+
+# ------------------------------------------------------------
+# Read-only operations that execute even in dry run mode
+# Used for checking state, listing directories, etc.
+# ------------------------------------------------------------
+
+# Determine if a command is read-only (safe to run in dry run)
+isReadOnlyCmd() {
+  local cmd="$1"
+  case "$cmd" in
+    test|[|[[|ls|cat|grep|awk|sed|head|tail|find|which|command|echo|printf|whoami|id|hostname|uname|df|du|stat|file)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+# Run a read-only command (executes even in dry run mode)
+runCmdReadOnly() {
+  # Always execute read-only commands, even in dry run
+  if isLocalMode; then
+    "$@"
+  else
+    ensureSshOpts
+    local cmd=""
+    printf -v cmd "%q " "$@"
+    ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "bash -lc $(printf '%q' "$cmd")"
+  fi
+}
+
+# Run a read-only shell script (executes even in dry run mode)
+runShReadOnly() {
+  local script="${1:-}"
+  # Always execute read-only scripts, even in dry run
+  if isLocalMode; then
+    bash -lc "$script"
+  else
+    ensureSshOpts
+    ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "bash -lc $(printf '%q' "$script")"
+  fi
 }

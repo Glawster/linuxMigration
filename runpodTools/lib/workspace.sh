@@ -19,19 +19,40 @@ ENV_NAME="${ENV_NAME:-runpod}"
 # Remote state tracking
 # ============================================================
 # State must live on the remote pod (NOT locally)
-STATE_FILE="${RUNPOD_DIR}/state.env"
+# Make state file unique per deployment target to avoid conflicts
+# between different pods/test setups
+getStateFileName() {
+  local base_name="state"
+  
+  # If SSH_TARGET is set (remote mode), create unique state file per target
+  if [[ -n "${SSH_TARGET:-}" && "${SSH_TARGET}" != "local" ]]; then
+    # Extract host and port to create unique identifier
+    local target_id="${SSH_TARGET}"
+    if [[ -n "${SSH_PORT:-}" ]]; then
+      target_id="${target_id}_${SSH_PORT}"
+    fi
+    # Sanitize the target_id (replace special chars with underscore)
+    target_id="${target_id//[^a-zA-Z0-9_]/_}"
+    base_name="state_${target_id}"
+  fi
+  
+  echo "${RUNPOD_DIR}/${base_name}.env"
+}
+
+STATE_FILE="${STATE_FILE:-$(getStateFileName)}"
 
 ensureStateDir() {
   runCmd mkdir -p "$(dirname "$STATE_FILE")"
 }
 
 # ------------------------------------------------------------
-# isStepDone (REMOTE)
+# isStepDone (REMOTE) - Read-only, works in dry run mode
 # ------------------------------------------------------------
 isStepDone() {
   local step="$1"
 
-  runSh "test -f '${STATE_FILE}' || exit 1; \
+  # This is a read-only operation, should work in dry run mode
+  runShReadOnly "test -f '${STATE_FILE}' || exit 1; \
     source '${STATE_FILE}'; \
     var='DONE_${step}'; \
     [[ \"\${!var:-0}\" == '1' ]]"
@@ -68,13 +89,13 @@ EOF
 
 
 # ------------------------------------------------------------
-# showInventory (REMOTE)
+# showInventory (REMOTE) - Read-only, works in dry run mode
 # ------------------------------------------------------------
 
 showInventory() {
   log "workspace inventory"
 
-  runSh "$(cat <<'EOF'
+  runShReadOnly "$(cat <<'EOF'
 echo "--- Directories ---"
 ls -ld \
   "'${WORKSPACE_ROOT}'" \
