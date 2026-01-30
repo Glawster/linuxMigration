@@ -41,20 +41,42 @@
 ## Debugging
 
 ```bash
-# Dry run (show what would happen)
+# Dry run (connects to pod, checks state, shows what would happen)
 ./runpodFromSSH.sh --dry-run ssh root@HOST -p PORT -i KEY
 
 # On remote pod: check logs
 tail -100 /workspace/runpodTools/logs/bootstrap.*.log
 
-# On remote pod: check state
-cat /workspace/runpodTools/state.env
+# On remote pod: check state (unique per target)
+cat /workspace/runpodTools/state*.env
 
 # On remote pod: run single step
 bash /workspace/runpodTools/steps/40_comfyui.sh
 
-# Reset state
-rm /workspace/runpodTools/state.env
+# Reset state for current target
+rm /workspace/runpodTools/state*.env
+```
+
+## Dry Run Mode
+
+Dry run mode connects to the pod and shows what would happen:
+
+```bash
+# Preview installation
+./runpodFromSSH.sh --dry-run ssh root@HOST -p PORT -i KEY
+```
+
+**What happens in dry run:**
+- ✅ Connects to pod via SSH
+- ✅ Runs diagnostics and checks directory state
+- ✅ Shows what operations would be performed with `[]` prefix
+- ❌ Does NOT execute: git clone, apt install, conda create, etc.
+
+**Example output:**
+```
+[] ensuring comfyui git repositories
+[] cloning: https://github.com/comfyanonymous/ComfyUI.git -> /workspace/ComfyUI
+[] installing base tools via apt-get: git rsync tmux
 ```
 
 ## Common Scenarios
@@ -105,7 +127,7 @@ tmux attach -t comfyui
 | `/workspace/runpodTools/lib/` | Library functions |
 | `/workspace/runpodTools/steps/` | Step scripts |
 | `/workspace/runpodTools/logs/` | Timestamped logs |
-| `/workspace/runpodTools/state.env` | Completion tracking |
+| `/workspace/runpodTools/state*.env` | Completion tracking (unique per target) |
 | `/workspace/ComfyUI/` | ComfyUI installation |
 | `/workspace/kohya_ss/` | Kohya SS installation |
 | `/workspace/miniconda3/` | Miniconda installation |
@@ -137,9 +159,10 @@ conda activate runpod
 | "Step already done" | Use `--force` to rerun |
 | SSH connection fails | Check port, host, and key |
 | Need to rerun specific step | Use `--only STEP` |
-| Want to see what will happen | Use `--dry-run` |
+| Want to see what will happen | Use `--dry-run` (connects and checks state) |
 | Step failed | Check logs in `/workspace/runpodTools/logs/` |
-| Reset everything | `rm /workspace/runpodTools/state.env` |
+| Reset everything | `rm /workspace/runpodTools/state*.env` |
+| State from test pod interferes | State files are now unique per target automatically |
 
 ## All Options
 

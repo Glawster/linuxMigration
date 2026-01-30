@@ -39,9 +39,30 @@ runpodTools/
 # With Kohya
 ./runpodTools/runpodFromSSH.sh --kohya ssh root@HOST -p PORT -i ~/.ssh/id_ed25519
 
-# Dry run to see what would happen
+# Dry run to see what would happen (connects to pod but doesn't execute destructive commands)
 ./runpodTools/runpodFromSSH.sh --dry-run ssh root@HOST -p PORT -i ~/.ssh/id_ed25519
 ```
+
+### Dry Run Mode
+
+Dry run mode (`--dry-run`) is designed to show what would happen during installation:
+
+- **Connects to the pod** via SSH to check actual state
+- **Executes read-only operations**: checks directories, reads state files, runs diagnostics
+- **Shows destructive operations** with `[]` prefix but doesn't execute them
+- **Example output**:
+  ```
+  [] ensuring comfyui git repositories
+  [] cloning: https://github.com/comfyanonymous/ComfyUI.git -> /workspace/ComfyUI
+  [] installing base tools via apt-get: git rsync tmux
+  ```
+- **Use cases**:
+  - Preview what will be installed before committing
+  - Verify pod connectivity and current state
+  - Check if previous installation steps completed
+  - Test deployment scripts without making changes
+
+**Note**: Dry run mode uses a unique state file per target (based on SSH host:port), so state tracking works correctly across multiple pods and test environments.
 
 ### Advanced Usage
 
@@ -147,7 +168,25 @@ Or with custom model root:
 
 ## State File
 
-Located at `/workspace/runpodTools/state.env`, tracks completed steps:
+State files track completed steps to enable idempotent reruns. The state file is automatically made unique per deployment target:
+
+### Remote Mode (SSH)
+When connecting to a remote pod, the state file includes the target host and port:
+```
+/workspace/runpodTools/state_root_192_168_1_100_40023.env
+```
+
+This ensures that state from a local test setup doesn't interfere with a real pod deployment.
+
+### Local Mode
+When running in local mode, the default state file is used:
+```
+/workspace/runpodTools/state.env
+```
+
+### State File Contents
+
+Tracks completed steps:
 
 ```bash
 DONE_DIAGNOSTICS=1
@@ -156,7 +195,20 @@ DONE_CONDA=1
 DONE_COMFYUI=1
 ```
 
-Delete to force rerun all steps, or use `--force` flag.
+### Managing State
+
+```bash
+# View current state
+cat /workspace/runpodTools/state.env
+
+# Delete to force rerun all steps
+rm /workspace/runpodTools/state*.env
+
+# Or use --force flag to ignore state
+./runpodBootstrap.sh --force
+```
+
+**Note**: Each pod/target has its own state file, so you can work with multiple environments without conflicts.
 
 ## Development
 
