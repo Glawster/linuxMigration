@@ -14,7 +14,6 @@ LIB_DIR="${RUNPOD_TOOLS_DIR}/lib"
 source "${LIB_DIR}/common.sh"
 
 main() {
-  logTask "generating uploadModels.sh script"
 
   local outputFile="${RUNPOD_TOOLS_DIR}/uploadModels.sh"
 

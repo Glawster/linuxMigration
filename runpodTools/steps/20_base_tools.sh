@@ -18,7 +18,6 @@ source "$LIB_DIR/apt.sh"
 source "$LIB_DIR/workspace.sh"
 
 main() {
-  log "base tools context"
  
   # Create bash aliases
   log "creating /root/.bash_aliases"

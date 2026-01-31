@@ -20,7 +20,6 @@ source "$LIB_DIR/conda.sh"
 source "$LIB_DIR/workspace.sh"
 
 main() {
-  logTask "ComfyUI"
 
   # Check if already done and not forcing
   if isStepDone "COMFYUI" && [[ "${FORCE:-0}" != "1" ]]; then
@@ -59,7 +58,7 @@ main() {
 
   START_SCRIPT="comfyStart.sh"
 
-  generatecomfyStartScript "$START_SCRIPT"
+  generateScript "$START_SCRIPT"
 
   runHostCmd scp "${SCP_OPTS[@]}" "$START_SCRIPT" "${SSH_TARGET}:${WORKSPACE_ROOT}/comfyStart.sh"
   runSh "chmod +x ${WORKSPACE_ROOT}/comfyStart.sh"
@@ -70,7 +69,7 @@ main() {
   log "comfyui done\n"
 }
 
-generatecomfyStartScript() {
+generateScript() {
   local outFile="$1"
 
   cat > "$outFile" <<EOF

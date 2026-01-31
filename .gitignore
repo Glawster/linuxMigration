@@ -36,3 +36,4 @@ support.*.zip
 llavaStart.sh
 startLlavaApi.sh
 runpodTools/steps/40_comfyui.sh
+llavaAdapter.py

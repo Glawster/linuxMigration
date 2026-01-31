@@ -20,7 +20,6 @@ source "$LIB_DIR/conda.sh"
 source "$LIB_DIR/workspace.sh"
 
 main() {
-  logTask "kohya"
 
   # Check if already done and not forcing
   if isStepDone "KOHYA" && [[ "${FORCE:-0}" != "1" ]]; then
