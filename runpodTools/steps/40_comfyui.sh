@@ -53,7 +53,6 @@ main() {
   # Upgrade pip and wheel
   if ! isStepDone "COMFYUI_PIP_UPGRADE"; then
     log "upgrading pip and wheel"
-    local torch_index="${TORCH_CUDA_INDEX_URL:-https://download.pytorch.org/whl/cu121}"
     condaEnvCmd "${ENV_NAME}" python --version
     condaEnvCmd "${ENV_NAME}" python -m pip install --root-user-action=ignore --upgrade pip wheel
     markStepDone "COMFYUI_PIP_UPGRADE"
