@@ -15,7 +15,7 @@ source "${LIB_DIR}/common.sh"
 
 main() {
 
-  local outputFile="${RUNPOD_TOOLS_DIR}/uploadModels.sh"
+  local outputFile="uploadModels.sh"
 
   # Always regenerate
   cat > "$outputFile" <<'UPLOAD_SCRIPT'

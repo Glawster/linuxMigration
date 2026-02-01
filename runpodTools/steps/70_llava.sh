@@ -102,7 +102,13 @@ requireCmd tmux
 [[ -d "\$LLAVA_DIR" ]] || { echo "ERROR: llava directory not found: \$LLAVA_DIR" >&2; exit 1; }
 [[ -x "\$CONDA_EXE" ]] || { echo "ERROR: conda not found/executable at \$CONDA_EXE" >&2; exit 1; }
 
-if [[ -z "\${LLAVA_MODEL_PATH:-}" ]]; then
+LLAVA_MODEL_PATH="${LLAVA_MODEL_PATH:-liuhaotian/llava-v1.5-7b}"
+LLAVA_GRADIO_URL="${LLAVA_GRADIO_URL:-http://127.0.0.1:7003}"
+LLAVA_API_NAME="${LLAVA_API_NAME:-/add_text_1}"
+LAVA_GRADIO_URL="${LAVA_GRADIO_URL:-$LLAVA_GRADIO_URL}"
+LAVA_API_NAME="${LAVA_API_NAME:-$LLAVA_API_NAME}"
+
+if [[ -z "${LLAVA_MODEL_PATH:-}" ]]; then
   echo "ERROR: LLAVA_MODEL_PATH is not set (required to start model worker)" >&2
   echo "Set it to a local path or HF repo id, e.g.:" >&2
   echo "  export LLAVA_MODEL_PATH=/workspace/models/llava-1.5-7b" >&2
@@ -114,13 +120,19 @@ assertPortFree "\$CONTROLLER_PORT"
 assertPortFree "\$WORKER_PORT"
 assertPortFree "\$WEB_PORT"
 
+LOG_DIR="${LOG_DIR:-${WORKSPACE}/logs}"
+mkdir -p "$LOG_DIR"
+LOG_CONTROLLER="$LOG_DIR/llava.controller.${CONTROLLER_PORT}.log"
+LOG_WORKER="$LOG_DIR/llava.worker.${WORKER_PORT}.log"
+LOG_WEB="$LOG_DIR/llava.web.${WEB_PORT}.log"
+
 # --- controller ---
 if tmux has-session -t "\$SESSION_CONTROLLER" 2>/dev/null; then
   echo "controller already running (tmux session: \$SESSION_CONTROLLER)"
 else
   tmux new-session -d -s "\$SESSION_CONTROLLER" \\
     "bash -lc 'set -euo pipefail; cd \"\$LLAVA_DIR\"; \"\$CONDA_EXE\" run -n \"\$ENV_NAME\" --no-capture-output \\
-      python -m llava.serve.controller --host 0.0.0.0 --port \"\$CONTROLLER_PORT\"'"
+      python -m llava.serve.controller --host 0.0.0.0 --port \"\$CONTROLLER_PORT\" 2>&1 | tee -a \"\$LOG_CONTROLLER\"'"
   echo "controller started..."
 fi
 
@@ -131,7 +143,7 @@ else
   tmux new-session -d -s "\$SESSION_WORKER" \\
     "bash -lc 'set -euo pipefail; cd \"\$LLAVA_DIR\"; \"\$CONDA_EXE\" run -n \"\$ENV_NAME\" --no-capture-output \\
       python -m llava.serve.model_worker --host 0.0.0.0 --port \"\$WORKER_PORT\" \\
-        --controller http://127.0.0.1:\$CONTROLLER_PORT --model-path \"\$LLAVA_MODEL_PATH\"'"
+        --controller http://127.0.0.1:\$CONTROLLER_PORT --model-path \"\$LLAVA_MODEL_PATH\" 2>&1 | tee -a \"\$LOG_WORKER\"'"
   echo "worker started..."
 fi
 
@@ -142,7 +154,7 @@ else
   tmux new-session -d -s "\$SESSION_WEB" \\
     "bash -lc 'set -euo pipefail; cd \"\$LLAVA_DIR\"; \"\$CONDA_EXE\" run -n \"\$ENV_NAME\" --no-capture-output \\
       python -m llava.serve.gradio_web_server --host 0.0.0.0 --port \"\$WEB_PORT\" \\
-        --controller http://127.0.0.1:\$CONTROLLER_PORT'"
+        --controller http://127.0.0.1:\$CONTROLLER_PORT 2>&1 | tee -a \"\$LOG_WEB\"'"
   echo "web started..."
 fi
 
