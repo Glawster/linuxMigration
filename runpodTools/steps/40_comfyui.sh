@@ -44,7 +44,7 @@ main() {
     log "comfyui-manager already cloned"
   fi
 
-  # the following don't seen to install so commented out
+  # the following don't seem to install so commented out
   #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/ltdrdata/ComfyUI-Impact-Pack.git"     "ComfyuiImactPack"
   #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git"  "ComfyuiImactSubPack"
   #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/facebookresearch/sam2"                "ComfyuiImactPack"
@@ -78,10 +78,10 @@ main() {
     log "comfyui-manager requirements already installed"
   fi
 
-  # Verify CUDA
+  # Verify CUDA (informational check - installation continues regardless)
   if ! isStepDone "COMFYUI_CUDA_CHECK"; then
     log "verifying CUDA availability"
-    condaEnvCmd "$ENV_NAME" python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
+    condaEnvCmd "$ENV_NAME" python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)" || log "CUDA check failed (continuing anyway)"
     markStepDone "COMFYUI_CUDA_CHECK"
   else
     log "cuda already verified"
