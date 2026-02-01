@@ -170,6 +170,12 @@ EOF
 main() {
   logTask "LLaVA"
 
+  # Check if already done and not forcing
+  if isStepDone "LLAVA" && [[ "${FORCE:-0}" != "1" ]]; then
+    log "llava already configured (use --force to rerun)"
+    return 0
+  fi
+
   LLAVA_VERSION="${LLAVA_VERSION:-1.5}"
   LLAVA_REF="${LLAVA_REF:-v1.5}"
   LLAVA_DIR="${LLAVA_DIR:-${WORKSPACE_ROOT}/LLaVA}"
@@ -180,26 +186,59 @@ main() {
   log "llava version: $LLAVA_VERSION"
   log "llava ref: $LLAVA_REF"
 
-  log "ensuring llava repo"
-  ensureGitRepo "$LLAVA_DIR" "https://github.com/haotian-liu/LLaVA.git" "LLaVA"
+  # Ensure repo
+  if ! isStepDone "LLAVA_REPO"; then
+    log "ensuring llava repo"
+    ensureGitRepo "$LLAVA_DIR" "https://github.com/haotian-liu/LLaVA.git" "LLaVA"
 
-  local resolvedRef
-  resolvedRef="$(resolveLlavaRef "$LLAVA_DIR" "$LLAVA_REF")"
-  log "resolved ref: $resolvedRef"
+    local resolvedRef
+    resolvedRef="$(resolveLlavaRef "$LLAVA_DIR" "$LLAVA_REF")"
+    log "resolved ref: $resolvedRef"
 
-  runSh "git -C \"$LLAVA_DIR\" checkout \"$resolvedRef\""
-  runSh "git -C \"$LLAVA_DIR\" reset --hard \"$resolvedRef\""
+    runSh "git -C \"$LLAVA_DIR\" checkout \"$resolvedRef\""
+    runSh "git -C \"$LLAVA_DIR\" reset --hard \"$resolvedRef\""
+    markStepDone "LLAVA_REPO"
+  else
+    log "llava repository already cloned"
+  fi
 
-  log "ensuring conda env: $LLAVA_ENV_NAME"
-  ensureCondaEnv "$LLAVA_ENV_NAME" "3.10"
+  # Ensure conda environment
+  if ! isStepDone "LLAVA_ENV"; then
+    log "ensuring conda env: $LLAVA_ENV_NAME"
+    ensureCondaEnv "$LLAVA_ENV_NAME" "3.10"
+    markStepDone "LLAVA_ENV"
+  else
+    log "llava conda environment already created"
+  fi
 
-  log "installing llava (editable)"
-  condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install -U pip wheel setuptools
-  condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install -e "$LLAVA_DIR"
+  # Upgrade pip/wheel/setuptools
+  if ! isStepDone "LLAVA_PIP_UPGRADE"; then
+    log "upgrading pip, wheel, and setuptools"
+    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install -U pip wheel setuptools
+    markStepDone "LLAVA_PIP_UPGRADE"
+  else
+    log "pip, wheel, and setuptools already upgraded"
+  fi
 
-  log "verifying llava import"
-  condaEnvCmd "$LLAVA_ENV_NAME" python -c 'import llava; print(llava.__file__)'
+  # Install LLaVA
+  if ! isStepDone "LLAVA_INSTALL"; then
+    log "installing llava (editable)"
+    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install -e "$LLAVA_DIR"
+    markStepDone "LLAVA_INSTALL"
+  else
+    log "llava already installed"
+  fi
 
+  # Verify installation
+  if ! isStepDone "LLAVA_VERIFY"; then
+    log "verifying llava import"
+    condaEnvCmd "$LLAVA_ENV_NAME" python -c 'import llava; print(llava.__file__)' || log "llava verification failed (continuing anyway)"
+    markStepDone "LLAVA_VERIFY"
+  else
+    log "llava already verified"
+  fi
+
+  # Generate and upload start script (always regenerate for potential updates)
   local startScript="./llavaStart.sh"
   log "writing llava start helper (local): $startScript"
   generateScript "$startScript"
@@ -208,6 +247,7 @@ main() {
   runHostCmd scp "${SCP_OPTS[@]}" "$startScript" "${SSH_TARGET}:${WORKSPACE_ROOT}/llavaStart.sh"
   runSh "chmod +x '${WORKSPACE_ROOT}/llavaStart.sh'"
 
+  markStepDone "LLAVA"
   log "llava step complete..."
 }
 

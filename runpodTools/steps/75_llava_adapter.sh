@@ -8,8 +8,6 @@ set -euo pipefail
 # - start uvicorn in tmux on pod
 # ------------------------------------------------------------
 
-stepName="75_llava_adapter"
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$(dirname "$SCRIPT_DIR")/lib"
 
@@ -150,6 +148,12 @@ SH
 # ------------------------------------------------------------
 main() {
 
+  # Check if already done and not forcing
+  if isStepDone "LLAVA_ADAPTER" && [[ "${FORCE:-0}" != "1" ]]; then
+    log "llava adapter already configured (use --force to rerun)"
+    return 0
+  fi
+
   LLAVA_ENV_NAME="${LLAVA_ENV_NAME:-llava}"
   LLAVA_ADAPTER_PORT="${LLAVA_ADAPTER_PORT:-9188}"
   LLAVA_GRADIO_URL="${LLAVA_GRADIO_URL:-http://127.0.0.1:7003}"
@@ -157,10 +161,16 @@ main() {
   LLAVA_PREPROCESS="${LLAVA_PREPROCESS:-Default}"
   SESSION="${LLAVA_ADAPTER_SESSION:-llava_adapter}"
 
-  log "ensure adapter deps (remote conda env: ${LLAVA_ENV_NAME})"
-  condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install -U fastapi uvicorn gradio_client python-multipart
-  log "Llava Adapter dependencies are ok"
+  # Install adapter dependencies
+  if ! isStepDone "LLAVA_ADAPTER_DEPS"; then
+    log "ensure adapter deps (remote conda env: ${LLAVA_ENV_NAME})"
+    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install -U fastapi uvicorn gradio_client python-multipart
+    markStepDone "LLAVA_ADAPTER_DEPS"
+  else
+    log "llava adapter dependencies already installed"
+  fi
 
+  # Generate and upload adapter scripts (always regenerate for potential updates)
   local localAdapter="./llavaAdapter.py"
   local localStart="./adapterStart.sh"
   local remoteAdapter="${WORKSPACE_ROOT}/llavaAdapter.py"
@@ -175,8 +185,10 @@ main() {
   runHostCmd scp "${SCP_OPTS[@]}" "$localStart" "${SSH_TARGET}:${remoteStart}"
   runSh "chmod +x '${remoteAdapter}' '${remoteStart}'"
 
-  log "start adapter in tmux (remote): session=${SESSION} port=${LLAVA_ADAPTER_PORT} (or run /workspace/adapterStart.sh later)"
-  runSh "$(cat <<EOF
+  # Start adapter (only if not already done)
+  if ! isStepDone "LLAVA_ADAPTER_START"; then
+    log "start adapter in tmux (remote): session=${SESSION} port=${LLAVA_ADAPTER_PORT} (or run /workspace/adapterStart.sh later)"
+    runSh "$(cat <<EOF
 set -euo pipefail
 
 LOG_DIR="/workspace/logs"
@@ -206,10 +218,15 @@ tmux new-session -d -s "${SESSION}" \\
 echo "adapter started..."
 EOF
 )"
+    markStepDone "LLAVA_ADAPTER_START"
+  else
+    log "llava adapter already started"
+  fi
 
   log "probe adapter on pod"
   runSh "curl -s -o /dev/null -w 'adapter http: %{http_code}\n' http://127.0.0.1:${LLAVA_ADAPTER_PORT}/analyze || true"
 
+  markStepDone "LLAVA_ADAPTER"
   log "done..."
 }
 
