@@ -128,4 +128,5 @@ fi
 Potential improvements for consideration:
 - Add timestamp tracking to show when each sub-step completed
 - Add checksums to detect if requirements.txt changed and trigger re-install
-- Add option to embed pod IP/port in state.env for multi-pod workflows (currently not implemented as pods are typically single-use)
+- Add option to embed pod IP/port in state.env for multi-pod workflows
+  (currently not implemented as pods are typically single-use)

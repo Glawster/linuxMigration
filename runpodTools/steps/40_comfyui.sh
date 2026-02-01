@@ -78,7 +78,7 @@ main() {
     log "comfyui-manager requirements already installed"
   fi
 
-  # Verify CUDA (always run as quick verification)
+  # Verify CUDA
   if ! isStepDone "COMFYUI_CUDA_CHECK"; then
     log "verifying CUDA availability"
     condaEnvCmd "$ENV_NAME" python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
