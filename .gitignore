@@ -35,5 +35,8 @@ runpodTools/uploadModels.sh
 support.*.zip
 llavaStart.sh
 startLlavaApi.sh
-runpodTools/steps/40_comfyui.sh
 llavaAdapter.py
+comfyStart.sh
+runpodTools/startComfyUI.sh
+runpodTools/startLlavaApi.sh
+runpodTools/uploadModels.sh
