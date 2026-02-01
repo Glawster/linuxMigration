@@ -21,6 +21,7 @@ ENV/
 *~
 
 # Logs
+logs/
 *.log
 
 # OS
@@ -32,11 +33,12 @@ runs/
 runpodTools/logs/
 runpodTools/state.env
 runpodTools/uploadModels.sh
+runpodTools/uploadModels.sh
 support.*.zip
 llavaStart.sh
-startLlavaApi.sh
 llavaAdapter.py
 comfyStart.sh
+# these are old filenames kept for backward compatibility
+startLlavaApi.sh
 runpodTools/startComfyUI.sh
 runpodTools/startLlavaApi.sh
-runpodTools/uploadModels.sh
