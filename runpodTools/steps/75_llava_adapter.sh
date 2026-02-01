@@ -28,7 +28,7 @@ source "$LIB_DIR/run.sh"
 # ------------------------------------------------------------
 # helper: generate adapter python LOCALLY
 # ------------------------------------------------------------
-generateScript() {
+generateAdapter() {
   local outFile="$1"
 
   cat >"$outFile" <<'PY'
@@ -43,8 +43,8 @@ from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from gradio_client import Client
 
-GRADIO_INTERNAL = os.environ.get("LLAVA_GRADIO_URL", "http://127.0.0.1:7003")
-API_NAME = os.environ.get("LLAVA_API_NAME", "/add_text_1")
+GRADIO_INTERNAL = os.environ.get("LLAVA_GRADIO_URL") or os.environ.get("LAVA_GRADIO_URL") or "http://127.0.0.1:7003"
+API_NAME = os.environ.get("LLAVA_API_NAME") or os.environ.get("LAVA_API_NAME") or "/add_text_1"
 DEFAULT_PREPROCESS = os.environ.get("LLAVA_PREPROCESS", "Default")
 
 app = FastAPI()
@@ -78,6 +78,74 @@ PY
 }
 
 # ------------------------------------------------------------
+# helper: generate adapterStart.sh LOCALLY
+# ------------------------------------------------------------
+generateScript() {
+  local outFile="$1"
+
+  cat >"$outFile" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+WORKSPACE="${WORKSPACE:-/workspace}"
+CONDA_DIR="${CONDA_DIR:-${WORKSPACE}/miniconda3}"
+CONDA_EXE="${CONDA_EXE:-${CONDA_DIR}/bin/conda}"
+ENV_NAME="${LLAVA_ENV_NAME:-llava}"
+
+ADAPTER_PORT="${LLAVA_ADAPTER_PORT:-9188}"
+SESSION="${LLAVA_ADAPTER_SESSION:-llava_adapter}"
+
+# defaults (can be overridden by environment)
+export LLAVA_MODEL_PATH="${LLAVA_MODEL_PATH:-liuhaotian/llava-v1.5-7b}"
+export LLAVA_GRADIO_URL="${LLAVA_GRADIO_URL:-http://127.0.0.1:7003}"
+export LLAVA_API_NAME="${LLAVA_API_NAME:-/add_text_1}"
+export LLAVA_PREPROCESS="${LLAVA_PREPROCESS:-Default}"
+
+# compatibility with older variable names requested by user
+export LAVA_GRADIO_URL="${LAVA_GRADIO_URL:-$LLAVA_GRADIO_URL}"
+export LAVA_API_NAME="${LAVA_API_NAME:-$LLAVA_API_NAME}"
+
+if ! command -v ss >/dev/null 2>&1; then
+  echo "ERROR: ss not available; cannot check port usage" >&2
+  exit 1
+fi
+
+if ss -ltn | awk '{print $4}' | grep -q ":${ADAPTER_PORT}$"; then
+  echo "ERROR: port ${ADAPTER_PORT} already in use" >&2
+  ss -ltnp | grep ":${ADAPTER_PORT}" || true
+  exit 1
+fi
+
+LOG_DIR="${LOG_DIR:-${WORKSPACE}/logs}"
+mkdir -p "$LOG_DIR"
+LOG_FILE="${LOG_DIR}/llava.adapter.${ADAPTER_PORT}.log"
+
+if ! command -v tmux >/dev/null 2>&1; then
+  echo "tmux not available; starting adapter in foreground"
+  exec "$CONDA_EXE" run -n "$ENV_NAME" --no-capture-output \
+    bash -lc "cd '${WORKSPACE}' && python -m uvicorn llavaAdapter:app --host 0.0.0.0 --port '${ADAPTER_PORT}'" \
+    2>&1 | tee -a "$LOG_FILE"
+fi
+
+if tmux has-session -t "$SESSION" 2>/dev/null; then
+  echo "adapter already running (tmux session: $SESSION)"
+  echo "log: $LOG_FILE"
+  exit 0
+fi
+
+tmux new-session -d -s "$SESSION" \
+  "bash -lc 'set -euo pipefail; cd "${WORKSPACE}"; "${CONDA_EXE}" run -n "${ENV_NAME}" --no-capture-output \
+    python -m uvicorn llavaAdapter:app --host 0.0.0.0 --port "${ADAPTER_PORT}" 2>&1 | tee -a "${LOG_FILE}"'"
+
+echo "adapter started (tmux session: $SESSION)"
+echo "log: $LOG_FILE"
+SH
+
+  chmod +x "$outFile"
+}
+
+
+# ------------------------------------------------------------
 # main
 # ------------------------------------------------------------
 main() {
@@ -94,18 +162,26 @@ main() {
   log "Llava Adapter dependencies are ok"
 
   local localAdapter="./llavaAdapter.py"
+  local localStart="./adapterStart.sh"
   local remoteAdapter="${WORKSPACE_ROOT}/llavaAdapter.py"
+  local remoteStart="${WORKSPACE_ROOT}/adapterStart.sh"
 
   log "create adapter script (local): ${localAdapter}"
-  generateScript "$localAdapter"
+  generateAdapter "$localAdapter"
+  generateScript "$localStart"
 
   log "copy adapter to remote workspace: ${remoteAdapter}"
   runHostCmd scp "${SCP_OPTS[@]}" "$localAdapter" "${SSH_TARGET}:${remoteAdapter}"
-  runSh "chmod +x '${remoteAdapter}'"
+  runHostCmd scp "${SCP_OPTS[@]}" "$localStart" "${SSH_TARGET}:${remoteStart}"
+  runSh "chmod +x '${remoteAdapter}' '${remoteStart}'"
 
-  log "start adapter in tmux (remote): session=${SESSION} port=${LLAVA_ADAPTER_PORT}"
+  log "start adapter in tmux (remote): session=${SESSION} port=${LLAVA_ADAPTER_PORT} (or run /workspace/adapterStart.sh later)"
   runSh "$(cat <<EOF
 set -euo pipefail
+
+LOG_DIR="/workspace/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/llava.adapter.${LLAVA_ADAPTER_PORT}.log"
 
 if command -v fuser >/dev/null 2>&1; then
   fuser -k ${LLAVA_ADAPTER_PORT}/tcp >/dev/null 2>&1 || true
@@ -122,10 +198,10 @@ fi
 
 tmux new-session -d -s "${SESSION}" \\
   "bash -lc 'set -euo pipefail; \\
-    export LLAVA_GRADIO_URL=\"${LLAVA_GRADIO_URL}\" LLAVA_API_NAME=\"${LLAVA_API_NAME}\" LLAVA_PREPROCESS=\"${LLAVA_PREPROCESS}\"; \\
+    export LLAVA_GRADIO_URL="${LLAVA_GRADIO_URL}" LLAVA_API_NAME="${LLAVA_API_NAME}" LLAVA_PREPROCESS="${LLAVA_PREPROCESS}" LAVA_GRADIO_URL="${LAVA_GRADIO_URL:-$LLAVA_GRADIO_URL}" LAVA_API_NAME="${LAVA_API_NAME:-$LLAVA_API_NAME}"; \\
     cd \"${WORKSPACE_ROOT}\"; \\
     \"${WORKSPACE_ROOT}/miniconda3/bin/conda\" run -n \"${LLAVA_ENV_NAME}\" --no-capture-output \\
-      python -m uvicorn llavaAdapter:app --host 0.0.0.0 --port ${LLAVA_ADAPTER_PORT}'"
+      python -m uvicorn llavaAdapter:app --host 0.0.0.0 --port ${LLAVA_ADAPTER_PORT} 2>&1 | tee -a "$LOG_FILE"'"
 
 echo "adapter started..."
 EOF
