@@ -28,10 +28,21 @@ main() {
   fi
 
   # Ensure repos (remote-safe via ensureGitRepo)
-  log "ensuring comfyui git repositories"
-  ensureGitRepo "$COMFY_DIR" "https://github.com/comfyanonymous/ComfyUI.git" "ComfyUI"
-  log "ensuring comfyui custom nodes"
-  ensureGitRepo "$COMFY_DIR/custom_nodes/ComfyUI-Manager" "https://github.com/ltdrdata/ComfyUI-Manager.git" "ComfyUI-Manager"
+  if ! isStepDone "COMFYUI_REPO"; then
+    log "ensuring comfyui git repository"
+    ensureGitRepo "$COMFY_DIR" "https://github.com/comfyanonymous/ComfyUI.git" "ComfyUI"
+    markStepDone "COMFYUI_REPO"
+  else
+    log "comfyui repository already cloned"
+  fi
+
+  if ! isStepDone "COMFYUI_MANAGER"; then
+    log "ensuring comfyui-manager custom node"
+    ensureGitRepo "$COMFY_DIR/custom_nodes/ComfyUI-Manager" "https://github.com/ltdrdata/ComfyUI-Manager.git" "ComfyUI-Manager"
+    markStepDone "COMFYUI_MANAGER"
+  else
+    log "comfyui-manager already cloned"
+  fi
 
   # the following don't seen to install so commented out
   #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/ltdrdata/ComfyUI-Impact-Pack.git"     "ComfyuiImactPack"
@@ -39,21 +50,45 @@ main() {
   #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/facebookresearch/sam2"                "ComfyuiImactPack"
   # ComfyUI Impact Subpack installed by pip
 
-  # Install dependencies
-  log "installing ComfyUI dependencies"
+  # Upgrade pip and wheel
+  if ! isStepDone "COMFYUI_PIP_UPGRADE"; then
+    log "upgrading pip and wheel"
+    local torch_index="${TORCH_CUDA_INDEX_URL:-https://download.pytorch.org/whl/cu121}"
+    condaEnvCmd "${ENV_NAME}" python --version
+    condaEnvCmd "${ENV_NAME}" python -m pip install --root-user-action=ignore --upgrade pip wheel
+    markStepDone "COMFYUI_PIP_UPGRADE"
+  else
+    log "pip and wheel already upgraded"
+  fi
 
-  local torch_index="${TORCH_CUDA_INDEX_URL:-https://download.pytorch.org/whl/cu121}"
+  # Install ComfyUI requirements
+  if ! isStepDone "COMFYUI_REQUIREMENTS"; then
+    log "installing comfyui requirements"
+    condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/requirements.txt"
+    markStepDone "COMFYUI_REQUIREMENTS"
+  else
+    log "comfyui requirements already installed"
+  fi
 
-  condaEnvCmd "${ENV_NAME}" python --version
-  condaEnvCmd "${ENV_NAME}" python -m pip install --root-user-action=ignore --upgrade pip wheel
+  # Install ComfyUI-Manager requirements
+  if ! isStepDone "COMFYUI_MANAGER_REQUIREMENTS"; then
+    log "installing comfyui-manager requirements"
+    condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
+    markStepDone "COMFYUI_MANAGER_REQUIREMENTS"
+  else
+    log "comfyui-manager requirements already installed"
+  fi
 
-  log "installing comfyui requirements"
-  condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/requirements.txt"
-  condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
+  # Verify CUDA (always run as quick verification)
+  if ! isStepDone "COMFYUI_CUDA_CHECK"; then
+    log "verifying CUDA availability"
+    condaEnvCmd "$ENV_NAME" python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
+    markStepDone "COMFYUI_CUDA_CHECK"
+  else
+    log "cuda already verified"
+  fi
 
-  # Verify CUDA
-  condaEnvCmd "$ENV_NAME" python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
-
+  # Generate and upload comfyStart.sh (always regenerate for potential updates)
   log "generating comfyStart.sh helper"
 
   START_SCRIPT="comfyStart.sh"
