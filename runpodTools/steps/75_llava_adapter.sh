@@ -170,7 +170,8 @@ main() {
     log "llava adapter dependencies already installed"
   fi
 
-  # Generate and upload adapter scripts (always regenerate for potential updates)
+  # Generate and upload adapter scripts
+  # Always regenerate to capture potential configuration changes (ports, URLs, etc.)
   local localAdapter="./llavaAdapter.py"
   local localStart="./adapterStart.sh"
   local remoteAdapter="${WORKSPACE_ROOT}/llavaAdapter.py"

@@ -232,7 +232,9 @@ main() {
   # Verify installation
   if ! isStepDone "LLAVA_VERIFY"; then
     log "verifying llava import"
-    condaEnvCmd "$LLAVA_ENV_NAME" python -c 'import llava; print(llava.__file__)' || log "llava verification failed (continuing anyway)"
+    if ! condaEnvCmd "$LLAVA_ENV_NAME" python -c 'import llava; print(llava.__file__)'; then
+      warn "llava verification failed (continuing anyway)"
+    fi
     markStepDone "LLAVA_VERIFY"
   else
     log "llava already verified"
