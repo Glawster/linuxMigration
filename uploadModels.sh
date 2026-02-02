@@ -255,11 +255,11 @@ rsyncOne "$LOCAL_LORA" "$REMOTE_LORA"
 rsyncOne "$LOCAL_YOLO" "$REMOTE_BBOX"
 
 # upload a test png file
+echo
 echo "=== Uploading Test Image ==="
 TEST_IMAGE_SRC="/home/andy/Source/ComfyUI/input/clothed-194.png"
 if [[ -f "$TEST_IMAGE_SRC" ]]; then
-  REMOTE_TEST_IMAGE="/workspace"
-  rsyncOne "$TEST_IMAGE_SRC" "$REMOTE_TEST_IMAGE"
+  rsyncOne "$TEST_IMAGE_SRC" "/workspace"
 else
   echo "WARNING: test image not found locally: $TEST_IMAGE_SRC"
 fi
@@ -269,6 +269,16 @@ if [[ -d "$WORKFLOWS_DIR" && "${WORKFLOW_COUNT}" -gt 0 ]]; then
   echo
   echo "=== Uploading Workflows ==="
   rsync -avP --partial --inplace --no-perms --no-owner --no-group     -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}"     "${WORKFLOWS_DIR}/" "$TARGET:${REMOTE_WORKFLOWS}/"
+fi
+
+# upload a test png file
+echo
+echo "=== Uploading Test Script ==="
+TEST_SCRIPT="/home/andy/bin/runpodTools/testLlavaInstall.sh"
+if [[ -f "$TEST_SCRIPT" ]]; then
+  rsyncOne "$TEST_SCRIPT" "/workspace"
+else
+  echo "WARNING: test script not found locally: $TEST_SCRIPT"
 fi
 
 echo

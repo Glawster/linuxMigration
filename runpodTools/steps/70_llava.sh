@@ -103,10 +103,11 @@ requireCmd tmux
 [[ -x "\$CONDA_EXE" ]] || { echo "ERROR: conda not found/executable at \$CONDA_EXE" >&2; exit 1; }
 
 LLAVA_MODEL_PATH="\${LLAVA_MODEL_PATH:-liuhaotian/llava-v1.5-7b}"
-LLAVA_GRADIO_URL="\${LLAVA_GRADIO_URL:-http://127.0.0.1:7003}"
 LLAVA_API_NAME="\${LLAVA_API_NAME:-/add_text_1}"
-LAVA_GRADIO_URL="\${LAVA_GRADIO_URL:-\$LLAVA_GRADIO_URL}"
 LAVA_API_NAME="\${LAVA_API_NAME:-\$LLAVA_API_NAME}"
+
+WORKER_ADDR="http://127.0.0.1:\${WORKER_PORT}"
+WORKER_ADDR_ARG="--worker-address \${WORKER_ADDR}"
 
 if [[ -z "\${LLAVA_MODEL_PATH:-}" ]]; then
   echo "ERROR: LLAVA_MODEL_PATH is not set (required to start model worker)" >&2
@@ -142,7 +143,9 @@ else
   tmux new-session -d -s "\$SESSION_WORKER" \\
     "bash -lc 'set -euo pipefail; cd \"\$LLAVA_DIR\"; \"\$CONDA_EXE\" run -n \"\$ENV_NAME\" --no-capture-output \\
       python -m llava.serve.model_worker --host 0.0.0.0 --port \"\$WORKER_PORT\" \\
-        --controller http://127.0.0.1:\$CONTROLLER_PORT --model-path \"\$LLAVA_MODEL_PATH\" 2>&1 | tee -a \"\$LOG_WORKER\"'"
+        --controller http://127.0.0.1:\$CONTROLLER_PORT \\
+        --model-path \"\$LLAVA_MODEL_PATH\" \\
+        \$WORKER_ADDR_ARG 2>&1 | tee -a \"\$LOG_WORKER\"'"
   echo "worker started..."
 fi
 
@@ -240,12 +243,13 @@ main() {
     log "llava already verified"
   fi
 
-  log "installing protobuf and sentencepiece"
-  condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U protobuf
-  condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U sentencepiece
-
-  log "installing gradio"
-  condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U gradio gradio_client
+  if ! isStepDone "LLAVA_PROTO_SENTENCEPIECE"; then
+    log "installing protobuf and sentencepiece"
+    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U protobuf sentencepiece
+    markStepDone "LLAVA_PROTO_SENTENCEPIECE"
+  else
+    log "protobuf and sentencepiece already installed"
+  fi
 
   local startScript="llavaStart.sh"
   log "writing llava start helper (local): $startScript"

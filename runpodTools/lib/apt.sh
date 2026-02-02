@@ -11,8 +11,6 @@ ensureAptPackages() {
     return 0
   fi
   
-  logTask "ensuring base tools via apt"
-  
   # Set environment for non-interactive apt
   export DEBIAN_FRONTEND=noninteractive
   export TZ=Etc/UTC

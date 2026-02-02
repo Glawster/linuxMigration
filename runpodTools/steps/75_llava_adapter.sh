@@ -8,6 +8,8 @@ set -euo pipefail
 # - start uvicorn in tmux on pod
 # ------------------------------------------------------------
 
+stepName="75_llava_adapter"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$(dirname "$SCRIPT_DIR")/lib"
 
@@ -33,51 +35,157 @@ generateAdapter() {
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import base64
+import json
 import os
 import tempfile
 from typing import Optional
 
+import requests
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
-from gradio_client import Client, handle_file
 
-GRADIO_INTERNAL = os.environ.get("LLAVA_GRADIO_URL") or os.environ.get("LAVA_GRADIO_URL") or "http://127.0.0.1:7003"
-API_NAME = os.environ.get("LLAVA_API_NAME") or os.environ.get("LAVA_API_NAME") or "/add_text_1"
-DEFAULT_PREPROCESS = os.environ.get("LLAVA_PREPROCESS", "Default")
+# ------------------------------------------------------------
+# LLaVA controller/worker API (no Gradio)
+# ------------------------------------------------------------
+CONTROLLER_INTERNAL = os.environ.get("LLAVA_CONTROLLER_URL", "http://127.0.0.1:7001").rstrip("/")
+MODEL_NAME = os.environ.get("LLAVA_MODEL_NAME", "llava-v1.5-7b")
+
+# Optional override: if controller returns nonsense, force worker URL
+WORKER_FALLBACK = os.environ.get("LLAVA_WORKER_URL", "").strip().rstrip("/")
+
+DEFAULT_QUESTION = os.environ.get("LLAVA_QUESTION", "Describe the image in detail.")
+DEFAULT_TEMPERATURE = float(os.environ.get("LLAVA_TEMPERATURE", "0.2"))
+DEFAULT_TOP_P = float(os.environ.get("LLAVA_TOP_P", "0.7"))
+DEFAULT_MAX_TOKENS = int(os.environ.get("LLAVA_MAX_TOKENS", "512"))
+
+# LLaVA typically expects an <image> token in the prompt for multimodal requests
+IMAGE_TOKEN = os.environ.get("LLAVA_IMAGE_TOKEN", "<image>")
 
 app = FastAPI()
 
-def _call_gradio(question: str, image_path: str, preprocess: str, api_name: str):
-    c = Client(GRADIO_INTERNAL)
+def _get_worker_address(model_name: str) -> str:
+    r = requests.post(
+        f"{CONTROLLER_INTERNAL}/get_worker_address",
+        json={"model": model_name},
+        timeout=10,
+    )
+    r.raise_for_status()
+    data = r.json()
+    addr = (data.get("address") or data.get("worker_address") or "").strip()
 
-    # allow "add_text_1" or "/add_text_1" etc.
-    if api_name and not api_name.startswith("/"):
-        api_name = "/" + api_name 
-    
-    # IMPORTANT Image component expects ImageData, not a raw string
-    img = handle_file(image_path)
+    # normalize localhost -> 127.0.0.1 (critical for pods)
+    addr = addr.replace("http://localhost", "http://127.0.0.1").rstrip("/")
 
-    # signature for /add_text_1: (text, image_filepath, preprocess_mode)
-    return c.predict(question, img, preprocess, api_name=api_name)
+    # fallback if controller returned empty or unusable
+    if not addr and WORKER_FALLBACK:
+        return WORKER_FALLBACK
+
+    if not addr:
+        raise RuntimeError(f"no worker address in response: {data}")
+
+    return addr
+
+def _call_worker(model: str, question: str, image_path: str) -> str:
+
+    WORKER_URL = _get_worker_address(model)
+
+    with open(image_path, "rb") as f:
+        image_b64 = base64.b64encode(f.read()).decode()
+
+    payload = {
+        "model": model,
+        "prompt": f"{IMAGE_TOKEN}\n{question}",
+        "images": [image_b64],
+        "temperature": DEFAULT_TEMPERATURE,
+        "top_p": DEFAULT_TOP_P,
+        "max_new_tokens": DEFAULT_MAX_TOKENS,
+        "stop": "###",
+        "stop_str": "###",
+        "stop_sequences": ["###"],
+    }
+
+    resp = requests.post(
+        f"{WORKER_URL}/worker_generate_stream",
+        json=payload,
+        stream=True,
+        timeout=300,
+    )
+
+    resp.raise_for_status()
+
+    last_obj = None
+    final_text = ""
+
+    for raw in resp.iter_lines(decode_unicode=True):
+        if not raw:
+            continue
+
+        line = raw.strip()
+
+        # Some servers send SSE lines: "data: {...}"
+        if line.startswith("data:"):
+            line = line[len("data:"):].strip()
+
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            # Keep going, but if we end with nothing this will help debugging
+            continue
+
+        last_obj = obj
+
+        t = obj.get("text")
+        if isinstance(t, str) and t:
+            # LLaVA streams cumulative text; keep the latest
+            final_text = t
+
+        ec = obj.get("error_code", 0)
+        if ec not in (0, None):
+            # stop early on worker-reported error
+            break
+
+    if not final_text:
+        # last resort: capture a snippet of response for debugging
+        try:
+            snippet = resp.text[:500]
+        except Exception:
+            snippet = "<unable to read resp.text>"
+        raise RuntimeError(f"worker returned no text (last_obj={last_obj}, snippet={snippet!r})")
+
+    return final_text.strip()
+
+
 
 @app.post("/")
 @app.post("/analyze")
 async def analyze(
     file: UploadFile = File(...),
-    question: str = Form("Describe the image in detail."),
-    preprocess: str = Form(DEFAULT_PREPROCESS),
-    api_name: str = Form(API_NAME),
+    question: str = Form(DEFAULT_QUESTION),
 ):
+    tmp_path: Optional[str] = None
     try:
         suffix = os.path.splitext(file.filename or "image.png")[1] or ".png"
+        data = await file.read()
+
+        # Defensive: ensure bytes
+        if isinstance(data, str):
+            data = data.encode("utf-8", errors="ignore")
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(await file.read())
+            tmp.write(data)
             tmp_path = tmp.name
 
-        result = _call_gradio(question, tmp_path, preprocess, api_name)
-        return JSONResponse({"ok": True, "result": result})
+        result = _call_worker(MODEL_NAME, question, tmp_path)
+        return {"ok": True, "result": result}
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
 PY
 
   chmod +x "$outFile"
@@ -102,14 +210,18 @@ ADAPTER_PORT="${LLAVA_ADAPTER_PORT:-9188}"
 SESSION="${LLAVA_ADAPTER_SESSION:-adapter}"
 
 # defaults (can be overridden by environment)
-export LLAVA_MODEL_PATH="${LLAVA_MODEL_PATH:-liuhaotian/llava-v1.5-7b}"
-export LLAVA_GRADIO_URL="${LLAVA_GRADIO_URL:-http://127.0.0.1:7003}"
-export LLAVA_API_NAME="${LLAVA_API_NAME:-/add_text_1}"
-export LLAVA_PREPROCESS="${LLAVA_PREPROCESS:-Default}"
+# defaults (can be overridden by environment)
+export LLAVA_CONTROLLER_URL="${LLAVA_CONTROLLER_URL:-http://127.0.0.1:7001}"
+export LLAVA_MODEL_NAME="${LLAVA_MODEL_NAME:-llava-v1.5-7b}"
 
-# compatibility with older variable names requested by user
-export LAVA_GRADIO_URL="${LAVA_GRADIO_URL:-$LLAVA_GRADIO_URL}"
-export LAVA_API_NAME="${LAVA_API_NAME:-$LLAVA_API_NAME}"
+# Optional: override worker URL if controller returns bogus values
+# (leave empty to use controller)
+export LLAVA_WORKER_URL="${LLAVA_WORKER_URL:-}"
+
+export LLAVA_QUESTION="${LLAVA_QUESTION:-Describe the image in detail.}"
+export LLAVA_TEMPERATURE="${LLAVA_TEMPERATURE:-0.2}"
+export LLAVA_TOP_P="${LLAVA_TOP_P:-0.7}"
+export LLAVA_MAX_TOKENS="${LLAVA_MAX_TOKENS:-512}"
 
 if ! command -v ss >/dev/null 2>&1; then
   echo "ERROR: ss not available; cannot check port usage" >&2
@@ -163,16 +275,14 @@ main() {
   fi
 
   LLAVA_ENV_NAME="${LLAVA_ENV_NAME:-llava}"
-  LLAVA_ADAPTER_PORT="${LLAVA_ADAPTER_PORT:-9188}"
-  LLAVA_GRADIO_URL="${LLAVA_GRADIO_URL:-http://127.0.0.1:7003}"
-  LLAVA_API_NAME="${LLAVA_API_NAME:-/add_text_1}"
-  LLAVA_PREPROCESS="${LLAVA_PREPROCESS:-Default}"
-  SESSION="${LLAVA_ADAPTER_SESSION:-llava_adapter}"
+  LLAVA_ADAPTER_PORT="${LLAVA_ADAPTER_PORT:-9188}"  
+  LLAVA_CONTROLLER_URL="${LLAVA_CONTROLLER_URL:-http://127.0.0.1:7001}"
+  LLAVA_MODEL_NAME="${LLAVA_MODEL_NAME:-llava-v1.5-7b}"
+  SESSION="${LLAVA_ADAPTER_SESSION:-adapter}"
 
-  # Install adapter dependencies
+  log "ensure adapter deps (remote conda env: ${LLAVA_ENV_NAME})"
   if ! isStepDone "LLAVA_ADAPTER_DEPS"; then
-    log "ensure adapter deps (remote conda env: ${LLAVA_ENV_NAME})"
-    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U fastapi uvicorn gradio_client python-multipart
+    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U requests fastapi uvicorn python-multipart
     markStepDone "LLAVA_ADAPTER_DEPS"
   else
     log "llava adapter dependencies already installed"

@@ -7,17 +7,21 @@ CONDA_EXE="${CONDA_EXE:-${CONDA_DIR}/bin/conda}"
 ENV_NAME="${LLAVA_ENV_NAME:-llava}"
 
 ADAPTER_PORT="${LLAVA_ADAPTER_PORT:-9188}"
-SESSION="${LLAVA_ADAPTER_SESSION:-llava_adapter}"
+SESSION="${LLAVA_ADAPTER_SESSION:-adapter}"
 
 # defaults (can be overridden by environment)
-export LLAVA_MODEL_PATH="${LLAVA_MODEL_PATH:-liuhaotian/llava-v1.5-7b}"
-export LLAVA_GRADIO_URL="${LLAVA_GRADIO_URL:-http://127.0.0.1:7003}"
-export LLAVA_API_NAME="${LLAVA_API_NAME:-/add_text_1}"
-export LLAVA_PREPROCESS="${LLAVA_PREPROCESS:-Default}"
+# defaults (can be overridden by environment)
+export LLAVA_CONTROLLER_URL="${LLAVA_CONTROLLER_URL:-http://127.0.0.1:7001}"
+export LLAVA_MODEL_NAME="${LLAVA_MODEL_NAME:-llava-v1.5-7b}"
 
-# compatibility with older variable names requested by user
-export LAVA_GRADIO_URL="${LAVA_GRADIO_URL:-$LLAVA_GRADIO_URL}"
-export LAVA_API_NAME="${LAVA_API_NAME:-$LLAVA_API_NAME}"
+# Optional: override worker URL if controller returns bogus values
+# (leave empty to use controller)
+export LLAVA_WORKER_URL="${LLAVA_WORKER_URL:-}"
+
+export LLAVA_QUESTION="${LLAVA_QUESTION:-Describe the image in detail.}"
+export LLAVA_TEMPERATURE="${LLAVA_TEMPERATURE:-0.2}"
+export LLAVA_TOP_P="${LLAVA_TOP_P:-0.7}"
+export LLAVA_MAX_TOKENS="${LLAVA_MAX_TOKENS:-512}"
 
 if ! command -v ss >/dev/null 2>&1; then
   echo "ERROR: ss not available; cannot check port usage" >&2
