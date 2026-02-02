@@ -61,7 +61,7 @@ main() {
   fi
 
   markStepDone "KOHYA"
-  log "kohya done\n"
+  log "done"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

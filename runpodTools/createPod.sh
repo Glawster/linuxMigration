@@ -11,6 +11,7 @@
 #
 # Options:
 #   --kohya          enable kohya setup
+#   --llava          enable llava setup
 #   --no-comfyui     disable comfyui setup
 #   --dry-run        dry run mode (show what would be done)
 #   --force          force rerun of all steps
@@ -23,6 +24,7 @@
 # Example:
 #   ./createPod.sh ssh root@213.192.2.88 -p 40023 -i ~/.ssh/id_ed25519
 #   ./createPod.sh --kohya ssh root@...
+#   ./createPod.sh --llava ssh root@...
 #   ./createPod.sh --only 40_comfyui ssh root@...
 
 set -euo pipefail

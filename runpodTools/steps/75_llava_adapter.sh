@@ -39,7 +39,7 @@ from typing import Optional
 
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
-from gradio_client import Client
+from gradio_client import Client, handle_file
 
 GRADIO_INTERNAL = os.environ.get("LLAVA_GRADIO_URL") or os.environ.get("LAVA_GRADIO_URL") or "http://127.0.0.1:7003"
 API_NAME = os.environ.get("LLAVA_API_NAME") or os.environ.get("LAVA_API_NAME") or "/add_text_1"
@@ -49,8 +49,16 @@ app = FastAPI()
 
 def _call_gradio(question: str, image_path: str, preprocess: str, api_name: str):
     c = Client(GRADIO_INTERNAL)
+
+    # allow "add_text_1" or "/add_text_1" etc.
+    if api_name and not api_name.startswith("/"):
+        api_name = "/" + api_name 
+    
+    # IMPORTANT Image component expects ImageData, not a raw string
+    img = handle_file(image_path)
+
     # signature for /add_text_1: (text, image_filepath, preprocess_mode)
-    return c.predict(question, image_path, preprocess, api_name=api_name)
+    return c.predict(question, img, preprocess, api_name=api_name)
 
 @app.post("/")
 @app.post("/analyze")
@@ -91,7 +99,7 @@ CONDA_EXE="${CONDA_EXE:-${CONDA_DIR}/bin/conda}"
 ENV_NAME="${LLAVA_ENV_NAME:-llava}"
 
 ADAPTER_PORT="${LLAVA_ADAPTER_PORT:-9188}"
-SESSION="${LLAVA_ADAPTER_SESSION:-llava_adapter}"
+SESSION="${LLAVA_ADAPTER_SESSION:-adapter}"
 
 # defaults (can be overridden by environment)
 export LLAVA_MODEL_PATH="${LLAVA_MODEL_PATH:-liuhaotian/llava-v1.5-7b}"
@@ -164,7 +172,7 @@ main() {
   # Install adapter dependencies
   if ! isStepDone "LLAVA_ADAPTER_DEPS"; then
     log "ensure adapter deps (remote conda env: ${LLAVA_ENV_NAME})"
-    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install -U fastapi uvicorn gradio_client python-multipart
+    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U fastapi uvicorn gradio_client python-multipart
     markStepDone "LLAVA_ADAPTER_DEPS"
   else
     log "llava adapter dependencies already installed"
@@ -172,60 +180,16 @@ main() {
 
   # Generate and upload adapter scripts
   # Always regenerate to capture potential configuration changes (ports, URLs, etc.)
-  local localAdapter="./llavaAdapter.py"
-  local localStart="./adapterStart.sh"
-  local remoteAdapter="${WORKSPACE_ROOT}/llavaAdapter.py"
-  local remoteStart="${WORKSPACE_ROOT}/adapterStart.sh"
+  local llavaAdapter="./llavaAdapter.py"
+  local adapterStart="./adapterStart.sh"
 
-  log "create adapter script (local): ${localAdapter}"
-  generateAdapter "$localAdapter"
-  generateScript "$localStart"
+  log "create adapter script (local): ${llavaAdapter}"
+  generateAdapter "$llavaAdapter"
+  generateScript "$adapterStart"
 
-  log "copy adapter to remote workspace: ${remoteAdapter}"
-  runHostCmd scp "${SCP_OPTS[@]}" "$localAdapter" "${SSH_TARGET}:${remoteAdapter}"
-  runHostCmd scp "${SCP_OPTS[@]}" "$localStart" "${SSH_TARGET}:${remoteStart}"
-  runSh "chmod +x '${remoteAdapter}' '${remoteStart}'"
-
-  # Start adapter (only if not already done)
-  if ! isStepDone "LLAVA_ADAPTER_START"; then
-    log "start adapter in tmux (remote): session=${SESSION} port=${LLAVA_ADAPTER_PORT} (or run /workspace/adapterStart.sh later)"
-    runSh "$(cat <<EOF
-set -euo pipefail
-
-LOG_DIR="/workspace/logs"
-mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/llava.adapter.${LLAVA_ADAPTER_PORT}.log"
-
-if command -v fuser >/dev/null 2>&1; then
-  fuser -k ${LLAVA_ADAPTER_PORT}/tcp >/dev/null 2>&1 || true
-fi
-
-if ! command -v tmux >/dev/null 2>&1; then
-  echo "ERROR: tmux not installed" >&2
-  exit 1
-fi
-
-if tmux has-session -t "${SESSION}" 2>/dev/null; then
-  tmux kill-session -t "${SESSION}"
-fi
-
-tmux new-session -d -s "${SESSION}" \\
-  "bash -lc 'set -euo pipefail; \\
-    export LLAVA_GRADIO_URL="${LLAVA_GRADIO_URL}" LLAVA_API_NAME="${LLAVA_API_NAME}" LLAVA_PREPROCESS="${LLAVA_PREPROCESS}" LAVA_GRADIO_URL="${LAVA_GRADIO_URL:-$LLAVA_GRADIO_URL}" LAVA_API_NAME="${LAVA_API_NAME:-$LLAVA_API_NAME}"; \\
-    cd \"${WORKSPACE_ROOT}\"; \\
-    \"${WORKSPACE_ROOT}/miniconda3/bin/conda\" run -n \"${LLAVA_ENV_NAME}\" --no-capture-output \\
-      python -m uvicorn llavaAdapter:app --host 0.0.0.0 --port ${LLAVA_ADAPTER_PORT} 2>&1 | tee -a "$LOG_FILE"'"
-
-echo "adapter started..."
-EOF
-)"
-    markStepDone "LLAVA_ADAPTER_START"
-  else
-    log "llava adapter already started"
-  fi
-
-  log "probe adapter on pod"
-  runSh "curl -s -o /dev/null -w 'adapter http: %{http_code}\n' http://127.0.0.1:${LLAVA_ADAPTER_PORT}/analyze || true"
+  log "copy adapter to remote workspace: ${llavaAdapter}, ${adapterStart}"
+  runHostCmd scp "${SCP_OPTS[@]}" "$llavaAdapter" "${SSH_TARGET}:${WORKSPACE_ROOT}/${llavaAdapter}"
+  runHostCmd scp "${SCP_OPTS[@]}" "$adapterStart" "${SSH_TARGET}:${WORKSPACE_ROOT}/${adapterStart}"
 
   markStepDone "LLAVA_ADAPTER"
   log "done..."

@@ -100,7 +100,7 @@ main() {
   log "comfyStart.sh installed to /workspace"
 
   markStepDone "COMFYUI"
-  log "comfyui done\n"
+  log "done"
 }
 
 generateScript() {
@@ -117,13 +117,6 @@ CONDA_EXE="\$CONDA_DIR/bin/conda"
 ENV_NAME="${ENV_NAME:-runpod}"
 PORT="${COMFYUI_PORT:-8188}"
 SESSION="comfyui"
-
-# optional defaults used by llava/adapter (exported for convenience)
-export LLAVA_MODEL_PATH="${LLAVA_MODEL_PATH:-liuhaotian/llava-v1.5-7b}"
-export LLAVA_GRADIO_URL="${LLAVA_GRADIO_URL:-http://127.0.0.1:7003}"
-export LLAVA_API_NAME="${LLAVA_API_NAME:-/add_text_1}"
-export LAVA_GRADIO_URL="${LAVA_GRADIO_URL:-$LLAVA_GRADIO_URL}"
-export LAVA_API_NAME="${LAVA_API_NAME:-$LLAVA_API_NAME}"
 
 if ! command -v ss >/dev/null 2>&1; then
   echo "ERROR: ss not available; cannot check port usage" >&2

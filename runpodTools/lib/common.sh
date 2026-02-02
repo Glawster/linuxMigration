@@ -23,7 +23,7 @@ log() { # used to giva an update to a task being actioned
 }
 
 logTask() { # used to say "am starting this task"
-  echo -e "$*...\n"
+  echo -e "\n$*...\n"
 }
 warn() {
   echo -e "WARNING: $*\n" >&2
@@ -49,10 +49,10 @@ ensureDir() {
 ensureRemoteConfigured() {
   if [[ "${REQUIRE_REMOTE}" == "1" ]]; then
     if [[ -z "${SSH_TARGET:-}" ]]; then
-      die "Remote execution required but SSH_TARGET is not set."
+      die "remote execution required but SSH_TARGET is not set."
     fi
     if ! declare -F runCmd >/dev/null 2>&1; then
-      die "Remote execution required but runCmd() is not available (did you source lib/run.sh?)."
+      die "remote execution required but runCmd() is not available (did you source lib/run.sh?)."
     fi
   fi
 }

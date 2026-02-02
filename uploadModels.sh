@@ -1,25 +1,4 @@
 #!/usr/bin/env bash
-# steps/60_upload_models.sh
-# Generate uploadModels.sh script for uploading models and workflows to RunPod (LOCAL step)
-#
-# Always regenerates uploadModels.sh (low overhead)
-
-set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RUNPOD_TOOLS_DIR="$(dirname "$SCRIPT_DIR")"
-LIB_DIR="${RUNPOD_TOOLS_DIR}/lib"
-
-# shellcheck disable=SC1091
-source "${LIB_DIR}/common.sh"
-
-main() {
-
-  local outputFile="uploadModels.sh"
-
-  # Always regenerate
-  cat > "$outputFile" <<'UPLOAD_SCRIPT'
-#!/usr/bin/env bash
 # uploadModels.sh (local)
 #
 # Upload minimal models and workflow files required by ComfyUI to RunPod
@@ -279,7 +258,7 @@ rsyncOne "$LOCAL_YOLO" "$REMOTE_BBOX"
 echo "=== Uploading Test Image ==="
 TEST_IMAGE_SRC="/home/andy/Source/ComfyUI/input/clothed-194.png"
 if [[ -f "$TEST_IMAGE_SRC" ]]; then
-  REMOTE_TEST_IMAGE="/workspace/clothed-194.png"
+  REMOTE_TEST_IMAGE="/workspace"
   rsyncOne "$TEST_IMAGE_SRC" "$REMOTE_TEST_IMAGE"
 else
   echo "WARNING: test image not found locally: $TEST_IMAGE_SRC"
@@ -294,13 +273,3 @@ fi
 
 echo
 echo "done"
-UPLOAD_SCRIPT
-
-  chmod +x "$outputFile" || true
-  log "uploadModels.sh created at: $outputFile"
-  log "done"
-}
-
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
-  main "$@"
-fi

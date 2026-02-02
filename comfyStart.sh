@@ -30,7 +30,7 @@ if [[ ! -x "$CONDA_EXE" ]]; then
   exit 1
 fi
 
-LOG_DIR="$WORKSPACE/.runpod/logs"
+LOG_DIR="$WORKSPACE/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/comfyui.${PORT}.log"
 

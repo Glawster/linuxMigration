@@ -93,7 +93,7 @@ main() {
   fi  
 
   markStepDone "CONDA"
-  log "Conda done\n"
+  log "done"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

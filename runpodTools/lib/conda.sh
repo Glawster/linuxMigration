@@ -49,7 +49,7 @@ _condaExec() {
 # IMPORTANT: do NOT run conda update here (ToS may not be accepted yet)
 # ------------------------------------------------------------
 ensureConda() {
-  logTask "ensuring conda installation at ${CONDA_DIR}"
+  log "ensuring conda installation at ${CONDA_DIR}"
 
   local condaExe=""
   condaExe="$(resolveCondaExe "$CONDA_DIR" 2>/dev/null || true)"
@@ -193,7 +193,7 @@ condaEnvSh() {
     return 1
   fi
 
-  echo "Running in conda env '${env}': ${script}"
+  echo "running in conda env '${env}': ${script}"
   runCmd "${condaExe}" run -n "${env}" --no-capture-output bash -lc "${script}"
 }
 
@@ -214,7 +214,7 @@ condaEnvCmd() {
     return 1
   fi
 
-  log "Running in conda env '${envName}': $*"
+  log "running in conda env '${envName}': $*"
 
   # argv-safe: no shell, no temp scripts, no quoting games
   runCmd "${condaExe}" run -n "${envName}" --no-capture-output "$@"

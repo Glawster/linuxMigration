@@ -73,9 +73,9 @@ CONTROLLER_PORT="\${CONTROLLER_PORT:-7001}"
 WORKER_PORT="\${WORKER_PORT:-7002}"
 WEB_PORT="\${WEB_PORT:-7003}"
 
-SESSION_CONTROLLER="\${SESSION_CONTROLLER:-llava_controller}"
-SESSION_WORKER="\${SESSION_WORKER:-llava_worker}"
-SESSION_WEB="\${SESSION_WEB:-llava_web}"
+SESSION_CONTROLLER="\${SESSION_CONTROLLER:-controller}"
+SESSION_WORKER="\${SESSION_WORKER:-worker}"
+SESSION_WEB="\${SESSION_WEB:-web}"
 
 requireCmd() {
   local c="\$1"
@@ -102,17 +102,17 @@ requireCmd tmux
 [[ -d "\$LLAVA_DIR" ]] || { echo "ERROR: llava directory not found: \$LLAVA_DIR" >&2; exit 1; }
 [[ -x "\$CONDA_EXE" ]] || { echo "ERROR: conda not found/executable at \$CONDA_EXE" >&2; exit 1; }
 
-LLAVA_MODEL_PATH="${LLAVA_MODEL_PATH:-liuhaotian/llava-v1.5-7b}"
-LLAVA_GRADIO_URL="${LLAVA_GRADIO_URL:-http://127.0.0.1:7003}"
-LLAVA_API_NAME="${LLAVA_API_NAME:-/add_text_1}"
-LAVA_GRADIO_URL="${LAVA_GRADIO_URL:-$LLAVA_GRADIO_URL}"
-LAVA_API_NAME="${LAVA_API_NAME:-$LLAVA_API_NAME}"
+LLAVA_MODEL_PATH="\${LLAVA_MODEL_PATH:-liuhaotian/llava-v1.5-7b}"
+LLAVA_GRADIO_URL="\${LLAVA_GRADIO_URL:-http://127.0.0.1:7003}"
+LLAVA_API_NAME="\${LLAVA_API_NAME:-/add_text_1}"
+LAVA_GRADIO_URL="\${LAVA_GRADIO_URL:-\$LLAVA_GRADIO_URL}"
+LAVA_API_NAME="\${LAVA_API_NAME:-\$LLAVA_API_NAME}"
 
-if [[ -z "${LLAVA_MODEL_PATH:-}" ]]; then
+if [[ -z "\${LLAVA_MODEL_PATH:-}" ]]; then
   echo "ERROR: LLAVA_MODEL_PATH is not set (required to start model worker)" >&2
-  echo "Set it to a local path or HF repo id, e.g.:" >&2
-  echo "  export LLAVA_MODEL_PATH=/workspace/models/llava-1.5-7b" >&2
-  echo "  export LLAVA_MODEL_PATH=liuhaotian/llava-v1.5-7b" >&2
+  echo "Set it to a local path or HF repo id, e.g.:"
+  echo "  export LLAVA_MODEL_PATH=/workspace/models/llava-1.5-7b"
+  echo "  export LLAVA_MODEL_PATH=liuhaotian/llava-v1.5-7b"
   exit 1
 fi
 
@@ -120,12 +120,11 @@ assertPortFree "\$CONTROLLER_PORT"
 assertPortFree "\$WORKER_PORT"
 assertPortFree "\$WEB_PORT"
 
-LOG_DIR="${LOG_DIR:-${WORKSPACE}/logs}"
-mkdir -p "$LOG_DIR"
-LOG_CONTROLLER="$LOG_DIR/llava.controller.${CONTROLLER_PORT}.log"
-LOG_WORKER="$LOG_DIR/llava.worker.${WORKER_PORT}.log"
-LOG_WEB="$LOG_DIR/llava.web.${WEB_PORT}.log"
-
+LOG_DIR="\${LOG_DIR:-\${WORKSPACE}/logs}"
+mkdir -p "\$LOG_DIR"
+LOG_CONTROLLER="\$LOG_DIR/llava.controller.\${CONTROLLER_PORT}.log"
+LOG_WORKER="\$LOG_DIR/llava.worker.\${WORKER_PORT}.log"
+LOG_WEB="\$LOG_DIR/llava.web.\${WEB_PORT}.log"
 # --- controller ---
 if tmux has-session -t "\$SESSION_CONTROLLER" 2>/dev/null; then
   echo "controller already running (tmux session: \$SESSION_CONTROLLER)"
@@ -154,6 +153,7 @@ else
   tmux new-session -d -s "\$SESSION_WEB" \\
     "bash -lc 'set -euo pipefail; cd \"\$LLAVA_DIR\"; \"\$CONDA_EXE\" run -n \"\$ENV_NAME\" --no-capture-output \\
       python -m llava.serve.gradio_web_server --host 0.0.0.0 --port \"\$WEB_PORT\" \\
+        --model-list-mode reload \\
         --controller http://127.0.0.1:\$CONTROLLER_PORT 2>&1 | tee -a \"\$LOG_WEB\"'"
   echo "web started..."
 fi
@@ -214,7 +214,7 @@ main() {
   # Upgrade pip/wheel/setuptools
   if ! isStepDone "LLAVA_PIP_UPGRADE"; then
     log "upgrading pip, wheel, and setuptools"
-    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install -U pip wheel setuptools
+    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U pip wheel setuptools
     markStepDone "LLAVA_PIP_UPGRADE"
   else
     log "pip, wheel, and setuptools already upgraded"
@@ -240,8 +240,14 @@ main() {
     log "llava already verified"
   fi
 
-  # Generate and upload start script (always regenerate for potential updates)
-  local startScript="./llavaStart.sh"
+  log "installing protobuf and sentencepiece"
+  condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U protobuf
+  condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U sentencepiece
+
+  log "installing gradio"
+  condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U gradio gradio_client
+
+  local startScript="llavaStart.sh"
   log "writing llava start helper (local): $startScript"
   generateScript "$startScript"
 

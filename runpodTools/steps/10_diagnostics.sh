@@ -29,7 +29,7 @@ main() {
   
   markStepDone "DIAGNOSTICS"
   markStepDone "GPU_CHECK"
-  log "diagnostics done\n"
+  log "done"
 }
 
 # Run if executed directly
