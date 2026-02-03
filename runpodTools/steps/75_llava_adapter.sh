@@ -6,6 +6,7 @@ set -euo pipefail
 # - generate adapter LOCALLY in current dir
 # - scp to remote $WORKSPACE_ROOT
 # - start uvicorn in tmux on pod
+# - using conda env runpod
 # ------------------------------------------------------------
 
 stepName="75_llava_adapter"
@@ -257,12 +258,11 @@ set -euo pipefail
 WORKSPACE="${WORKSPACE:-/workspace}"
 CONDA_DIR="${CONDA_DIR:-${WORKSPACE}/miniconda3}"
 CONDA_EXE="${CONDA_EXE:-${CONDA_DIR}/bin/conda}"
-ENV_NAME="${LLAVA_ENV_NAME:-llava}"
+ENV_NAME="${ENV_NAME:-runpod}"
 
 ADAPTER_PORT="${LLAVA_ADAPTER_PORT:-9188}"
 SESSION="${LLAVA_ADAPTER_SESSION:-adapter}"
 
-# defaults (can be overridden by environment)
 # defaults (can be overridden by environment)
 export LLAVA_CONTROLLER_URL="${LLAVA_CONTROLLER_URL:-http://127.0.0.1:7001}"
 export LLAVA_MODEL_NAME="${LLAVA_MODEL_NAME:-llava-v1.5-7b}"
@@ -327,15 +327,15 @@ main() {
     return 0
   fi
 
-  LLAVA_ENV_NAME="${LLAVA_ENV_NAME:-llava}"
+  ENV_NAME="${ENV_NAME:-runpod}"
   LLAVA_ADAPTER_PORT="${LLAVA_ADAPTER_PORT:-9188}"  
   LLAVA_CONTROLLER_URL="${LLAVA_CONTROLLER_URL:-http://127.0.0.1:7001}"
   LLAVA_MODEL_NAME="${LLAVA_MODEL_NAME:-llava-v1.5-7b}"
   SESSION="${LLAVA_ADAPTER_SESSION:-adapter}"
 
-  log "ensure adapter deps (remote conda env: ${LLAVA_ENV_NAME})"
+  log "ensure adapter deps (remote conda env: ${ENV_NAME})"
   if ! isStepDone "LLAVA_ADAPTER_DEPS"; then
-    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U requests fastapi uvicorn python-multipart
+    condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -U requests fastapi uvicorn python-multipart
     markStepDone "LLAVA_ADAPTER_DEPS"
   else
     log "llava adapter dependencies already installed"

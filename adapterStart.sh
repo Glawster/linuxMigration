@@ -4,12 +4,11 @@ set -euo pipefail
 WORKSPACE="${WORKSPACE:-/workspace}"
 CONDA_DIR="${CONDA_DIR:-${WORKSPACE}/miniconda3}"
 CONDA_EXE="${CONDA_EXE:-${CONDA_DIR}/bin/conda}"
-ENV_NAME="${LLAVA_ENV_NAME:-llava}"
+ENV_NAME="${ENV_NAME:-runpod}"
 
 ADAPTER_PORT="${LLAVA_ADAPTER_PORT:-9188}"
 SESSION="${LLAVA_ADAPTER_SESSION:-adapter}"
 
-# defaults (can be overridden by environment)
 # defaults (can be overridden by environment)
 export LLAVA_CONTROLLER_URL="${LLAVA_CONTROLLER_URL:-http://127.0.0.1:7001}"
 export LLAVA_MODEL_NAME="${LLAVA_MODEL_NAME:-llava-v1.5-7b}"

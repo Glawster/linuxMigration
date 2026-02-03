@@ -54,7 +54,7 @@ generateScript() {
 
   # bake in what we want self-contained on the pod
   local bakedWorkspaceRoot="${WORKSPACE_ROOT:-/workspace}"
-  local bakedEnvName="${LLAVA_ENV_NAME:-llava}"
+  local bakedEnvName="${ENV_NAME:-runpod}"
 
   cat >"$outFile" <<EOF
 #!/usr/bin/env bash
@@ -182,10 +182,10 @@ main() {
   LLAVA_VERSION="${LLAVA_VERSION:-1.5}"
   LLAVA_REF="${LLAVA_REF:-v1.5}"
   LLAVA_DIR="${LLAVA_DIR:-${WORKSPACE_ROOT}/LLaVA}"
-  LLAVA_ENV_NAME="${LLAVA_ENV_NAME:-llava}"
+  ENV_NAME="${ENV_NAME:-runpod}"
 
   log "llava dir: $LLAVA_DIR"
-  log "llava env: $LLAVA_ENV_NAME"
+  log "llava env: $ENV_NAME"
   log "llava version: $LLAVA_VERSION"
   log "llava ref: $LLAVA_REF"
 
@@ -207,8 +207,8 @@ main() {
 
   # Ensure conda environment
   if ! isStepDone "LLAVA_ENV"; then
-    log "ensuring conda env: $LLAVA_ENV_NAME"
-    ensureCondaEnv "$LLAVA_ENV_NAME" "3.10"
+    log "ensuring conda env: $ENV_NAME"
+    ensureCondaEnv "$ENV_NAME" "3.10"
     markStepDone "LLAVA_ENV"
   else
     log "llava conda environment already created"
@@ -217,7 +217,7 @@ main() {
   # Upgrade pip/wheel/setuptools
   if ! isStepDone "LLAVA_PIP_UPGRADE"; then
     log "upgrading pip, wheel, and setuptools"
-    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U pip wheel setuptools
+    condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -U pip wheel setuptools
     markStepDone "LLAVA_PIP_UPGRADE"
   else
     log "pip, wheel, and setuptools already upgraded"
@@ -226,7 +226,7 @@ main() {
   # Install LLaVA
   if ! isStepDone "LLAVA_INSTALL"; then
     log "installing llava (editable)"
-    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -e "$LLAVA_DIR"
+    condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -e "$LLAVA_DIR"
     markStepDone "LLAVA_INSTALL"
   else
     log "llava already installed"
@@ -235,7 +235,7 @@ main() {
   # Verify installation
   if ! isStepDone "LLAVA_VERIFY"; then
     log "verifying llava import"
-    if ! condaEnvCmd "$LLAVA_ENV_NAME" python -c 'import llava; print(llava.__file__)'; then
+    if ! condaEnvCmd "$ENV_NAME" python -c 'import llava; print(llava.__file__)'; then
       warn "llava verification failed (continuing anyway)"
     fi
     markStepDone "LLAVA_VERIFY"
@@ -245,7 +245,7 @@ main() {
 
   if ! isStepDone "LLAVA_PROTO_SENTENCEPIECE"; then
     log "installing protobuf and sentencepiece"
-    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U protobuf sentencepiece
+    condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -U protobuf sentencepiece
     markStepDone "LLAVA_PROTO_SENTENCEPIECE"
   else
     log "protobuf and sentencepiece already installed"
