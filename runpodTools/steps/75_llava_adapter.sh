@@ -6,7 +6,7 @@ set -euo pipefail
 # - generate adapter LOCALLY in current dir
 # - scp to remote $WORKSPACE_ROOT
 # - start uvicorn in tmux on pod
-# - using conda env runpod
+# - using conda env llava
 # ------------------------------------------------------------
 
 stepName="75_llava_adapter"
@@ -135,7 +135,7 @@ def _call_worker(model_name: str, question: str, image_path: str) -> str:
         "top_p": top_p,
         "max_new_tokens": max_tokens,
         # safest: omit stop entirely for now
-        "stop": "\n",
+        "stop": "###",
     }
 
     r = requests.post(
@@ -258,7 +258,7 @@ set -euo pipefail
 WORKSPACE="${WORKSPACE:-/workspace}"
 CONDA_DIR="${CONDA_DIR:-${WORKSPACE}/miniconda3}"
 CONDA_EXE="${CONDA_EXE:-${CONDA_DIR}/bin/conda}"
-ENV_NAME="${ENV_NAME:-runpod}"
+ENV_NAME="${ENV_NAME:-llava}"
 
 ADAPTER_PORT="${LLAVA_ADAPTER_PORT:-9188}"
 SESSION="${LLAVA_ADAPTER_SESSION:-adapter}"
@@ -327,7 +327,7 @@ main() {
     return 0
   fi
 
-  ENV_NAME="${ENV_NAME:-runpod}"
+  ENV_NAME="${ENV_NAME:-llava}"
   LLAVA_ADAPTER_PORT="${LLAVA_ADAPTER_PORT:-9188}"  
   LLAVA_CONTROLLER_URL="${LLAVA_CONTROLLER_URL:-http://127.0.0.1:7001}"
   LLAVA_MODEL_NAME="${LLAVA_MODEL_NAME:-llava-v1.5-7b}"

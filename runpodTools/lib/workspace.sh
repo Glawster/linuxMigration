@@ -15,7 +15,7 @@ KOHYA_DIR="${KOHYA_DIR:-${WORKSPACE_ROOT}/kohya_ss}"
 WORKFLOWS_DIR="${WORKFLOWS_DIR:-${WORKSPACE_ROOT}/workflows}"
 
 # Default conda environment
-ENV_NAME="${ENV_NAME:-runpod}"
+ENV_NAME="${ENV_NAME:-comfyui}"
 
 # ============================================================
 # Remote state tracking

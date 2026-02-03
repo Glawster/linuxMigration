@@ -54,7 +54,7 @@ generateScript() {
 
   # bake in what we want self-contained on the pod
   local bakedWorkspaceRoot="${WORKSPACE_ROOT:-/workspace}"
-  local bakedEnvName="${ENV_NAME:-runpod}"
+  local bakedEnvName="${LLAVA_ENV_NAME:-llava}"
 
   cat >"$outFile" <<EOF
 #!/usr/bin/env bash
@@ -182,7 +182,7 @@ main() {
   LLAVA_VERSION="${LLAVA_VERSION:-1.5}"
   LLAVA_REF="${LLAVA_REF:-v1.5}"
   LLAVA_DIR="${LLAVA_DIR:-${WORKSPACE_ROOT}/LLaVA}"
-  ENV_NAME="${ENV_NAME:-runpod}"
+  LLAVA_ENV_NAME="${ENV_NAME:-llava}"
 
   log "llava dir: $LLAVA_DIR"
   log "llava env: $ENV_NAME"

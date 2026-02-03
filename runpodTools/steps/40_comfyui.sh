@@ -21,14 +21,15 @@ source "$LIB_DIR/workspace.sh"
 
 main() {
 
+  echo $FORCE
   # Check if already done and not forcing
-  if isStepDone "COMFYUI" && [[ "${FORCE:-0}" != "1" ]]; then
+  if isStepDone "COMFYUI" && [[ "${FORCE}" != "1" ]]; then
     log "comfyui already configured (use --force to rerun)"
     return 0
   fi
 
   # Ensure repos (remote-safe via ensureGitRepo)
-  if ! isStepDone "COMFYUI_REPO"; then
+  if ! isStepDone "COMFYUI_REPO" || [[ "${FORCE}" == "1" ]]; then
     log "ensuring comfyui git repository"
     ensureGitRepo "$COMFY_DIR" "https://github.com/comfyanonymous/ComfyUI.git" "ComfyUI"
     markStepDone "COMFYUI_REPO"
@@ -36,7 +37,7 @@ main() {
     log "comfyui repository already cloned"
   fi
 
-  if ! isStepDone "COMFYUI_MANAGER"; then
+  if ! isStepDone "COMFYUI_MANAGER" || [[ "${FORCE}" == "1" ]]; then
     log "ensuring comfyui-manager custom node"
     ensureGitRepo "$COMFY_DIR/custom_nodes/ComfyUI-Manager" "https://github.com/ltdrdata/ComfyUI-Manager.git" "ComfyUI-Manager"
     markStepDone "COMFYUI_MANAGER"
@@ -51,7 +52,7 @@ main() {
   # ComfyUI Impact Subpack installed by pip
 
   # Upgrade pip and wheel
-  if ! isStepDone "COMFYUI_PIP_UPGRADE"; then
+  if ! isStepDone "COMFYUI_PIP_UPGRADE" || [[ "${FORCE}" == "1" ]]; then
     log "upgrading pip and wheel"
     condaEnvCmd "${ENV_NAME}" python --version
     condaEnvCmd "${ENV_NAME}" python -m pip install --root-user-action=ignore --upgrade pip wheel
@@ -61,7 +62,7 @@ main() {
   fi
 
   # Install ComfyUI requirements
-  if ! isStepDone "COMFYUI_REQUIREMENTS"; then
+  if ! isStepDone "COMFYUI_REQUIREMENTS" || [[ "${FORCE}" == "1" ]]; then
     log "installing comfyui requirements"
     condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/requirements.txt"
     markStepDone "COMFYUI_REQUIREMENTS"
@@ -70,7 +71,7 @@ main() {
   fi
 
   # Install ComfyUI-Manager requirements
-  if ! isStepDone "COMFYUI_MANAGER_REQUIREMENTS"; then
+  if ! isStepDone "COMFYUI_MANAGER_REQUIREMENTS" || [[ "${FORCE}" == "1" ]]; then
     log "installing comfyui-manager requirements"
     condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
     markStepDone "COMFYUI_MANAGER_REQUIREMENTS"
@@ -79,7 +80,7 @@ main() {
   fi
 
   # Verify CUDA (informational check - installation continues regardless)
-  if ! isStepDone "COMFYUI_CUDA_CHECK"; then
+  if ! isStepDone "COMFYUI_CUDA_CHECK" || [[ "${FORCE}" == "1" ]]; then
     log "verifying CUDA availability"
     condaEnvCmd "$ENV_NAME" python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)" || log "CUDA check failed (continuing anyway)"
     markStepDone "COMFYUI_CUDA_CHECK"
@@ -114,7 +115,7 @@ WORKSPACE="${WORKSPACE_ROOT:-/workspace}"
 COMFY_DIR="\$WORKSPACE/ComfyUI"
 CONDA_DIR="\$WORKSPACE/miniconda3"
 CONDA_EXE="\$CONDA_DIR/bin/conda"
-ENV_NAME="${ENV_NAME:-runpod}"
+ENV_NAME="${ENV_NAME:-comfyui}"
 PORT="${COMFYUI_PORT:-8188}"
 SESSION="comfyui"
 

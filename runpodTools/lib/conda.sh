@@ -154,7 +154,7 @@ ensureCondaConfiguration() {
 # ensure env exists (remote-safe, idempotent)
 # ------------------------------------------------------------
 ensureCondaEnv() {
-  local env_name="${1:-runpod}"
+  local env_name="${1:-comfyui}"
   local python_version="${2:-3.10}"
 
   # Check if env exists (pipeline is ok because _condaExec uses bash -lc)
