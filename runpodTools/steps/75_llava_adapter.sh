@@ -359,15 +359,32 @@ main() {
     return 0
   fi
 
-  ENV_NAME="${ENV_NAME:-llava}"
+  JOYFUL="${JOYFUL:-0}"
+
+  # argument --joyful supplied to the bootstrap script enables joyful mode
+  if [[ "$JOYFUL" == "1" ]]; then
+    LLAVA_VERSION="${LLAVA_VERSION:-joycaption-alpha-two}"   # or beta-one, your choice
+    LLAVA_REF="${LLAVA_REF:-main}"                           # no specific tag needed
+    LLAVA_DIR="${LLAVA_DIR:-${WORKSPACE_ROOT}/LLaVA-JoyCaption}"  # different dir to avoid conflict
+    LLAVA_ENV_NAME="${LLAVA_ENV_NAME:-joycaption}"
+    LLAVA_MODEL_PATH="${LLAVA_MODEL_PATH:-fancyfeast/llama-joycaption-alpha-two-hf-llava}"
+    LLAVA_MODEL_NAME="${LLAVA_MODEL_NAME:-joycaption-alpha-two}"
+  else
+    LLAVA_VERSION="${LLAVA_VERSION:-1.5}"
+    LLAVA_REF="${LLAVA_REF:-v1.5}"
+    LLAVA_DIR="${LLAVA_DIR:-${WORKSPACE_ROOT}/LLaVA}"
+    LLAVA_ENV_NAME="${LLAVA_ENV_NAME:-llava}"
+    LLAVA_MODEL_PATH="${LLAVA_MODEL_PATH:-liuhaotian/llava-v1.5-7b}"
+    LLAVA_MODEL_NAME="${LLAVA_MODEL_NAME:-llava-v1.5-7b}"
+  fi
   LLAVA_ADAPTER_PORT="${LLAVA_ADAPTER_PORT:-9188}"  
   LLAVA_CONTROLLER_URL="${LLAVA_CONTROLLER_URL:-http://127.0.0.1:7001}"
-  LLAVA_MODEL_NAME="${LLAVA_MODEL_NAME:-llava-v1.5-7b}"
+
   SESSION="${LLAVA_ADAPTER_SESSION:-adapter}"
 
-  log "ensure adapter deps (remote conda env: ${ENV_NAME})"
+  log "ensure adapter deps (remote conda env: ${LLAVA_ENV_NAME})"
   if ! isStepDone "LLAVA_ADAPTER_DEPS"; then
-    condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -U requests fastapi uvicorn python-multipart
+    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U requests fastapi uvicorn python-multipart
     markStepDone "LLAVA_ADAPTER_DEPS"
   else
     log "llava adapter dependencies already installed"

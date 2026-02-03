@@ -22,6 +22,12 @@ source "$LIB_DIR/workspace.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/run.sh"
 
+source "$LIB_DIR/llava.sh"
+if ! llava_validate_config 2>/dev/null; then
+  die "llava model configuration is invalid" 
+fi
+
+
 # ------------------------------------------------------------
 # helper: resolve a ref/tag/branch (REMOTE)
 # ------------------------------------------------------------
@@ -55,6 +61,8 @@ generateScript() {
   # bake in what we want self-contained on the pod
   local bakedWorkspaceRoot="${WORKSPACE_ROOT:-/workspace}"
   local bakedEnvName="${LLAVA_ENV_NAME:-llava}"
+  local bakedModelPath="${LLAVA_MODEL_PATH:-}"
+  local bakedLlavaDir="${LLAVA_DIR:-${bakedWorkspaceRoot}/LLaVA}"
 
   cat >"$outFile" <<EOF
 #!/usr/bin/env bash
@@ -65,7 +73,7 @@ WORKSPACE='${bakedWorkspaceRoot}'
 ENV_NAME='${bakedEnvName}'
 
 # runtime-overridable variables
-LLAVA_DIR="\${LLAVA_DIR:-\${WORKSPACE}/LLaVA}"
+LLAVA_DIR='${bakedLlavaDir}'
 CONDA_DIR="\${CONDA_DIR:-\${WORKSPACE}/miniconda3}"
 CONDA_EXE="\${CONDA_EXE:-\${CONDA_DIR}/bin/conda}"
 
@@ -102,9 +110,9 @@ requireCmd tmux
 [[ -d "\$LLAVA_DIR" ]] || { echo "ERROR: llava directory not found: \$LLAVA_DIR" >&2; exit 1; }
 [[ -x "\$CONDA_EXE" ]] || { echo "ERROR: conda not found/executable at \$CONDA_EXE" >&2; exit 1; }
 
-LLAVA_MODEL_PATH="\${LLAVA_MODEL_PATH:-liuhaotian/llava-v1.5-7b}"
+LLAVA_MODEL_PATH='${bakedModelPath}'
+LLAVA_MODEL_NAME='${bakedModelName}'
 LLAVA_API_NAME="\${LLAVA_API_NAME:-/add_text_1}"
-LAVA_API_NAME="\${LAVA_API_NAME:-\$LLAVA_API_NAME}"
 
 WORKER_ADDR="http://127.0.0.1:\${WORKER_PORT}"
 WORKER_ADDR_ARG="--worker-address \${WORKER_ADDR}"
@@ -112,6 +120,7 @@ WORKER_ADDR_ARG="--worker-address \${WORKER_ADDR}"
 if [[ -z "\${LLAVA_MODEL_PATH:-}" ]]; then
   echo "ERROR: LLAVA_MODEL_PATH is not set (required to start model worker)" >&2
   echo "Set it to a local path or HF repo id, e.g.:"
+  echo "  export LLAVA_MODEL_PATH=fancyfeast/llama-joycaption-alpha-two-hf-llava"
   echo "  export LLAVA_MODEL_PATH=/workspace/models/llava-1.5-7b"
   echo "  export LLAVA_MODEL_PATH=liuhaotian/llava-v1.5-7b"
   exit 1
@@ -123,9 +132,9 @@ assertPortFree "\$WEB_PORT"
 
 LOG_DIR="\${LOG_DIR:-\${WORKSPACE}/logs}"
 mkdir -p "\$LOG_DIR"
-LOG_CONTROLLER="\$LOG_DIR/llava.controller.\${CONTROLLER_PORT}.log"
-LOG_WORKER="\$LOG_DIR/llava.worker.\${WORKER_PORT}.log"
-LOG_WEB="\$LOG_DIR/llava.web.\${WEB_PORT}.log"
+LOG_CONTROLLER="\$LOG_DIR/controller.\${CONTROLLER_PORT}.log"
+LOG_WORKER="\$LOG_DIR/worker.\${WORKER_PORT}.log"
+LOG_WEB="\$LOG_DIR/web.\${WEB_PORT}.log"
 
 # --- controller ---
 if tmux has-session -t "\$SESSION_CONTROLLER" 2>/dev/null; then
@@ -174,21 +183,19 @@ EOF
 main() {
   logTask "LLaVA"
 
+  log "joyful mode: ${LLAVA_JOYFUL}"
+  log "llava dir: $LLAVA_DIR"
+  log "llava env: $LLAVA_ENV_NAME"
+  log "llava version: $LLAVA_VERSION"
+  log "llava ref: $LLAVA_REF"
+  log "llava model: ${LLAVA_MODEL_NAME}"
+  log "llava path: ${LLAVA_MODEL_PATH}"
+
   # Check if already done and not forcing
   if isStepDone "LLAVA" && [[ "${FORCE:-0}" != "1" ]]; then
     log "llava already configured (use --force to rerun)"
     return 0
   fi
-
-  LLAVA_VERSION="${LLAVA_VERSION:-1.5}"
-  LLAVA_REF="${LLAVA_REF:-v1.5}"
-  LLAVA_DIR="${LLAVA_DIR:-${WORKSPACE_ROOT}/LLaVA}"
-  LLAVA_ENV_NAME="${LLAVA_ENV_NAME:-llava}"
-
-  log "llava dir: $LLAVA_DIR"
-  log "llava env: $LLAVA_ENV_NAME"
-  log "llava version: $LLAVA_VERSION"
-  log "llava ref: $LLAVA_REF"
 
   # Ensure repo
   if ! isStepDone "LLAVA_REPO" || [[ "${FORCE:-0}" == "1" ]]; then
@@ -250,6 +257,17 @@ main() {
     markStepDone "LLAVA_PROTO_SENTENCEPIECE"
   else
     log "protobuf and sentencepiece already installed"
+  fi
+
+  if [[ "${LLAVA_JOYFUL:-0}" == "1" ]]; then
+    if ! isStepDone "JOY_EXTRA_DEPS" || [[ "${FORCE:-0}" == "1" ]]; then
+        log "installing extra deps useful for joycaption / modern llava-family"
+        condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U \
+            transformers==4.44.2 pillow accelerate bitsandbytes  # pin transformers if newer versions break
+        markStepDone "JOY_EXTRA_DEPS"
+    else
+        log "joycaption extra deps already installed"
+    fi
   fi
 
   local startScript="llavaStart.sh"

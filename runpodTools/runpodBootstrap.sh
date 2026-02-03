@@ -52,13 +52,17 @@ TESTDIR="$RUNPOD_DIR/test"
 ENABLE_COMFYUI="${ENABLE_COMFYUI:-1}"
 ENABLE_KOHYA="${ENABLE_KOHYA:-0}"
 ENABLE_LLAVA="${ENABLE_LLAVA:-0}"
+ENABLE_JOYFUL="${ENABLE_JOYFUL:-0}"
+if $ENABLE_JOYFUL; then
+  ENABLE_LLAVA=1
+fi
 
 DRY_RUN="${DRY_RUN:-0}"
 DRY_PREFIX="${DRY_PREFIX:-[]}"
 
 FORCE="${FORCE:-0}"
 
-export DRY_RUN DRY_PREFIX FORCE ENABLE_COMFYUI ENABLE_KOHYA ENABLE_LLAVA
+export DRY_RUN DRY_PREFIX FORCE ENABLE_COMFYUI ENABLE_KOHYA ENABLE_LLAVA ENABLE_JOYFUL
 
 FROM_STEP=""
 ONLY_STEP=""
@@ -162,6 +166,7 @@ while [[ $# -gt 0 ]]; do
     --no-comfyui) ENABLE_COMFYUI=0; shift ;;
     --kohya) ENABLE_KOHYA=1; shift ;;
     --llava) ENABLE_LLAVA=1; shift ;;
+    --joyful) ENABLE_JOYFUL=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --force) FORCE=1; shift ;;
     --from)
@@ -313,6 +318,7 @@ log "runpod bootstrap (modular)"
 echo "comfyui   : $ENABLE_COMFYUI"
 echo "kohya     : $ENABLE_KOHYA"
 echo "llava     : $ENABLE_LLAVA"
+echo "joyful    : $ENABLE_JOYFUL"
 echo "dry run   : $DRY_RUN"
 echo "force     : $FORCE"
 echo "state file: $STATE_FILE"

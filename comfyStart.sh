@@ -5,7 +5,7 @@ WORKSPACE="/workspace"
 COMFY_DIR="$WORKSPACE/ComfyUI"
 CONDA_DIR="$WORKSPACE/miniconda3"
 CONDA_EXE="$CONDA_DIR/bin/conda"
-ENV_NAME="runpod"
+ENV_NAME="comfyui"
 PORT="8188"
 SESSION="comfyui"
 

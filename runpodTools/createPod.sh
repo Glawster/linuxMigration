@@ -38,6 +38,7 @@ Usage: $(basename "$0") [options] ssh user@host -p PORT -i KEY
 Options:
   --kohya          enable kohya setup
   --llava          enable llava setup
+  --joyful         enable joyful setup (uses JoyCaption for LLaVA)
   --no-comfyui     disable comfyui setup
   --dry-run        dry run mode (show what would be done)
   --force          force rerun of all steps
@@ -74,6 +75,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --llava)
       BOOTSTRAP_ARGS+=(--llava)
+      shift
+      ;;
+    --joyful)
+      JOYFUL=1
+      BOOTSTRAP_ARGS+=(--joyful)
+      if [[ ! " ${BOOTSTRAP_ARGS[@]} " =~ " --llava " ]]; then
+        BOOTSTRAP_ARGS+=(--llava)
+      fi  
       shift
       ;;
     --no-comfyui)
@@ -142,6 +151,7 @@ echo
 export REQUIRE_REMOTE=1
 export DRY_RUN
 export DRY_PREFIX
+export JOYFUL
 
 export SSH_TARGET
 export SSH_PORT
