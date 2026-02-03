@@ -28,147 +28,200 @@ source "$LIB_DIR/run.sh"
 # ------------------------------------------------------------
 # helper: generate adapter python LOCALLY
 # ------------------------------------------------------------
+
 generateAdapter() {
   local outFile="$1"
 
-  cat >"$outFile" <<'PY'
+  # IMPORTANT:
+  # - this heredoc is UNQUOTED so values like $LLAVA_CONTROLLER_URL get baked in,
+  #   making llavaAdapter.py self-contained on the pod.
+  cat >"$outFile" <<PY
 #!/usr/bin/env python3
-from __future__ import annotations
-
-import base64
-import json
 import os
+import json
+import base64
 import tempfile
-from typing import Optional
+from typing import Optional, Dict, Any
 
 import requests
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
-# ------------------------------------------------------------
-# LLaVA controller/worker API (no Gradio)
-# ------------------------------------------------------------
-CONTROLLER_INTERNAL = os.environ.get("LLAVA_CONTROLLER_URL", "http://127.0.0.1:7001").rstrip("/")
-MODEL_NAME = os.environ.get("LLAVA_MODEL_NAME", "llava-v1.5-7b")
-
-# Optional override: if controller returns nonsense, force worker URL
-WORKER_FALLBACK = os.environ.get("LLAVA_WORKER_URL", "").strip().rstrip("/")
-
-DEFAULT_QUESTION = os.environ.get("LLAVA_QUESTION", "Describe the image in detail.")
-DEFAULT_TEMPERATURE = float(os.environ.get("LLAVA_TEMPERATURE", "0.2"))
-DEFAULT_TOP_P = float(os.environ.get("LLAVA_TOP_P", "0.7"))
-DEFAULT_MAX_TOKENS = int(os.environ.get("LLAVA_MAX_TOKENS", "512"))
-
-# LLaVA typically expects an <image> token in the prompt for multimodal requests
-IMAGE_TOKEN = os.environ.get("LLAVA_IMAGE_TOKEN", "<image>")
-
 app = FastAPI()
 
-def _get_worker_address(model_name: str) -> str:
-    r = requests.post(
-        f"{CONTROLLER_INTERNAL}/get_worker_address",
-        json={"model": model_name},
-        timeout=10,
-    )
+# Baked-in defaults from the step (self-contained on pod)
+DEFAULT_CONTROLLER_URL = "${LLAVA_CONTROLLER_URL}"
+DEFAULT_MODEL_NAME = "${LLAVA_MODEL_NAME}"
+DEFAULT_TEMPERATURE = float("${LLAVA_TEMPERATURE:-0.2}")
+DEFAULT_TOP_P = float("${LLAVA_TOP_P:-0.7}")
+DEFAULT_MAX_TOKENS = int("${LLAVA_MAX_TOKENS:-256}")
+
+IMAGE_TOKEN = "<image>"
+
+
+def _env(name: str, fallback: str) -> str:
+    v = os.environ.get(name)
+    return v.strip() if isinstance(v, str) and v.strip() else fallback
+
+
+def _post_json(url: str, payload: Dict[str, Any], timeout: int = 60) -> Dict[str, Any]:
+    r = requests.post(url, json=payload, timeout=timeout)
     r.raise_for_status()
-    data = r.json()
-    addr = (data.get("address") or data.get("worker_address") or "").strip()
+    return r.json()
 
-    # normalize localhost -> 127.0.0.1 (critical for pods)
-    addr = addr.replace("http://localhost", "http://127.0.0.1").rstrip("/")
 
-    # fallback if controller returned empty or unusable
-    if not addr and WORKER_FALLBACK:
-        return WORKER_FALLBACK
+def _resolve_worker_url(controller_url: str, model_name: str) -> str:
+    # Optional direct override (useful if controller is weird)
+    override = os.environ.get("LLAVA_WORKER_URL", "").strip()
+    if override:
+        return override.rstrip("/")
 
+    controller_url = controller_url.rstrip("/")
+    obj = _post_json(f"{controller_url}/get_worker_address", {"model": model_name}, timeout=60)
+    addr = (obj.get("address") or "").strip()
     if not addr:
-        raise RuntimeError(f"no worker address in response: {data}")
+        raise RuntimeError(f"controller returned no worker address: {obj}")
+    return addr.rstrip("/")
 
-    return addr
 
-def _call_worker(model: str, question: str, image_path: str) -> str:
+def _clean_stream_text(full_text: str, question: str) -> str:
+    # LLaVA worker often echoes: "<image>\\n{question}\\n\\nThe answer..."
+    t = full_text or ""
+    t = t.replace("\\x00", "")
 
-    WORKER_URL = _get_worker_address(model)
+    # Strip leading <image> token line if present
+    s = t.lstrip()
+    if s.startswith(IMAGE_TOKEN):
+        # remove first line containing <image>
+        parts = s.split("\\n", 1)
+        s = parts[1] if len(parts) > 1 else ""
+
+    # If question is echoed, trim everything through it
+    q = (question or "").strip()
+    if q:
+        idx = s.find(q)
+        if idx >= 0:
+            s = s[idx + len(q):]
+
+    return s.strip()
+
+def _call_worker(model_name: str, question: str, image_path: str) -> str:
+
+    controller = _env("LLAVA_CONTROLLER_URL", DEFAULT_CONTROLLER_URL).rstrip("/")
+    model = _env("LLAVA_MODEL_NAME", model_name)
+
+    temperature = float(_env("LLAVA_TEMPERATURE", str(DEFAULT_TEMPERATURE)))
+    top_p = float(_env("LLAVA_TOP_P", str(DEFAULT_TOP_P)))
+    max_tokens = int(_env("LLAVA_MAX_TOKENS", str(DEFAULT_MAX_TOKENS)))
+
+    worker = _resolve_worker_url(controller, model)
 
     with open(image_path, "rb") as f:
-        image_b64 = base64.b64encode(f.read()).decode()
+        image_b64 = base64.b64encode(f.read()).decode("ascii")
 
-    payload = {
+    # IMPORTANT: real newline, not "\\n"
+    prompt = f"{IMAGE_TOKEN}\n{question}".strip()
+
+    # ensure prompt contains <image> if we send an image
+    if image_b64 and "<image>" not in prompt:
+        prompt = "<image>\n" + prompt
+
+    payload: Dict[str, Any] = {
         "model": model,
-        "prompt": f"{IMAGE_TOKEN}\n{question}",
+        "prompt": prompt,
         "images": [image_b64],
-        "temperature": DEFAULT_TEMPERATURE,
-        "top_p": DEFAULT_TOP_P,
-        "max_new_tokens": DEFAULT_MAX_TOKENS,
-        "stop": "###",
-        "stop_str": "###",
-        "stop_sequences": ["###"],
+        "temperature": temperature,
+        "top_p": top_p,
+        "max_new_tokens": max_tokens,
+        # safest: omit stop entirely for now
+        "stop": "\n",
     }
 
-    resp = requests.post(
-        f"{WORKER_URL}/worker_generate_stream",
+    r = requests.post(
+        f"{worker}/worker_generate_stream",
         json=payload,
         stream=True,
         timeout=300,
     )
+    r.raise_for_status()
 
-    resp.raise_for_status()
+    last_obj: Optional[Dict[str, Any]] = None
+    final_text: str = ""
 
-    last_obj = None
-    final_text = ""
+    decoder = json.JSONDecoder()
+    buf = ""
 
-    for raw in resp.iter_lines(decode_unicode=True):
-        if not raw:
+    for chunk in r.iter_content(chunk_size=None):
+        if not chunk:
             continue
 
-        line = raw.strip()
+        if isinstance(chunk, bytes):
+            buf += chunk.decode("utf-8", errors="ignore")
+        else:
+            buf += str(chunk)
 
-        # Some servers send SSE lines: "data: {...}"
-        if line.startswith("data:"):
-            line = line[len("data:"):].strip()
+        # normalize line endings
+        buf = buf.replace("\r\n", "\n")
 
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            # Keep going, but if we end with nothing this will help debugging
-            continue
+        while True:
+            s = buf.lstrip()
 
-        last_obj = obj
+            # handle SSE style "data: {json}"
+            if s.startswith("data:"):
+                s = s[5:].lstrip()
 
-        t = obj.get("text")
-        if isinstance(t, str) and t:
-            # LLaVA streams cumulative text; keep the latest
-            final_text = t
+            if not s:
+                buf = ""
+                break
 
-        ec = obj.get("error_code", 0)
-        if ec not in (0, None):
-            # stop early on worker-reported error
-            break
+            try:
+                obj, idx = decoder.raw_decode(s)
+            except json.JSONDecodeError:
+                # need more bytes
+                break
+
+            # advance buffer
+            consumed = len(buf) - len(s) + idx
+            buf = buf[consumed:]
+
+            if not isinstance(obj, dict):
+                continue
+
+            last_obj = obj
+
+            t = obj.get("text")
+            if isinstance(t, str) and t.strip():
+                final_text = t
+
+            ec = obj.get("error_code", 0)
+            if ec not in (0, None):
+                break
 
     if not final_text:
-        # last resort: capture a snippet of response for debugging
-        try:
-            snippet = resp.text[:500]
-        except Exception:
-            snippet = "<unable to read resp.text>"
-        raise RuntimeError(f"worker returned no text (last_obj={last_obj}, snippet={snippet!r})")
+        raise RuntimeError(f"worker returned no text (last_obj={last_obj})")
 
-    return final_text.strip()
+    return _clean_stream_text(final_text, question)
 
+DEFAULT_QUESTION = _env("LLAVA_QUESTION", "Describe the image in detail.")
 
 
 @app.post("/")
 @app.post("/analyze")
 async def analyze(
-    file: UploadFile = File(...),
+    # accept either "file" OR "image" from multipart form
+    file: Optional[UploadFile] = File(None),
+    image: Optional[UploadFile] = File(None),
     question: str = Form(DEFAULT_QUESTION),
 ):
     tmp_path: Optional[str] = None
     try:
-        suffix = os.path.splitext(file.filename or "image.png")[1] or ".png"
-        data = await file.read()
+        up = file or image
+        if up is None:
+            return JSONResponse({"ok": False, "error": "missing upload field: provide multipart 'file' or 'image'"},
+                                status_code=400)
 
-        # Defensive: ensure bytes
+        suffix = os.path.splitext(up.filename or "image.png")[1] or ".png"
+        data = await up.read()
         if isinstance(data, str):
             data = data.encode("utf-8", errors="ignore")
 
@@ -176,8 +229,8 @@ async def analyze(
             tmp.write(data)
             tmp_path = tmp.name
 
-        result = _call_worker(MODEL_NAME, question, tmp_path)
-        return {"ok": True, "result": result}
+        result_text = _call_worker(DEFAULT_MODEL_NAME, question, tmp_path)
+        return {"ok": True, "result": result_text}
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
     finally:
@@ -188,7 +241,7 @@ async def analyze(
                 pass
 PY
 
-  chmod +x "$outFile"
+  chmod +x "$outFile" || true
 }
 
 # ------------------------------------------------------------

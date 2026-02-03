@@ -226,7 +226,7 @@ main() {
   # Install LLaVA
   if ! isStepDone "LLAVA_INSTALL"; then
     log "installing llava (editable)"
-    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install -e "$LLAVA_DIR"
+    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -e "$LLAVA_DIR"
     markStepDone "LLAVA_INSTALL"
   else
     log "llava already installed"

@@ -346,15 +346,11 @@ for step in "${ALL_AVAILABLE_STEPS[@]}"; do
         fi
       fi
       ;;
-    75_llava_adapter)
-      if [[ "$ENABLE_LLAVA" == "1" ]]; then
-        ALL_STEPS+=("$step")
-        # Ensure llava step is also included
-        if ! [[ " ${ALL_STEPS[*]} " == *" 70_llava "* ]]; then
-          ALL_STEPS+=("70_llava") 
-        fi
-      fi
-      ;;
+#    75_llava_adapter)
+#      if [[ "$ENABLE_LLAVA" == "1" ]]; then
+#        ALL_STEPS+=("$step")
+#      fi
+#      ;;
     *)
       # Include all other steps by default
       ALL_STEPS+=("$step")
