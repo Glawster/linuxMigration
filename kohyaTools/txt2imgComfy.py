@@ -217,7 +217,7 @@ def parseArgs() -> argparse.Namespace:
     p.add_argument("--variants", type=int, default=1, help="generate N variants per input image")
 
     p.add_argument("--local", default=None, help="ComfyUI base url (e.g. http://127.0.0.1:8188)")
-    p.add_argument("--remote", default=None, help="ComfyUI base url (e.g. RunPod proxy url)")
+    p.add_argument("--remote", default=None, help="ComfyUI Pod ID or base url (e.g. http://comfyui.example.com)")
 
     return p.parse_args()
 
@@ -227,7 +227,14 @@ def resolveBaseUrl(args: argparse.Namespace, cfg: Dict[str, Any]) -> str:
         raise ValueError("use --local OR --remote, not both")
 
     if args.remote:
-        return str(args.remote).strip()
+        # identify if this is a Pod ID or full URL
+        if "://" not in str(args.remote):
+            podId = str(args.remote).strip()
+            if not podId:
+                raise ValueError("invalid ComfyUI Pod ID")
+            return f"https://{podId}-8188.proxy.runpod.net"
+        else:   # it is a pod id
+            return str(args.remote).strip()
 
     if args.local:
         return str(args.local).strip()

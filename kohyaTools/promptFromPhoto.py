@@ -10,9 +10,10 @@ Generate prompt sidecar JSON files from reference photos using LLaVA.
 - Supports dry-run / print / explain / scorecards / golden fixtures
 
 Assumptions:
-- LLaVA endpoint returns a JSON with keys like:
-  posePrompt, clothingPrompt, locationPrompt, lightingPrompt, cameraPrompt,
-  negativesHint, styleNegative
+- Supports two LLaVA response shapes:
+  1) structured JSON keys like posePrompt, clothingPrompt, locationPrompt, lightingPrompt,
+     cameraPrompt, negativesHint, styleNegative
+  2) simple JSON like {ok: true, result: "...description..."} (the full description is stored as positive.description)
 """
 
 from __future__ import annotations
@@ -100,6 +101,10 @@ def buildSidecar(
     """Normalize LLaVA output into a stable sidecar format."""
 
     # Normalize llava fields defensively
+    # - structured mode: posePrompt/clothingPrompt/...
+    # - simple mode: {ok: true, result: "free text description"}
+    description = _cleanPiece(llavaJson.get("result", "")) if isinstance(llavaJson.get("result", ""), str) else ""
+
     pose = _cleanPiece(llavaJson.get("posePrompt", ""))
     clothing = _cleanPiece(llavaJson.get("clothingPrompt", ""))
     location = _cleanPiece(llavaJson.get("locationPrompt", ""))
@@ -111,6 +116,7 @@ def buildSidecar(
 
     positive = {
         "identity": identity,
+        "description": description,
         "pose": pose,
         "clothing": clothing,
         "location": location,
@@ -154,7 +160,7 @@ def buildSidecar(
         if identity:
             why.append("set identity from config/arg")
 
-        for k in ["pose", "clothing", "location", "lighting", "camera"]:
+        for k in ["description", "pose", "clothing", "location", "lighting", "camera"]:
             if positive.get(k):
                 why.append(f"added positive.{k} from llava")
         for k in ["general", "style"]:
@@ -179,6 +185,12 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
     p.add_argument("--input", type=Path, default=Path(getCfgValue(cfg, "comfyInput")))
     p.add_argument("--llavaurl", default=getCfgValue(cfg, "llavaUrl"))
 
+    p.add_argument(
+        "--question",
+        default=str(getCfgValue(cfg, "llavaQuestion", "Describe the image in detail. Pay particular attention to pose and clothing.")),
+        help="question/instruction sent to llava",
+    )
+
     p.add_argument("--identity", default=str(getCfgValue(cfg, "comfyText2ImgIdentity", "kathy")))
 
     p.add_argument("--force", action="store_true", help="overwrite existing sidecars")
@@ -199,19 +211,25 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
     return p.parse_args()
 
 
-def postToLlava(llavaUrl: str, img: Path) -> Dict[str, Any]:
+def postToLlava(llavaUrl: str, img: Path, question: str) -> Dict[str, Any]:
     # Note: content-type should match actual file; but most servers are fine with octet-stream.
     # We keep it simple and stable.
     with img.open("rb") as f:
         r = requests.post(
             llavaUrl,
-            files={"file": (img.name, f, "application/octet-stream")},
+            files={"image": (img.name, f, "application/octet-stream")},
+            data={"question": question},
             timeout=300,
         )
     r.raise_for_status()
     data = r.json()
     if not isinstance(data, dict):
         raise ValueError("LLaVA response is not a json object")
+
+    # If server returns {ok: false, ...}, surface it as an error early
+    if "ok" in data and not bool(data.get("ok")):
+        raise ValueError(f"llava returned ok=false: {str(data)[:500]}")
+
     return data
 
 
@@ -237,7 +255,7 @@ def main() -> int:
         logger.error("Input dir does not exist: %s", inputDir)
         return 2
 
-    basePositive = str(getCfgValue(cfg, "comfyText2ImgBasePositive", args.identity))
+    basePositive = str(getCfgValue(cfg, "comfyText2ImgBasePositive", ""))
     baseNegative = str(getCfgValue(cfg, "comfyText2ImgBaseNegative", ""))
 
     images = listImages(inputDir, args.only)
@@ -247,6 +265,7 @@ def main() -> int:
     logger.info("found images: %d", len(images))
     logger.info("...input dir: %s", inputDir)
     logger.info("...llava url: %s", args.llavaurl)
+    logger.info("...question: %s", args.question)
     logger.info("...identity: %s", args.identity)
     logger.info("...dry run: %s", bool(args.dry_run))
 
@@ -267,7 +286,7 @@ def main() -> int:
         logger.info("analyzing: %s", img.name)
 
         try:
-            llavaJson = postToLlava(args.llavaurl, img)
+            llavaJson = postToLlava(args.llavaurl, img, args.question)
             sidecarData = buildSidecar(
                 imageName=img.name,
                 llavaJson=llavaJson,
