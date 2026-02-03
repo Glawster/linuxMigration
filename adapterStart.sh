@@ -4,7 +4,7 @@ set -euo pipefail
 WORKSPACE="${WORKSPACE:-/workspace}"
 CONDA_DIR="${CONDA_DIR:-${WORKSPACE}/miniconda3}"
 CONDA_EXE="${CONDA_EXE:-${CONDA_DIR}/bin/conda}"
-ENV_NAME="${ENV_NAME:-runpod}"
+ENV_NAME="${ENV_NAME:-llava}"
 
 ADAPTER_PORT="${LLAVA_ADAPTER_PORT:-9188}"
 SESSION="${LLAVA_ADAPTER_SESSION:-adapter}"

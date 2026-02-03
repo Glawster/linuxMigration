@@ -84,30 +84,33 @@ def _resolve_worker_url(controller_url: str, model_name: str) -> str:
         raise RuntimeError(f"controller returned no worker address: {obj}")
     return addr.rstrip("/")
 
-
 def _clean_stream_text(full_text: str, question: str) -> str:
-    # LLaVA worker often echoes: "<image>\\n{question}\\n\\nThe answer..."
-    t = full_text or ""
-    t = t.replace("\\x00", "")
+    t = (full_text or "").replace("\x00", "")
+    t = t.replace("\r\n", "\n")
 
-    # Strip leading <image> token line if present
     s = t.lstrip()
-    if s.startswith(IMAGE_TOKEN):
-        # remove first line containing <image>
-        parts = s.split("\\n", 1)
-        s = parts[1] if len(parts) > 1 else ""
 
-    # If question is echoed, trim everything through it
+    # 1) Strip leading "<image>" line if present (REAL newline)
+    if s.startswith(IMAGE_TOKEN):
+        # drop first line
+        s = s.split("\n", 1)[1] if "\n" in s else ""
+        s = s.lstrip()
+
+    # 2) If the question is echoed right at the start, trim it safely
     q = (question or "").strip()
     if q:
-        idx = s.find(q)
-        if idx >= 0:
-            s = s[idx + len(q):]
+        # allow optional leading newlines/spaces before the question
+        s2 = s.lstrip("\n ").lstrip()
+        if s2.startswith(q):
+            s2 = s2[len(q):]
+            s = s2
+
+    # 3) Drop a couple of leading blank lines that often follow the echoed prompt
+    s = s.lstrip("\n").lstrip()
 
     return s.strip()
 
 def _call_worker(model_name: str, question: str, image_path: str) -> str:
-
     controller = _env("LLAVA_CONTROLLER_URL", DEFAULT_CONTROLLER_URL).rstrip("/")
     model = _env("LLAVA_MODEL_NAME", model_name)
 
@@ -117,26 +120,36 @@ def _call_worker(model_name: str, question: str, image_path: str) -> str:
 
     worker = _resolve_worker_url(controller, model)
 
-    with open(image_path, "rb") as f:
-        image_b64 = base64.b64encode(f.read()).decode("ascii")
+    image_b64 = ""
+    if image_path:
+        with open(image_path, "rb") as f:
+            image_b64 = base64.b64encode(f.read()).decode("ascii")
 
     # IMPORTANT: real newline, not "\\n"
     prompt = f"{IMAGE_TOKEN}\n{question}".strip()
 
-    # ensure prompt contains <image> if we send an image
-    if image_b64 and "<image>" not in prompt:
-        prompt = "<image>\n" + prompt
+    images: list[str] = []
+    if image_b64:
+        images = [image_b64]
+        if "<image>" not in prompt:
+            prompt = "<image>\n" + prompt
+    else:
+        # no image => remove image token if present
+        prompt = question.strip()
 
     payload: Dict[str, Any] = {
         "model": model,
         "prompt": prompt,
-        "images": [image_b64],
+        "images": images,
         "temperature": temperature,
         "top_p": top_p,
         "max_new_tokens": max_tokens,
-        # safest: omit stop entirely for now
-        "stop": "###",
+        # DO NOT send stop at all; safest here
+        # "stop": "###",
     }
+
+    # never send None values
+    payload = {k: v for k, v in payload.items() if v is not None}
 
     r = requests.post(
         f"{worker}/worker_generate_stream",
@@ -151,8 +164,11 @@ def _call_worker(model_name: str, question: str, image_path: str) -> str:
 
     decoder = json.JSONDecoder()
     buf = ""
+    abort = False
 
     for chunk in r.iter_content(chunk_size=None):
+        if abort:
+            break
         if not chunk:
             continue
 
@@ -161,27 +177,37 @@ def _call_worker(model_name: str, question: str, image_path: str) -> str:
         else:
             buf += str(chunk)
 
-        # normalize line endings
         buf = buf.replace("\r\n", "\n")
 
         while True:
             s = buf.lstrip()
-
-            # handle SSE style "data: {json}"
-            if s.startswith("data:"):
-                s = s[5:].lstrip()
-
             if not s:
                 buf = ""
                 break
+
+            # handle SSE style: "data: {...}"
+            if s.startswith("data:"):
+                s = s[5:].lstrip()
+
+            # if there is any non-json prefix, skip until first '{'
+            if not s.startswith("{"):
+                brace = s.find("{")
+                if brace == -1:
+                    # keep a small tail in case '{' splits across chunks
+                    buf = s[-1024:]
+                    break
+                s = s[brace:]
 
             try:
                 obj, idx = decoder.raw_decode(s)
             except json.JSONDecodeError:
                 # need more bytes
+                # keep a small tail so buffer doesn't grow forever
+                if len(buf) > 10_000_000:
+                    buf = buf[-1_000_000:]
                 break
 
-            # advance buffer
+            # advance buffer by consumed chars (account for lstrip + skipped prefix)
             consumed = len(buf) - len(s) + idx
             buf = buf[consumed:]
 
@@ -194,11 +220,17 @@ def _call_worker(model_name: str, question: str, image_path: str) -> str:
             if isinstance(t, str) and t.strip():
                 final_text = t
 
+                # treat high-traffic sentinel as a real error
+                if "NETWORK ERROR DUE TO HIGH TRAFFIC" in final_text:
+                    abort = True
+                    break
+
             ec = obj.get("error_code", 0)
             if ec not in (0, None):
+                abort = True
                 break
 
-    if not final_text:
+    if not final_text or "NETWORK ERROR DUE TO HIGH TRAFFIC" in final_text:
         raise RuntimeError(f"worker returned no text (last_obj={last_obj})")
 
     return _clean_stream_text(final_text, question)
