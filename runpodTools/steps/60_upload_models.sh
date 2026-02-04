@@ -292,7 +292,7 @@ if [[ -d "$WORKFLOWS_DIR" && "${WORKFLOW_COUNT}" -gt 0 ]]; then
   rsync -avP --partial --inplace --no-perms --no-owner --no-group     -e "ssh -p ${SSH_PORT} ${SSH_IDENTITY:+-i $SSH_IDENTITY}"     "${WORKFLOWS_DIR}/" "$TARGET:${REMOTE_WORKFLOWS}/"
 fi
 
-# upload a test png file
+# upload a test script
 echo
 echo "=== Uploading Test Script ==="
 TEST_SCRIPT="/home/andy/bin/runpodTools/testLlavaInstall.sh"
@@ -300,6 +300,16 @@ if [[ -f "$TEST_SCRIPT" ]]; then
   rsyncOne "$TEST_SCRIPT" "/workspace"
 else
   echo "WARNING: test script not found locally: $TEST_SCRIPT"
+fi
+
+# upload any lib files
+echo
+echo "=== Uploading Lib files ==="
+LIB_FILE="/home/andy/bin/runpodTools/lib/llava.sh"
+if [[ -f "$LIB_FILE" ]]; then
+  rsyncOne "$LIB_FILE" "/workspace/lib"
+else
+  echo "WARNING: lib file not found locally: $LIB_FILE"
 fi
 
 echo

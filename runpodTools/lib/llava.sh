@@ -9,7 +9,7 @@
 # Mode switch
 # ------------------------------------------------------------
 
-LLAVA_JOYFUL="${LLAVA_JOYFUL:-0}"
+WORKSPACE_ROOT="${WORKSPACE:-/workspace}"
 
 # Normalize truthy values
 case "${JOYFUL,,}" in
