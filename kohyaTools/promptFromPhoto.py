@@ -183,7 +183,7 @@ def buildSidecar(
 def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
     p = argparse.ArgumentParser("Generate prompt sidecars from photos")
     p.add_argument("--input", type=Path, default=Path(getCfgValue(cfg, "comfyInput")))
-    p.add_argument("--llavaurl", default=getCfgValue(cfg, "llavaUrl"))
+    p.add_argument("--remote",required=True, default=getCfgValue(cfg, "llavaUrl"))
 
     p.add_argument(
         "--question",
@@ -247,6 +247,16 @@ def main() -> int:
     cfg = loadConfig()
     args = parseArgs(cfg)
 
+    llavaUrl = str(args.remote).strip()
+    if args.remote:
+        # identify if this is a Pod ID or full URL
+        if "://" not in str(args.remote):
+            podId = str(args.remote).strip()
+            port = 9188
+            if not podId:
+                raise ValueError("invalid ComfyUI Pod ID")
+            llavaUrl = f"https://{podId}-{int(port)}.proxy.runpod.net/analyze"
+    
     logger = getLogger("promptFromPhoto", includeConsole=True)
     setLogger(logger)
 
@@ -264,7 +274,7 @@ def main() -> int:
 
     logger.info("found images: %d", len(images))
     logger.info("...input dir: %s", inputDir)
-    logger.info("...llava url: %s", args.llavaurl)
+    logger.info("...llava url: %s", llavaUrl)
     logger.info("...question: %s", args.question)
     logger.info("...identity: %s", args.identity)
     logger.info("...dry run: %s", bool(args.dry_run))
@@ -286,7 +296,7 @@ def main() -> int:
         logger.info("analyzing: %s", img.name)
 
         try:
-            llavaJson = postToLlava(args.llavaurl, img, args.question)
+            llavaJson = postToLlava(llavaUrl, img, args.question)
             sidecarData = buildSidecar(
                 imageName=img.name,
                 llavaJson=llavaJson,

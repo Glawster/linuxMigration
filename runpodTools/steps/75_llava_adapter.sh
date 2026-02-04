@@ -40,11 +40,13 @@ generateAdapter() {
 #!/usr/bin/env python3
 import os
 import json
+import io
 import base64
 import tempfile
-from typing import Optional, Dict, Any
-
 import requests
+
+from typing import Optional, Dict, Any
+from PIL import Image
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
@@ -122,30 +124,29 @@ def _call_worker(model_name: str, question: str, image_path: str) -> str:
 
     image_b64 = ""
     if image_path:
-        with open(image_path, "rb") as f:
-            image_b64 = base64.b64encode(f.read()).decode("ascii")
+        img = Image.open(image_path)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        image_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
-    # IMPORTANT: real newline, not "\\n"
-    prompt = f"{IMAGE_TOKEN}\n{question}".strip()
-
-    images: list[str] = []
     if image_b64:
-        images = [image_b64]
-        if "<image>" not in prompt:
-            prompt = "<image>\n" + prompt
+        thisImage = [image_b64]
+        prompt = f"<image>\n{question}".strip()
     else:
-        # no image => remove image token if present
+        thisImage = []
         prompt = question.strip()
 
     payload: Dict[str, Any] = {
         "model": model,
         "prompt": prompt,
-        "images": images,
+        "images": thisImage,
         "temperature": temperature,
         "top_p": top_p,
         "max_new_tokens": max_tokens,
-        # DO NOT send stop at all; safest here
-        # "stop": "###",
+        "stop": "###",
     }
 
     # never send None values

@@ -1,0 +1,3 @@
+[submodule "sidecarEditor"]
+	path = sidecarEditor
+	url = /tmp/sidecarEditor
