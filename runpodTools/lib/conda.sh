@@ -155,7 +155,6 @@ ensureCondaConfiguration() {
 # ------------------------------------------------------------
 ensureCondaEnv() {
   local env_name="${1:-comfyui}"
-  local python_version="${2:-3.10}"
 
   # Check if env exists (pipeline is ok because _condaExec uses bash -lc)
   if _condaExec "env list | awk '{print \$1}' | grep -qx '${env_name}'"; then
@@ -164,7 +163,7 @@ ensureCondaEnv() {
   fi
 
   log "creating conda environment: ${env_name}"
-  _condaExec "create -n '${env_name}' python='${python_version}' -y"
+  _condaExec "create -n '${env_name}' python=3.10 -y"
   log "environment created"
   return 0
 }
@@ -218,4 +217,40 @@ condaEnvCmd() {
 
   # argv-safe: no shell, no temp scripts, no quoting games
   runCmd "${condaExe}" run -n "${envName}" --no-capture-output "$@"
+}
+
+ensureLlavaEnv() {
+  local target="${1:-llava}"
+  local joyful="${LLAVA_JOYFUL:-0}"
+
+  # Helper: does env exist?
+  condaEnvExists() {
+    _condaExec "env list | awk '{print \$1}' | grep -qx \"$1\""
+  }
+
+  if condaEnvExists "$target"; then
+    log "conda env already exists: $target"
+    return 0
+  fi
+
+  if [[ "$target" == "llava" ]] && condaEnvExists "joycaption"; then
+    log "cloning joycaption → llava"
+    _condaExec "create -y --name \"$target\" --clone joycaption"
+    return 0
+  fi
+
+  if [[ "$target" == "joycaption" ]] && condaEnvExists "llava"; then
+    log "cloning llava → joycaption"
+    _condaExec "create -y --name \"$target\" --clone llava"
+    return 0
+  fi
+
+  if condaEnvExists "runpod"; then
+    log "cloning runpod → llava"
+    _condaExec "create -y --name \"$target\" --clone runpod"
+    return 0
+  fi
+
+  log "creating fresh conda env: llava (python 3.10)"
+  _condaExec "create -y -n \"$target\" python=3.10"
 }

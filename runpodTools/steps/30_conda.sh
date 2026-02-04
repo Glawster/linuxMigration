@@ -82,7 +82,7 @@ main() {
     markStepDone "CONDA_CHANNELS"
   fi
 
-  if ! ensureCondaEnv "$ENV_NAME" "3.10"; then
+  if ! ensureCondaEnv "$ENV_NAME"; then
     #condaDiagnostics
     die "conda env setup failed"
   fi
