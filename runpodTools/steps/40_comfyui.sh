@@ -19,89 +19,36 @@ source "$LIB_DIR/conda.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/workspace.sh"
 
-main() {
+ensureCustomNode() {
+  local nodeName="$1"
+  local repoUrl="$2"
+  local cloneStep="$3"
+  local reqStep="$4"
 
-  echo $FORCE
-  # Check if already done and not forcing
-  if isStepDone "COMFYUI" && [[ "${FORCE}" != "1" ]]; then
-    log "comfyui already configured (use --force to rerun)"
-    return 0
-  fi
+  local nodeDir="$COMFY_DIR/custom_nodes/$nodeName"
 
-  # Ensure repos (remote-safe via ensureGitRepo)
-  if ! isStepDone "COMFYUI_REPO" || [[ "${FORCE}" == "1" ]]; then
-    log "ensuring comfyui git repository"
-    ensureGitRepo "$COMFY_DIR" "https://github.com/comfyanonymous/ComfyUI.git" "ComfyUI"
-    markStepDone "COMFYUI_REPO"
+  if ! isStepDone "$cloneStep" || [[ "${FORCE}" == "1" ]]; then
+    log "ensuring custom node repo: $nodeName"
+    ensureGitRepo "$nodeDir" "$repoUrl" "$nodeName"
+    markStepDone "$cloneStep"
   else
-    log "comfyui repository already cloned"
+    log "custom node repo already present: $nodeName"
   fi
 
-  if ! isStepDone "COMFYUI_MANAGER" || [[ "${FORCE}" == "1" ]]; then
-    log "ensuring comfyui-manager custom node"
-    ensureGitRepo "$COMFY_DIR/custom_nodes/ComfyUI-Manager" "https://github.com/ltdrdata/ComfyUI-Manager.git" "ComfyUI-Manager"
-    markStepDone "COMFYUI_MANAGER"
+  installNodeRequirements "$nodeDir" "$reqStep"
+}
+
+installNodeRequirements() {
+  local nodeDir="$1"
+  local stepName="$2"
+
+  if ! isStepDone "$stepName" || [[ "${FORCE}" == "1" ]]; then
+    log "installing custom node requirements: $(basename "$nodeDir")"
+    condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$nodeDir/requirements.txt"
+    markStepDone "$stepName"
   else
-    log "comfyui-manager already cloned"
+    log "custom node requirements already installed: $(basename "$nodeDir")"
   fi
-
-  # the following don't seem to install so commented out
-  #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/ltdrdata/ComfyUI-Impact-Pack.git"     "ComfyuiImactPack"
-  #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git"  "ComfyuiImactSubPack"
-  #ensureGitRepo "$COMFY_DIR/custom_nodes" "https://github.com/facebookresearch/sam2"                "ComfyuiImactPack"
-  # ComfyUI Impact Subpack installed by pip
-
-  # Upgrade pip and wheel
-  if ! isStepDone "COMFYUI_PIP_UPGRADE" || [[ "${FORCE}" == "1" ]]; then
-    log "upgrading pip and wheel"
-    condaEnvCmd "${ENV_NAME}" python --version
-    condaEnvCmd "${ENV_NAME}" python -m pip install --root-user-action=ignore --upgrade pip wheel
-    markStepDone "COMFYUI_PIP_UPGRADE"
-  else
-    log "pip and wheel already upgraded"
-  fi
-
-  # Install ComfyUI requirements
-  if ! isStepDone "COMFYUI_REQUIREMENTS" || [[ "${FORCE}" == "1" ]]; then
-    log "installing comfyui requirements"
-    condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/requirements.txt"
-    markStepDone "COMFYUI_REQUIREMENTS"
-  else
-    log "comfyui requirements already installed"
-  fi
-
-  # Install ComfyUI-Manager requirements
-  if ! isStepDone "COMFYUI_MANAGER_REQUIREMENTS" || [[ "${FORCE}" == "1" ]]; then
-    log "installing comfyui-manager requirements"
-    condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
-    markStepDone "COMFYUI_MANAGER_REQUIREMENTS"
-  else
-    log "comfyui-manager requirements already installed"
-  fi
-
-  # Verify CUDA (informational check - installation continues regardless)
-  if ! isStepDone "COMFYUI_CUDA_CHECK" || [[ "${FORCE}" == "1" ]]; then
-    log "verifying CUDA availability"
-    condaEnvCmd "$ENV_NAME" python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)" || log "CUDA check failed (continuing anyway)"
-    markStepDone "COMFYUI_CUDA_CHECK"
-  else
-    log "cuda already verified"
-  fi
-
-  # Generate and upload comfyStart.sh (always regenerate for potential updates)
-  log "generating comfyStart.sh helper"
-
-  START_SCRIPT="comfyStart.sh"
-
-  generateScript "$START_SCRIPT"
-
-  runHostCmd scp "${SCP_OPTS[@]}" "$START_SCRIPT" "${SSH_TARGET}:${WORKSPACE_ROOT}/comfyStart.sh"
-  runSh "chmod +x ${WORKSPACE_ROOT}/comfyStart.sh"
-
-  log "comfyStart.sh installed to /workspace"
-
-  markStepDone "COMFYUI"
-  log "done"
 }
 
 generateScript() {
@@ -165,6 +112,94 @@ echo "log: \$LOG_FILE"
 EOF
 
   chmod +x "$outFile"
+}
+
+main() {
+
+  # Check if already done and not forcing
+  if isStepDone "COMFYUI" && [[ "${FORCE}" != "1" ]]; then
+    log "comfyui already configured (use --force to rerun)"
+    return 0
+  fi
+
+  # Ensure repos (remote-safe via ensureGitRepo)
+  if ! isStepDone "COMFYUI_REPO" || [[ "${FORCE}" == "1" ]]; then
+    log "ensuring comfyui git repository"
+    ensureGitRepo "$COMFY_DIR" "https://github.com/comfyanonymous/ComfyUI.git" "ComfyUI"
+    markStepDone "COMFYUI_REPO"
+  else
+    log "comfyui repository already cloned"
+  fi
+
+  ensureCustomNode \
+    "ComfyUI-Manager" \
+    "https://github.com/ltdrdata/ComfyUI-Manager.git" \
+    "COMFYUI_MANAGER" \
+    "COMFYUI_MANAGER_REQUIREMENTS"
+
+  ensureCustomNode \
+    "ComfyUI-Impact-Pack" \
+    "https://github.com/ltdrdata/ComfyUI-Impact-Pack.git" \
+    "COMFYUI_IMPACT_PACK" \
+    "COMFYUI_IMPACT_PACK_REQUIREMENTS"
+
+  ensureCustomNode \
+    "ComfyUI-Impact-Subpack" \
+    "https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git" \
+    "COMFYUI_IMPACT_SUBPACK" \
+    "COMFYUI_IMPACT_SUBPACK_REQUIREMENTS"
+
+  # Upgrade pip and wheel
+  if ! isStepDone "COMFYUI_PIP_UPGRADE" || [[ "${FORCE}" == "1" ]]; then
+    log "upgrading pip and wheel"
+    condaEnvCmd "${ENV_NAME}" python --version
+    condaEnvCmd "${ENV_NAME}" python -m pip install --root-user-action=ignore --upgrade pip wheel
+    markStepDone "COMFYUI_PIP_UPGRADE"
+  else
+    log "pip and wheel already upgraded"
+  fi
+
+  # Install ComfyUI requirements
+  if ! isStepDone "COMFYUI_REQUIREMENTS" || [[ "${FORCE}" == "1" ]]; then
+    log "installing comfyui requirements"
+    condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/requirements.txt"
+    markStepDone "COMFYUI_REQUIREMENTS"
+  else
+    log "comfyui requirements already installed"
+  fi
+
+  # Install ComfyUI-Manager requirements
+  if ! isStepDone "COMFYUI_MANAGER_REQUIREMENTS" || [[ "${FORCE}" == "1" ]]; then
+    log "installing comfyui-manager requirements"
+    condaEnvCmd "$ENV_NAME" python -m pip install --root-user-action=ignore -r "$COMFY_DIR/custom_nodes/ComfyUI-Manager/requirements.txt"
+    markStepDone "COMFYUI_MANAGER_REQUIREMENTS"
+  else
+    log "comfyui-manager requirements already installed"
+  fi
+
+  # Verify CUDA (informational check - installation continues regardless)
+  if ! isStepDone "COMFYUI_CUDA_CHECK" || [[ "${FORCE}" == "1" ]]; then
+    log "verifying CUDA availability"
+    condaEnvCmd "$ENV_NAME" python -c "import torch; print('cuda?', torch.cuda.is_available()); print('gpu:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)" || log "CUDA check failed (continuing anyway)"
+    markStepDone "COMFYUI_CUDA_CHECK"
+  else
+    log "cuda already verified"
+  fi
+
+  # Generate and upload comfyStart.sh (always regenerate for potential updates)
+  log "generating comfyStart.sh helper"
+
+  START_SCRIPT="comfyStart.sh"
+
+  generateScript "$START_SCRIPT"
+
+  runHostCmd scp "${SCP_OPTS[@]}" "$START_SCRIPT" "${SSH_TARGET}:${WORKSPACE_ROOT}/comfyStart.sh"
+  runSh "chmod +x ${WORKSPACE_ROOT}/comfyStart.sh"
+
+  log "comfyStart.sh installed to /workspace"
+
+  markStepDone "COMFYUI"
+  log "done"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
