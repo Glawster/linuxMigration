@@ -282,4 +282,13 @@ else
 fi
 
 echo
+echo "=== Uploading Lib files ==="
+LIB_FILE="/home/andy/bin/runpodTools/lib/llava.sh"
+if [[ -f "$LIB_FILE" ]]; then
+  rsyncOne "$LIB_FILE" "/workspace/lib"
+else
+  echo "WARNING: lib file not found locally: $LIB_FILE"
+fi
+
+echo
 echo "done"

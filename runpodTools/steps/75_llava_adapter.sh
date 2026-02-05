@@ -322,7 +322,7 @@ fi
 
 LOG_DIR="${LOG_DIR:-${WORKSPACE}/logs}"
 mkdir -p "$LOG_DIR"
-LOG_FILE="${LOG_DIR}/llava.adapter.${ADAPTER_PORT}.log"
+LOG_FILE="${LOG_DIR}/adapter.${ADAPTER_PORT}.log"
 
 if ! command -v tmux >/dev/null 2>&1; then
   echo "tmux not available; starting adapter in foreground"
