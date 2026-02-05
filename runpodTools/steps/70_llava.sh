@@ -218,7 +218,7 @@ main() {
   # Ensure conda environment
   if ! isStepDone "LLAVA_ENV" || [[ "${FORCE:-0}" == "1" ]]; then
     log "ensuring conda env: $LLAVA_ENV_NAME"
-    ensureLLavaEnv "$LLAVA_ENV_NAME"
+    ensureLlavaEnv "$LLAVA_ENV_NAME"
     markStepDone "LLAVA_ENV"
   else
     log "llava conda environment already created"
