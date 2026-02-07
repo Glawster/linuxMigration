@@ -8,7 +8,6 @@
 
 : "${WORKSPACE_ROOT:?WORKSPACE_ROOT must be set by bootstrap}"
 
-RUNPOD_DIR="${RUNPOD_DIR:-${WORKSPACE_ROOT}/runpodTools}"
 CONDA_DIR="${CONDA_DIR:-${WORKSPACE_ROOT}/miniconda3}"
 COMFY_DIR="${COMFY_DIR:-${WORKSPACE_ROOT}/ComfyUI}"
 KOHYA_DIR="${KOHYA_DIR:-${WORKSPACE_ROOT}/kohya_ss}"
@@ -21,7 +20,7 @@ ENV_NAME="${ENV_NAME:-comfyui}"
 # Remote state tracking
 # ============================================================
 # State must live on the remote pod (NOT locally)
-STATE_FILE="${RUNPOD_DIR}/state.env"
+STATE_FILE="${WORKSPACE_ROOT}/state.env"
 
 ensureStateDir() {
   runCmd mkdir -p "$(dirname "$STATE_FILE")"
@@ -68,7 +67,6 @@ EOF
 )"
 }
 
-
 # ------------------------------------------------------------
 # showInventory (REMOTE)
 # ------------------------------------------------------------
@@ -80,7 +78,6 @@ showInventory() {
 echo "--- Directories ---"
 ls -ld \
   "'${WORKSPACE_ROOT}'" \
-  "'${RUNPOD_DIR}'" \
   "'${CONDA_DIR}'" \
   "'${COMFY_DIR}'" \
   "'${KOHYA_DIR}'" \
