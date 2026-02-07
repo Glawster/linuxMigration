@@ -75,6 +75,11 @@ main() {
   # Now safe to update base conda if you still want it
   updateCondaBase || true
 
+  if ! isStepDone "CONDA_INIT" || [[ "${FORCE:-0}" == "1" ]]; then
+    ensureCondaInitBash
+    markStepDone "CONDA_INIT"
+  fi
+
   if ! ensureCondaChannels ; then
     #condaDiagnostics
     die "conda channel configuration failed"

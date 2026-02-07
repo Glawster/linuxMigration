@@ -27,6 +27,51 @@ if ! llava_validate_config 2>/dev/null; then
   die "llava model configuration is invalid" 
 fi
 
+# ------------------------------------------------------------
+# helper: patch pyproject.toml to remove gradio deps for 
+# headless installs (e.g., server without GUI)
+# ------------------------------------------------------------
+patchPyProjectHeadless() {
+  local envName="$1"
+  local repoDir="$2"
+
+  if [[ -z "$envName" || -z "$repoDir" ]]; then
+    error "patchPyProjectHeadless requires envName and repoDir"
+    return 1
+  fi
+
+  log "[$envName] patching pyproject.toml for headless install (remove gradio deps)"
+
+  runSh "ENV_NAME='$envName' REPO_DIR='$repoDir' python - <<'PY'
+from pathlib import Path
+import re
+import os
+
+env = os.environ['ENV_NAME']
+repo = Path(os.environ['REPO_DIR'])
+
+p = repo / 'pyproject.toml'
+if not p.exists():
+    raise SystemExit(f'pyproject.toml not found: {p}')
+
+t = p.read_text()
+
+def drop_dep(text: str, pkg: str) -> str:
+    return re.sub(rf'\\s*\"{re.escape(pkg)}[^\"\\n]*\"\\s*,?', '', text)
+
+t2 = t
+t2 = drop_dep(t2, 'gradio')
+t2 = drop_dep(t2, 'gradio_client')
+
+# clean up stray commas
+t2 = re.sub(r',\\s*\\]', '\\n]', t2)
+
+p.write_text(t2)
+
+print(f'[{env}] patched:', p)
+print(f'[{env}] gradio removed:', t2 != t)
+PY"
+}
 
 # ------------------------------------------------------------
 # helper: resolve a ref/tag/branch (REMOTE)
@@ -60,6 +105,7 @@ generateScript() {
 
   # bake in what we want self-contained on the pod
   local bakedWorkspaceRoot="${WORKSPACE_ROOT:-/workspace}"
+  echo "bakedWorkspaceRoot: $bakedWorkspaceRoot"
 
   cat >"$outFile" <<EOF
 #!/usr/bin/env bash
@@ -67,9 +113,8 @@ set -euo pipefail
 
 # baked-in defaults from bootstrap
 WORKSPACE='${bakedWorkspaceRoot}'
-
-LIB_DIR="\${LIB_DIR:-\${WORKSPACE}/lib}"
-source "${LIB_DIR}/llava.sh"
+LIB_DIR="\${WORKSPACE}/lib"
+source "\${LIB_DIR}/llava.sh"
 llava_validate_config || exit 1
 
 ENV_NAME="${LLAVA_ENV_NAME:-${ENV_NAME:-llava}}"
@@ -157,6 +202,7 @@ else
       python -m llava.serve.model_worker --host 0.0.0.0 --port \"\$WORKER_PORT\" \\
         --controller http://127.0.0.1:\$CONTROLLER_PORT \\
         --model-path \"\$LLAVA_MODEL_PATH\" \\
+        --multi-modal \\
         \$WORKER_ADDR_ARG 2>&1 | tee -a \"\$LOG_WORKER\"'"
   echo "worker started..."
 fi
@@ -227,7 +273,7 @@ main() {
   # Upgrade pip/wheel/setuptools
   if ! isStepDone "LLAVA_PIP_UPGRADE" || [[ "${FORCE:-0}" == "1" ]]; then
     log "upgrading pip, wheel, and setuptools"
-    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U pip wheel setuptools
+    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore pip wheel setuptools
     markStepDone "LLAVA_PIP_UPGRADE"
   else
     log "pip, wheel, and setuptools already upgraded"
@@ -236,7 +282,9 @@ main() {
   # Install LLaVA
   if ! isStepDone "LLAVA_INSTALL" || [[ "${FORCE:-0}" == "1" ]]; then
     log "installing llava (editable)"
+    patchPyProjectHeadless "$LLAVA_ENV_NAME" "$LLAVA_DIR"
     condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -e "$LLAVA_DIR"
+    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore "numpy<2"
     markStepDone "LLAVA_INSTALL"
   else
     log "llava already installed"
@@ -255,22 +303,32 @@ main() {
 
   if ! isStepDone "LLAVA_PROTO_SENTENCEPIECE" || [[ "${FORCE:-0}" == "1" ]]; then
     log "installing protobuf and sentencepiece"
-    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U protobuf sentencepiece
+    condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore protobuf sentencepiece
     markStepDone "LLAVA_PROTO_SENTENCEPIECE"
   else
     log "protobuf and sentencepiece already installed"
   fi
 
-  if [[ "${LLAVA_JOYFUL:-0}" == "1" ]]; then
-    if ! isStepDone "JOY_EXTRA_DEPS" || [[ "${FORCE:-0}" == "1" ]]; then
-        log "installing extra deps useful for joycaption / modern llava-family"
-        condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore -U \
-            transformers==4.44.2 pillow accelerate bitsandbytes  # pin transformers if newer versions break
-        markStepDone "JOY_EXTRA_DEPS"
-    else
-        log "joycaption extra deps already installed"
-    fi
-  fi
+  # if [[ "${LLAVA_JOYFUL:-0}" == "1" ]]; then
+  #   if ! isStepDone "JOY_EXTRA_DEPS" || [[ "${FORCE:-0}" == "1" ]]; then
+  #       log "installing extra deps useful for joycaption / modern llava-family"
+  #       condaEnvCmd "$LLAVA_ENV_NAME" python -m pip install --root-user-action=ignore  \
+  #           transformers==4.44.2 pillow accelerate bitsandbytes  # pin transformers if newer versions break
+  #       markStepDone "JOY_EXTRA_DEPS"
+  #   else
+  #       log "joycaption extra deps already installed"
+  #   fi
+  # fi
+
+  condaEnvCmd "$LLAVA_ENV_NAME" python - <<'PY'
+import torch, torchvision, transformers, tokenizers, accelerate, sentencepiece
+print("torch        :", torch.__version__)
+print("torchvision  :", torchvision.__version__)
+print("transformers :", transformers.__version__)
+print("tokenizers   :", tokenizers.__version__)
+print("accelerate   :", accelerate.__version__)
+print("sentencepiece:", sentencepiece.__version__)
+PY
 
   local startScript="llavaStart.sh"
   log "writing llava start helper (local): $startScript"

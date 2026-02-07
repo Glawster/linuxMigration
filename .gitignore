@@ -33,7 +33,6 @@ runs/
 runpodTools/logs/
 runpodTools/state.env
 runpodTools/uploadModels.sh
-runpodTools/uploadModels.sh
 support.*.zip
 llavaStart.sh
 llavaAdapter.py
@@ -43,3 +42,5 @@ startLlavaApi.sh
 runpodTools/startComfyUI.sh
 runpodTools/startLlavaApi.sh
 aw
+adapterStart.sh
+uploadModels.sh

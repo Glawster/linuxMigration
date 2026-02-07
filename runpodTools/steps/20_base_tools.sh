@@ -17,11 +17,38 @@ source "$LIB_DIR/apt.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/workspace.sh"
 
+setupSharedCaches() {
+  # run once (independent of BASE_TOOLS)
+  if isStepDone "CACHE_SETUP" && [[ "${FORCE:-0}" != "1" ]]; then
+    log "cache already set up"
+    return 0
+  fi
+
+  log "setting up shared caches"
+
+  # make cache dirs on workspace (persists for the pod lifetime)
+  runSh "mkdir -p \
+    /workspace/.cache/pip \
+    /workspace/.cache/huggingface/transformers \
+    /workspace/.cache/torch"
+
+  # make env vars available to all future shells (and tmux sessions)
+  runSh "mkdir -p /etc/profile.d"
+  runSh "cat >/etc/profile.d/runpod_cache.sh <<'EOF'
+export PIP_CACHE_DIR=/workspace/.cache/pip
+export HF_HOME=/workspace/.cache/huggingface
+export TRANSFORMERS_CACHE=/workspace/.cache/huggingface/transformers
+export TORCH_HOME=/workspace/.cache/torch
+EOF"
+  runSh "chmod 0644 /etc/profile.d/runpod_cache.sh"
+
+  markStepDone "CACHE_SETUP"
+  log "cache set up"
+}
+
 main() {
- 
-  # Create bash aliases
-  log "creating /root/.bash_aliases"
-  runSh "echo \"alias d='ls -al'\" >> ~/.bash_aliases"
+
+  setupSharedCaches
 
   # Check if already done and not forcing
   if isStepDone "BASE_TOOLS" && [[ "${FORCE:-0}" != "1" ]]; then

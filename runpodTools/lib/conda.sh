@@ -221,7 +221,6 @@ condaEnvCmd() {
 
 ensureLlavaEnv() {
   local target="${1:-llava}"
-  local joyful="${LLAVA_JOYFUL:-0}"
 
   # Helper: does env exist?
   condaEnvExists() {
@@ -233,24 +232,25 @@ ensureLlavaEnv() {
     return 0
   fi
 
-  if [[ "$target" == "llava" ]] && condaEnvExists "joycaption"; then
-    log "cloning joycaption → llava"
-    _condaExec "create -y --name \"$target\" --clone joycaption"
-    return 0
-  fi
-
-  if [[ "$target" == "joycaption" ]] && condaEnvExists "llava"; then
-    log "cloning llava → joycaption"
-    _condaExec "create -y --name \"$target\" --clone llava"
-    return 0
-  fi
-
-  if condaEnvExists "runpod"; then
-    log "cloning runpod → llava"
-    _condaExec "create -y --name \"$target\" --clone runpod"
-    return 0
-  fi
-
   log "creating fresh conda env: llava (python 3.10)"
   _condaExec "create -y -n \"$target\" python=3.10"
+}
+
+# ------------------------------------------------------------
+# initialise conda for interactive shells (remote-safe, idempotent-ish)
+# ------------------------------------------------------------
+ensureCondaInitBash() {
+  log "ensuring conda init (bash)"
+
+  # if already initialised, skip (unless FORCE=1 handled by caller)
+  if runSh "test -f /root/.bashrc && grep -q '>>> conda initialize >>>' /root/.bashrc"; then
+    log "conda init already present in /root/.bashrc"
+    return 0
+  fi
+
+  runSh "touch /root/.bashrc"
+  _condaExec "init bash"
+
+  log "conda init configured"
+  return 0
 }

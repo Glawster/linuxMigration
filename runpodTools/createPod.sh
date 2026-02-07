@@ -78,7 +78,6 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --joyful)
-      JOYFUL=1
       BOOTSTRAP_ARGS+=(--joyful)
       if [[ ! " ${BOOTSTRAP_ARGS[@]} " =~ " --llava " ]]; then
         BOOTSTRAP_ARGS+=(--llava)

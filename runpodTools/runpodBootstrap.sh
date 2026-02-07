@@ -52,17 +52,22 @@ TESTDIR="$RUNPOD_DIR/test"
 ENABLE_COMFYUI="${ENABLE_COMFYUI:-1}"
 ENABLE_KOHYA="${ENABLE_KOHYA:-0}"
 ENABLE_LLAVA="${ENABLE_LLAVA:-0}"
-ENABLE_JOYFUL="${ENABLE_JOYFUL:-0}"
-if $ENABLE_JOYFUL; then
-  ENABLE_LLAVA=1
-fi
+
+# joyful is a *mode* controlled by env var JOYFUL (0/1/true/yes/on)
+JOYFUL="${JOYFUL:-0}"
+case "${JOYFUL,,}" in
+  1|true|yes|on) JOYFUL=1; ENABLE_LLAVA=1 ;;
+  *)             JOYFUL=0 ;;
+esac
+
+export DRY_RUN DRY_PREFIX FORCE ENABLE_COMFYUI ENABLE_KOHYA ENABLE_LLAVA JOYFUL
 
 DRY_RUN="${DRY_RUN:-0}"
 DRY_PREFIX="${DRY_PREFIX:-[]}"
 
 FORCE="${FORCE:-0}"
 
-export DRY_RUN DRY_PREFIX FORCE ENABLE_COMFYUI ENABLE_KOHYA ENABLE_LLAVA ENABLE_JOYFUL
+export DRY_RUN DRY_PREFIX FORCE ENABLE_COMFYUI ENABLE_KOHYA ENABLE_LLAVA JOYFUL
 
 FROM_STEP=""
 ONLY_STEP=""
@@ -166,7 +171,7 @@ while [[ $# -gt 0 ]]; do
     --no-comfyui) ENABLE_COMFYUI=0; shift ;;
     --kohya) ENABLE_KOHYA=1; shift ;;
     --llava) ENABLE_LLAVA=1; shift ;;
-    --joyful) ENABLE_JOYFUL=1; shift ;;
+    --joyful) JOYFUL=1; ENABLE_LLAVA=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --force) FORCE=1; shift ;;
     --from)
@@ -318,7 +323,7 @@ log "runpod bootstrap (modular)"
 echo "comfyui   : $ENABLE_COMFYUI"
 echo "kohya     : $ENABLE_KOHYA"
 echo "llava     : $ENABLE_LLAVA"
-echo "joyful    : $ENABLE_JOYFUL"
+echo "joyful    : $JOYFUL"
 echo "dry run   : $DRY_RUN"
 echo "force     : $FORCE"
 echo "state file: $STATE_FILE"
@@ -346,17 +351,13 @@ for step in "${ALL_AVAILABLE_STEPS[@]}"; do
     70_llava)
       if [[ "$ENABLE_LLAVA" == "1" ]]; then
         ALL_STEPS+=("$step")
-        # Also ensure llava adapter step is included
-        if ! [[ " ${ALL_STEPS[*]} " == *" 75_llava_adapter "* ]]; then
-          ALL_STEPS+=("75_llava_adapter")
-        fi
       fi
       ;;
-#    75_llava_adapter)
-#      if [[ "$ENABLE_LLAVA" == "1" ]]; then
-#        ALL_STEPS+=("$step")
-#      fi
-#      ;;
+    75_llava_adapter)
+      if [[ "$ENABLE_LLAVA" == "1" ]]; then
+        ALL_STEPS+=("$step")
+      fi
+      ;;
     *)
       # Include all other steps by default
       ALL_STEPS+=("$step")
@@ -370,6 +371,13 @@ STEPS_TO_RUN=()
 if [[ -n "$ONLY_STEP" ]]; then
   # Run only specified step
   STEPS_TO_RUN=("$ONLY_STEP")
+
+  # Convenience: llava implies adapter
+  if [[ "$ENABLE_LLAVA" == "1" ]]; then
+    if [[ "$ONLY_STEP" == "70_llava" || "$ONLY_STEP" == "70" ]]; then
+      STEPS_TO_RUN+=("75_llava_adapter")
+    fi
+  fi
 else
   # Start from beginning or --from step
   START_FOUND=0
