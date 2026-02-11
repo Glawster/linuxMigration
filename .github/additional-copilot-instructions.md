@@ -93,39 +93,14 @@ linuxMigration/
 
 Primary script for organizing home directory structure.
 
+> **Note:** For generic Bash scripting safety patterns and common functions, see [Bash Scripting](../copilot-instructions.md#bash-scripting) in the generic guidelines.
+
 **Key Features:**
 - Creates standard directory structure
 - Moves files to appropriate locations
 - Preserves original structure where needed
 - Interactive confirmations for destructive operations
 - Comprehensive logging
-
-**Safety Patterns:**
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# Helper function for safe directory creation
-makeDir() {
-    local dir="$1"
-    if [ ! -d "$dir" ]; then
-        echo "creating directory: $dir"
-        mkdir -p "$dir"
-    fi
-}
-
-# Safe file move with existence check
-moveIfExists() {
-    local src="$1"
-    local dest="$2"
-    if [ -e "$src" ]; then
-        echo "moving: $src -> $dest"
-        mv -i "$src" "$dest/"
-    else
-        echo "skipping (not found): $src"
-    fi
-}
-```
 
 **Usage:**
 ```bash
@@ -154,9 +129,9 @@ bash organiseHome.sh --source /old/home --target /new/home
 └── [other standard directories]
 ```
 
-### Common Bash Patterns
+**Project-Specific Bash Patterns:**
 
-#### Progress Indicators
+The scripts in this repository follow the generic bash patterns documented in [Bash Scripting](../copilot-instructions.md#bash-scripting). Examples specific to organiseHome.sh:
 ```bash
 echo "=== Starting Home Directory Organization ==="
 echo "source: $sourceDir"
@@ -172,25 +147,6 @@ moveIfExists "$sourceDir/file.txt" "$targetDir/Documents"
 echo "=== Organization Complete ==="
 ```
 
-#### Error Handling
-```bash
-# Check prerequisites
-if [ ! -d "$sourceDir" ]; then
-    echo "Error: Source directory does not exist: $sourceDir"
-    exit 1
-fi
-
-# Validate before destructive operations
-if [ -e "$targetFile" ]; then
-    read -p "File exists. Overwrite? (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Skipping: $targetFile"
-        continue
-    fi
-fi
-```
-
 ## Subprojects
 
 This repository contains three major subprojects, each with its own focus and tooling:
@@ -201,62 +157,43 @@ This repository contains three major subprojects, each with its own focus and to
 
 ### recoveryTools - Photo/Video Recovery Pipeline
 
-All Python tools follow a consistent recovery pipeline pattern: work in-place, move filtered items to subdirectories.
+> **Note:** For generic recovery pipeline patterns, see [Recovery Pipeline Pattern](../copilot-instructions.md#recovery-pipeline-pattern) in the generic guidelines.
 
-### Common Patterns
+All recoveryTools follow the standard in-place processing pattern: work in directory, move filtered items to subdirectories.
 
-#### Argument Parsing
+#### recoveryCommon.py - Shared Utilities
+
+Shared constants and helper functions for the recovery pipeline.
+
+**File Type Detection:**
 ```python
-#!/usr/bin/env python3
-import argparse
-from pathlib import Path
+from recoveryCommon import isImage, isVideo, IMAGE_EXTS, VIDEO_EXTS
 
-def main():
-    parser = argparse.ArgumentParser(description="Tool description")
-    parser.add_argument("--source", required=True, help="Source directory")
-    parser.add_argument("--dry-run", action="store_true", help="Show what would be done")
-    parser.add_argument("--threshold", type=float, default=5.0, help="Detection threshold")
-    args = parser.parse_args()
-    
-    # Validate path
-    try:
-        sourceDir = Path(args.source).expanduser().resolve()
-    except (OSError, RuntimeError, ValueError) as e:
-        raise SystemExit(f"Error resolving path: {e}")
-    
-    if not sourceDir.is_dir():
-        raise SystemExit(f"Directory does not exist: {sourceDir}")
-    
-    # Process
-    processDirectory(sourceDir, args.dry_run, args.threshold)
+# Supported formats
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".gif", ".webp", ".heic", ".cr2", ".nef"}
+VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".mpg", ".mpeg", ".mts", ".m2ts", ".wmv", ".3gp"}
 
-if __name__ == "__main__":
-    main()
+# Check file types
+if isImage(filePath):
+    # Handle image
+    pass
+
+if isVideo(filePath):
+    # Handle video
+    pass
 ```
 
-#### In-Place Processing Pattern
+**Path Utilities:**
 ```python
-def processDirectory(sourceDir, dryRun=False):
-    """Process files in-place, moving filtered items to subdirectory."""
-    
-    # Create filtered directory
-    filteredDir = sourceDir / "FilteredImages"
-    if not dryRun:
-        filteredDir.mkdir(exist_ok=True)
-    
-    # Process files
-    for imageFile in sourceDir.glob("*.jpg"):
-        if shouldFilter(imageFile):
-            targetPath = filteredDir / imageFile.name
-            
-            if dryRun:
-                print(f"Would move: {imageFile} -> {targetPath}")
-            else:
-                imageFile.rename(targetPath)
-                print(f"Moved: {imageFile.name}")
+from recoveryCommon import isRelativeTo
+
+# Python 3.8-compatible relative path checking
+if isRelativeTo(filePath, parentDir):
+    # File is within parent directory
+    pass
 ```
 
-### removeBlackImages.py
+#### removeBlackImages.py - Black Image Detection
 
 Detects and removes black/corrupt images using histogram analysis.
 
@@ -889,21 +826,14 @@ set -euo pipefail
 
 ## Safety Guidelines
 
-### Bash Scripts
-- **Always** use `set -euo pipefail`
-- Quote all variable expansions: `"$VAR"`
-- Use `[[` for conditionals
-- Check existence before operations
-- Provide interactive confirmations for destructive actions
-- Use `-i` flag for `mv` and `cp` commands
+> **Note:** For generic safety patterns, see [Bash Scripting](../copilot-instructions.md#bash-scripting) and [Security Considerations](../copilot-instructions.md#security-considerations) in the generic guidelines.
 
-### Python Scripts
-- Validate all path arguments with `Path.resolve()`
-- Support `--dry-run` for testing
-- Create filtered subdirectories, don't delete
-- Log all operations
-- Handle errors gracefully (don't crash on one bad file)
-- Preserve original files when possible
+### Project-Specific Safety Considerations
+
+- **Home directory migrations**: Always test in isolated directories first
+- **Recovery tools**: Process in-place to avoid data loss; use `--dry-run` before actual runs
+- **RunPod bootstraps**: Use `--dry-run` to preview changes before modifying remote systems
+- **Configuration files**: Backup `~/.config/kohya/kohyaConfig.json` before modifications
 
 ## Troubleshooting
 
