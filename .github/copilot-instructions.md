@@ -1,73 +1,329 @@
-# GitHub Copilot Instructions for linuxMigration
+# GitHub Copilot Instructions - Generic Development Guidelines
 
-## Project Overview
+## Overview
 
-linuxMigration is a collection of shell scripts and Python utilities for managing Linux system migration, file organization, and media recovery. It includes tools for organizing home directories, installing applications, processing recovered files, and managing gaming environments.
+These are generic development guidelines for Python projects supporting multiple frameworks and patterns. They establish consistent coding standards, naming conventions, and best practices that can be applied across projects.
 
-## Quick Start
+**Note**: For project-specific information, architecture details, and custom workflows, see `additional-copilot-instructions.md` in the `.github` directory.
 
-### Prerequisites
-- Linux OS (tested on Pop!_OS / Ubuntu)
-- Bash shell
-- Python 3.8 or higher
-- Standard Linux utilities (mv, mkdir, etc.)
+## Quick Reference by Technology
 
-### Setup for Development
-1. Clone the repository
-2. For recovery tools, install dependencies:
-   ```bash
-   cd recoveryTools
-   pip install -r requirements.txt
-   ```
-3. Make scripts executable:
-   ```bash
-   chmod +x *.sh
-   ```
-
-### Running Scripts
-- Shell scripts: `./scriptName.sh` or `bash scriptName.sh`
-- Python scripts: `python3 scriptName.py` (use `--help` for options)
-- Recovery pipeline: `cd recoveryTools && python3 recoveryPipeline.py --source /path/to/images`
-
-## Architecture & Key Components
-
-### Directory Structure
-- **Root level**: Main shell scripts for system management and organization
-- **recoveryTools/**: Python utilities for media file recovery and deduplication
-- **kohyaTools/**: Tools related to image processing workflows
-- **runpodTools/**: Cloud computing environment setup utilities
-
-### Core Technologies
-- **Bash Scripting**: Primary automation and system management
-- **Python**: Media processing, recovery tools, and utilities
-- **Image Processing**: PIL/Pillow, imagehash for deduplication
-- **Video Processing**: ffmpeg integration for video analysis
+- **Tkinter Desktop Apps**: See [Tkinter Guidelines](#tkinter-gui-development)
+- **Qt/PySide6 Apps**: See [Qt Guidelines](#qt-gui-development)
+- **FastAPI/React Web Apps**: See [Web Application Guidelines](#web-application-development)
+- **DaVinci Resolve Scripts**: See [Video Automation Guidelines](#video-automation)
+- **Bash/System Scripts**: See [Bash Scripting Guidelines](#bash-scripting)
 
 ## Development Standards
 
 ### Code Style & Quality
+- **Python Formatting**: Use `black` for consistent code formatting
 - **Bash Scripts**: Use `set -euo pipefail` for safety, follow shellcheck recommendations
-- **Python Code**: Follow PEP 8 conventions
-- **Error Handling**: Always validate inputs and provide clear error messages
-- **Documentation**: Include header comments explaining script purpose and usage
+- **JavaScript/React**: Prettier (standard React/ESLint rules)
+- **Linting**: 
+  - Python: Custom GUI naming linter for Tkinter, PEP 8 for general code
+  - Bash: shellcheck
+  - JavaScript: ESLint
+- **Pre-commit hooks**: Automatic formatting and linting before commits
+- **Testing**: pytest for comprehensive test coverage
+- **Type hints**: Use type annotations where appropriate
+- **Documentation**: Docstrings for all public functions and classes
 
-### Naming Conventions
-- **Shell Scripts**: Use descriptive names with `.sh` extension (e.g., `organiseHome.sh`)
-- **Python Scripts**: Use snake_case with `.py` extension (e.g., `dedupe_images.py`)
-- **Functions**: camelCase for both bash and Python functions (e.g., `makeDir`, `processFiles`)
-- **Variables**: camelCase for multi-word names (e.g., `sourceDir`, `imgPath`, `startTime`)
+### File Organization
+- **UI Code**: Separate GUI components from business logic
+- **Business Logic**: Core functionality independent of UI (NO framework dependencies in core logic)
+- **Utilities**: Shared helper functions in dedicated modules
+- **Tests**: Mirror source structure in test directory
+- **Configuration**: Centralize constants and settings
+
+## Naming Conventions by Framework
+
+### Tkinter Projects
+- **GUI Components**: Prefix-based (e.g., `frmMain`, `btnSave`, `lblStatus`)
+- **Classes**: PascalCase (e.g., `MainFrame`, `DataProcessor`)
+- **Functions and Variables**: camelCase (e.g., `processData`, `loadConfig`)
+- **Constants**: UPPERCASE_WITH_UNDERSCORES (e.g., `MAX_SIZE`)
+- **Private Members**: Leading underscore (e.g., `_internalMethod`)
+- **Files**: camelCase (e.g., `dataProcessor.py`)
+
+### Qt/PySide6 Projects
+- **Classes**: PascalCase (e.g., `MainWindow`, `DataProcessor`)
+- **Functions and Variables**: snake_case (e.g., `process_data`, `load_config`)
+- **Qt Signals**: camelCase (e.g., `imageSelected`, `dataSaved`)
+- **Constants**: UPPERCASE_WITH_UNDERSCORES (e.g., `MAX_SIZE`)
+- **Private Members**: Leading underscore (e.g., `_internal_method`)
+- **Files**: camelCase (e.g., `dataProcessor.py`)
+
+### DaVinci Resolve / Video Automation
+- **Functions and Variables**: camelCase (e.g., `getResolve`, `timelineExists`)
+- **Constants**: UPPER_SNAKE_CASE (e.g., `VIDEO_EXTENSIONS`)
+- **Classes**: PascalCase (e.g., `TestTimeline`)
+- **Files**: camelCase (e.g., `organiseHomeVideo.py`)
+
+### Bash Scripts
+- **Shell Scripts**: Descriptive names with `.sh` extension (e.g., `organiseHome.sh`)
+- **Functions**: camelCase (e.g., `makeDir`, `moveIfExists`)
+- **Variables**: camelCase (e.g., `sourceDir`, `targetPath`)
 - **Constants**: UPPERCASE_WITH_UNDERSCORES
 
-### Script Organization
-- Keep scripts focused on a single purpose
-- Use helper functions for repeated operations
-- Include usage information and help text
-- Validate all required arguments and paths
+### Web Applications (FastAPI/React)
+- **Python Classes**: PascalCase (e.g., `MediaEditor`)
+- **Python Functions/Variables**: camelCase (e.g., `processUpload`)
+- **JavaScript/React Components**: PascalCase (e.g., `UploadButton`)
+- **Constants**: UPPERCASE_WITH_UNDERSCORES (e.g., `MAX_UPLOAD_SIZE`)
 
-## Bash Scripting Guidelines
+## Tkinter GUI Development
+
+### Framework Patterns
+- Use `pack()` layout manager consistently (avoid `grid()` unless necessary)
+- Implement consistent padding using constants (e.g., `PAD_X`, `PAD_Y`)
+- Follow frame-based component organization
+- Use status indicators for user feedback and progress
+- Inherit from base frame classes for standard functionality
+
+### Component Standards
+- **Buttons**: `ttk.Button` with `btn` prefix
+- **Entry Fields**: `ttk.Entry` with `ent` prefix
+- **Labels**: `ttk.Label` with `lbl` prefix
+- **Frames**: `ttk.Frame` with `frm` prefix
+- **Listboxes**: `tk.Listbox` with `lst` prefix
+- **Comboboxes**: `ttk.Combobox` with `cmb` prefix
+- **Checkbuttons**: `ttk.Checkbutton` with `chk` prefix
+- **Radiobuttons**: `ttk.Radiobutton` with `rad` prefix
+- **Text Widgets**: `tk.Text` with `txt` prefix
+- **Scrollbars**: `ttk.Scrollbar` with `scr` prefix
+- **Canvas**: `tk.Canvas` with `can` prefix
+
+### GUI Naming Linter
+
+#### Naming Rules
+Widgets must follow specific prefixes based on their type. See component standards above.
+
+#### Function Formatting Rules
+- Methods longer than 4 lines should have a blank line after the `def` statement
+- Short methods (≤4 lines) do not require blank line
+
+#### Usage
+```bash
+runLinter                    # Lint current directory
+runLinter path/to/file.py    # Lint specific file
+runLinter path/to/directory  # Lint directory
+```
+
+### Example Code
+```python
+import tkinter as tk
+from tkinter import ttk
+
+class MyFrame(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self._createWidgets()
+        
+    def _createWidgets(self):
+        self.frmMain = ttk.Frame(self)
+        self.frmMain.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        
+        self.lblStatus = ttk.Label(self.frmMain, text="Ready")
+        self.lblStatus.pack(pady=5)
+        
+        self.btnAction = ttk.Button(
+            self.frmMain, 
+            text="Process", 
+            command=self._onAction
+        )
+        self.btnAction.pack(pady=5)
+    
+    def _onAction(self):
+        """Handle button click."""
+        self.lblStatus.config(text="Processing...")
+        # Do work
+        self.lblStatus.config(text="Complete")
+```
+
+## Qt GUI Development
+
+### Framework Patterns
+- Use Qt layouts (QVBoxLayout, QHBoxLayout, QGridLayout, QSplitter)
+- Use signals and slots for component communication
+- Inherit from appropriate Qt widget classes
+- Keep UI code separate from business logic
+- Follow Qt's Model-View patterns where appropriate
+
+### Component Standards
+- **Buttons**: `QPushButton` or `QToolButton`
+- **Labels**: `QLabel` for text and images
+- **Text Input**: `QLineEdit` (single line) or `QTextEdit`/`QPlainTextEdit` (multi-line)
+- **Lists**: `QListWidget` or `QListView` with models
+- **Combos**: `QComboBox` for dropdown selections
+- **Checks**: `QCheckBox` for boolean options
+- **Radio**: `QRadioButton` for single-choice options
+- **Containers**: `QWidget`, `QFrame`, `QGroupBox`
+- **Dialogs**: `QDialog`, `QMessageBox`, `QFileDialog`
+- **Menus**: `QMenuBar`, `QMenu`, `QAction`
+
+### Qt-Specific Patterns
+
+#### Signals and Slots
+- Define custom signals using `Signal` from `PySide6.QtCore`
+- Connect signals to slots using `.connect()`
+- Emit signals to notify components
+- Disconnect signals when widgets are destroyed if needed
+
+#### Widget Initialization
+- Call `super().__init__()` in widget constructors
+- Set up UI in a separate `_setup_ui()` method
+- Initialize member variables before UI setup
+- Connect signals after UI is created
+
+#### Layout Management
+- Always use layouts, never fixed positions
+- Use spacers to control widget spacing
+- Set size policies appropriately
+- Use `setSizeConstraint()` for proper sizing
+
+#### Resource Management
+- Clean up resources in `closeEvent()` or destructors
+- Disconnect signals when appropriate
+- Close file handles and network connections
+
+### Example Code
+```python
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel
+from PySide6.QtCore import Signal
+
+class MyWidget(QWidget):
+    """Custom widget with signal example."""
+    
+    processing_complete = Signal(str)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._setup_ui()
+        
+    def _setup_ui(self):
+        """Set up the user interface."""
+        layout = QVBoxLayout(self)
+        
+        self.status_label = QLabel("Ready")
+        layout.addWidget(self.status_label)
+        
+        self.action_button = QPushButton("Process")
+        self.action_button.clicked.connect(self._on_action)
+        layout.addWidget(self.action_button)
+    
+    def _on_action(self):
+        """Handle button click."""
+        self.status_label.setText("Processing...")
+        result = self._do_processing()
+        self.status_label.setText("Complete")
+        self.processing_complete.emit(result)
+    
+    def _do_processing(self) -> str:
+        """Perform the actual processing."""
+        return "result"
+```
+
+## Web Application Development
+
+### Architecture (FastAPI + React)
+
+#### Backend (FastAPI)
+- Use FastAPI for all API endpoints
+- Design RESTful endpoints
+- Validate incoming requests (file type, size, format)
+- Serve static/media files securely
+- Return clear JSON error messages
+
+#### Frontend (React)
+- Use functional components and hooks
+- Leverage UI libraries (Material UI, etc.)
+- Store API URLs in environment files
+- Handle loading, errors, and job statuses gracefully
+- Provide responsive layouts
+
+#### Backend Example
+```python
+from fastapi import FastAPI, UploadFile, File
+
+app = FastAPI()
+
+@app.post("/upload/")
+async def uploadMedia(file: UploadFile = File(...)):
+    # Validate file type/size
+    # Store in upload directory
+    # Return file id/path
+    ...
+```
+
+#### Frontend Example
+```javascript
+import React, { useState } from "react";
+import { Button } from "@mui/material";
+
+function UploadButton() {
+  const [file, setFile] = useState(null);
+
+  const handleChange = (e) => setFile(e.target.files[0]);
+  
+  const handleUpload = async () => {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("file", file);
+    await fetch("/upload/", { method: "POST", body: formData });
+  };
+
+  return (
+    <>
+      <input type="file" onChange={handleChange} />
+      <Button onClick={handleUpload}>Upload</Button>
+    </>
+  );
+}
+```
+
+## Video Automation
+
+### DaVinci Resolve Integration
+- Never assume DaVinci Resolve APIs are available
+- Use try/except blocks around all Resolve API calls
+- Support both `DaVinciResolveScript` and `bmd` import methods
+- Test API compatibility across different versions
+
+### Common Patterns
+
+#### Timeline Management
+```python
+# Check if timeline exists
+if timelineExists(project, timelineName):
+    timeline = getTimelineByName(project, timelineName)
+else:
+    timeline = createTimelineInFolder(project, mediaPool, folder, timelineName)
+
+# Check if timeline is empty
+if timelineIsEmpty(timeline):
+    mediaPool.AppendToTimeline(clips)
+```
+
+#### Safe API Calls
+```python
+# Use safeCall for uncertain API methods
+success, result = safeCall(project, "GetTimelineByName", timelineName)
+if success and result:
+    # Use result
+    pass
+```
+
+### Stop File Mechanism
+- Support graceful cancellation via stop files
+- Check for stop files at appropriate intervals
+- Support multiple stop file locations
+- Use `stopIfRequested()` pattern
+
+## Bash Scripting
 
 ### Safety Patterns
-- Always use `set -euo pipefail` at the start of scripts
+- Always use `set -euo pipefail` at the start
 - Quote all variable expansions: `"$VAR"` not `$VAR`
 - Use `[[` for conditionals instead of `[`
 - Check if paths exist before operating on them
@@ -77,7 +333,7 @@ linuxMigration is a collection of shell scripts and Python utilities for managin
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Helper function example
+# Helper function
 makeDir() {
     local dir="$1"
     if [ ! -d "$dir" ]; then
@@ -99,25 +355,163 @@ moveIfExists() {
 ### User Interaction
 - Provide clear progress messages
 - Use `echo "=== Section Title ==="` for major operations
-- Use `-i` flag for interactive confirmations on destructive operations
+- Use `-i` flag for interactive confirmations
 - Exit with appropriate status codes (0 for success, non-zero for errors)
 
-## Python Recovery Tools Guidelines
+## Testing Requirements
 
-### Recovery Pipeline Pattern
+### Test Structure
+- Use pytest conventions (`test_*.py` files, `test_*` functions)
+- Create focused, single-purpose test functions
+- Use `tmp_path` fixture for temporary file/directory testing
+- Mock external dependencies appropriately
+- Organize tests to mirror source structure
+
+### Fast Validation Commands
+
+For projects with quick validation:
+```bash
+# Compile check (< 1 second)
+find . -name "*.py" -exec python3 -m py_compile {} \;
+
+# Test suite (< 1 second)
+python3 -m unittest discover tests/ -v
+
+# Headless verification (< 1 second)
+python3 headless_test.py
+```
+
+### Test Categories
+- **Unit Tests**: Individual functions/methods in isolation
+- **Integration Tests**: Component interactions
+- **End-to-End Tests**: Complete workflows
+- **GUI Tests**: User interface behavior
+- **Headless Tests**: Testing without display (for CI)
+
+### Coverage Expectations
+- Core business logic: >90% coverage
+- Critical functions: 100% coverage
+- Error handling: All error paths tested
+- Edge cases: Comprehensive boundary testing
+- Happy path and failure scenarios both covered
+
+### Test Best Practices
+- Use descriptive test function names
+- Follow Arrange-Act-Assert pattern
+- Use `tmp_path` for file operations (automatic cleanup)
+- Mock external services and expensive operations
+- Provide descriptive error messages in assertions
+- Test both success and failure scenarios
+- Keep tests independent and repeatable
+- Use parametrize for testing multiple inputs
+
+## Error Handling & Logging
+
+### Logging Standards
+- Use centralized logging configuration
+- Include module name and operation context
+- Log at appropriate levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+- Store logs with timestamp and rotation as appropriate
+
+### Logging Guidelines
+- **Message Format**: Keep messages lowercase and consistent
+- **Major Actions**: `"doing something..."` - action being initiated
+- **Action Completion**: `"...something done"` - action completed
+- **General Updates**: `"...message"` - informational updates
+- **Information Display**: `"...message: value"` - displaying data
+- **Error Messages**: Use Sentence Case for ERROR level messages
+
+### Usage Example
+```python
+from src.logUtils import logger
+
+logger.info("...processing data")
+logger.error("Failed to process: error details")
+```
+
+### Error Recovery
+- Implement graceful degradation for non-critical failures
+- Provide user-actionable error messages
+- Offer clear guidance when operations fail
+- Handle missing dependencies gracefully
+- Validate input before processing
+- Use try-except blocks appropriately
+- Log errors with sufficient context
+- Maintain application stability during errors
+
+## Security Considerations
+
+### Credential Handling
+- Never hardcode credentials or API keys
+- Use encrypted storage for sensitive data
+- Implement secure authentication flows
+- Clear credential caches when requested
+
+### File Operations
+- Validate file paths and extensions
+- Use safe file naming with conflict resolution
+- Implement proper error handling
+- Respect user permissions and system limitations
+- Always sanitize user-generated names
+- Support both Windows and Unix path separators
+
+### Path Handling
+- Always validate and sanitize file paths
+- Use absolute paths where possible
+- Avoid operations on system directories without confirmation
+- Check permissions before attempting operations
+
+### User Data Protection
+- Never delete files without explicit user consent
+- Use move operations instead of delete where possible
+- Create backup directories for filtered/removed items
+- Log all file operations for audit trail
+
+### API/Web Security
+- Validate all user input
+- Use secure storage for sensitive data
+- Handle exceptions without leaking sensitive information
+- Follow principle of least privilege
+- Limit upload size and sanitize files
+
+## Media Processing
+
+### File Type Support
+- **Photos**: JPEG, PNG, TIFF with EXIF metadata preservation
+- **Videos**: MP4, MOV with metadata extraction
+- **Thumbnails**: Consistent sizing and quality
+
+### Metadata Handling
+- Preserve EXIF data during file operations
+- Extract timestamp information reliably
+- Handle missing or corrupted metadata gracefully
+- Support multiple date sources (EXIF, file creation, modified)
+
+### Processing Tools
+- Use PIL/Pillow for image operations
+- Use `imagehash` for perceptual hashing and deduplication
+- Use ffmpeg for video analysis
+- Handle errors gracefully (corrupted files, missing metadata)
+
+### Performance Considerations
+- Use lazy loading for large collections
+- Implement progress feedback for batch operations
+- Cache results to improve responsiveness
+- Handle memory efficiently for large files
+- Profile before optimizing
+- Batch operations when possible
+
+## Recovery Pipeline Pattern
+
+### Python Recovery Tools
 - Scripts should work in-place, preserving directory structure
 - Create subdirectories for filtered items (e.g., `BlackImages/`, `Duplicates/`)
 - Support `--source` argument for target directory
 - Use `argparse` for command-line argument parsing
 - Validate paths using `pathlib.Path` with `resolve()`
+- Support `--dry-run` flags for testing operations
 
-### Image/Video Processing
-- Use PIL/Pillow for image operations
-- Use `imagehash` for perceptual hashing and deduplication
-- Support common formats: JPEG, PNG, MP4, MOV, etc.
-- Handle errors gracefully (corrupted files, missing metadata)
-
-### Common Patterns
+### Example Pattern
 ```python
 #!/usr/bin/env python3
 import argparse
@@ -143,233 +537,50 @@ if __name__ == "__main__":
     main()
 ```
 
-### File Operations
-- Use `Path.glob()` or `Path.rglob()` for file discovery
-- Always check if files exist before operating on them
-- Use `shutil.move()` for moving files between filesystems
-- Preserve timestamps and permissions where appropriate
-
-## Testing Requirements
-
-### Test Structure
-- Test scripts in a safe environment (use test directories)
-- Verify file operations don't cause data loss
-- Test with sample files before running on real data
-- Use `--dry-run` flags where available
-
-### Safety Checks
-- Always backup important data before running migration scripts
-- Test destructive operations with `-i` (interactive) flags first
-- Verify paths are correct before bulk operations
-- Use version control for configuration files
-
-### Validation
-- Check that files are moved, not deleted
-- Verify directory structures are preserved
-- Confirm file counts match expectations
-- Test edge cases (empty directories, special characters in filenames)
-
-## Security Considerations
-
-### Path Handling
-- Always validate and sanitize file paths
-- Use absolute paths where possible
-- Avoid operations on system directories without explicit confirmation
-- Check permissions before attempting file operations
-
-### User Data Protection
-- Never delete files without explicit user consent
-- Use move operations instead of delete where possible
-- Create backup directories for filtered/removed items
-- Log all file operations for audit trail
-
-### Script Execution
-- Require sudo only when necessary
-- Validate that scripts are run with appropriate permissions
-- Check for required tools/dependencies before execution
-- Exit gracefully if prerequisites are not met
-
-## File Organization Scripts
-
-### Home Organization Pattern
-Scripts like `organiseHome.sh` follow a consistent pattern:
-1. Define helper functions (`makeDir`, `moveIntoIfExists`)
-2. Create top-level directory structure
-3. Move items into appropriate categories
-4. Provide feedback on each operation
-
-### Categories
-- **Apps**: Application-related directories
-- **Cloud**: Cloud storage sync folders
-- **Development**: Code repositories and dev tools
-- **Games**: Gaming-related files and configs
-- **Configs**: Configuration files and dotfiles
-- **Archive**: Old/archived content
-
-### Usage Guidelines
-- Run scripts from the target directory or specify paths
-- Review the script before running to understand what will be moved
-- Use interactive mode (`-i` flag) when testing
-- Keep original directory structure as backup initially
-
-## Error Handling & Logging
-
-### Bash Script Logging
-- Echo clear status messages for each operation
-- Use consistent formatting: `echo "=== Major Section ==="`
-- Show what files/directories are being processed
-- Exit with meaningful error messages on failure
-
-### Python Script Logging
-- Use `print()` for progress updates
-- Include file paths in progress messages
-- Report summary statistics (files processed, duplicates found, etc.)
-- Log errors with context about what operation failed
-
-### Error Messages
-- Be specific about what went wrong
-- Include the path or file that caused the error
-- Suggest corrective actions when possible
-- Exit with non-zero status codes on errors
-
-### Example Patterns
-```bash
-# Bash
-if [ ! -d "$targetDir" ]; then
-    echo "Error: Directory does not exist: $targetDir"
-    exit 1
-fi
-
-# Python
-if not sourceDir.is_dir():
-    raise SystemExit(f"Error: Source directory does not exist: {sourceDir}")
-```
-
-## Code Examples
-
-### Bash Helper Functions
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# Make directory if it doesn't exist
-makeDir() {
-    local dir="$1"
-    if [ ! -d "$dir" ]; then
-        echo "creating directory: $dir"
-        mkdir -p "$dir"
-    else
-        echo "directory already exists: $dir"
-    fi
-}
-
-# Move file/directory if it exists
-moveIfExists() {
-    local src="$1"
-    local dest="$2"
-    if [ -e "$src" ]; then
-        makeDir "$dest"
-        echo "moving $src -> $dest"
-        mv -i "$src" "$dest/"
-    else
-        echo "not found (skip): $src"
-    fi
-}
-```
-
-### Python Path Validation
-```python
-import argparse
-from pathlib import Path
-
-def validateDirectory(pathStr):
-    """Validate and resolve a directory path."""
-    try:
-        path = Path(pathStr).expanduser().resolve()
-    except (OSError, RuntimeError, ValueError) as e:
-        raise SystemExit(f"Error resolving path: {e}")
-    
-    if not path.is_dir():
-        raise SystemExit(f"Directory does not exist: {path}")
-    
-    return path
-
-# Usage
-parser = argparse.ArgumentParser()
-parser.add_argument("--source", required=True, help="Source directory")
-args = parser.parse_args()
-sourceDir = validateDirectory(args.source)
-```
-
-### Recovery Tool Pattern
-```python
-#!/usr/bin/env python3
-"""
-Tool description and purpose.
-"""
-import argparse
-from pathlib import Path
-
-def processFiles(sourceDir, dryRun=False):
-    """Process files in the source directory."""
-    for imgFile in sourceDir.rglob("*.jpg"):
-        if dryRun:
-            print(f"Would process: {imgFile}")
-        else:
-            # Actual processing
-            print(f"Processing: {imgFile}")
-
-def main():
-    parser = argparse.ArgumentParser(description="Tool description")
-    parser.add_argument("--source", required=True, help="Source directory")
-    parser.add_argument("--dry-run", action="store_true", help="Show actions without executing")
-    args = parser.parse_args()
-    
-    sourceDir = validateDirectory(args.source)
-    processFiles(sourceDir, args.dry_run)
-
-if __name__ == "__main__":
-    main()
-```
-
 ## Common Patterns to Follow
 
-1. **Safety First**: Always use `set -euo pipefail` in bash scripts, validate inputs
-2. **Clear Feedback**: Provide progress messages for all operations
-3. **Non-Destructive**: Move files to subdirectories instead of deleting
-4. **Path Validation**: Resolve and check all paths before operations
-5. **Error Handling**: Exit gracefully with meaningful error messages
-6. **Dry Run Support**: Include `--dry-run` flags for testing operations
-7. **Modularity**: Use helper functions for repeated operations
-8. **Documentation**: Include usage information in script headers
+1. **Separation of Concerns**: Keep GUI, business logic, and data access separate
+2. **Error Handling**: Use try-except blocks with proper logging
+3. **User Feedback**: Provide clear status messages and progress indicators
+4. **Resource Management**: Clean up resources properly
+5. **Modular Design**: Create small, focused functions and classes
+6. **Configuration Management**: Centralize settings and constants
+7. **Testing**: Write tests for all new functionality
+8. **Documentation**: Add docstrings to public functions and classes
+9. **Type Hints**: Use type annotations for better code clarity
+10. **DRY Principle**: Don't repeat yourself - extract common code
+11. **Safety First**: Validate inputs, use safe patterns
+12. **Clear Feedback**: Provide progress messages for all operations
+13. **Non-Destructive**: Move files instead of deleting when possible
+14. **Path Validation**: Resolve and check all paths before operations
+15. **Dry Run Support**: Include `--dry-run` flags for testing
 
-## Repository-Specific Tools
+## Best Practices
 
-### Recovery Tools (`recoveryTools/`)
-- **dedupeImages.py**: Perceptual hash-based image deduplication
-- **dedupeVideos.py**: Video file deduplication
-- **filterBlackImages.py**: Remove corrupted/black images
-- **recoveryPipeline.py**: Combined pipeline for image processing
-- **sortImagesByResolution.py**: Organize images by resolution
-- **sortVideosByDuration.py**: Organize videos by duration
+### Code Quality
+- Write self-documenting code with clear names
+- Keep functions short and focused (single responsibility)
+- Use meaningful variable and function names
+- Comment only when necessary to explain "why", not "what"
+- Follow language-specific style guidelines
+- Use type hints for function signatures
 
-### Organization Scripts
-- **organiseHome.sh**: Structure home directory with standard categories
-- **organiseOfficeFiles.sh**: Organize office documents
-- **organiseWindowsHome.sh**: Windows home directory migration
-- **pdfFiler.sh**: PDF organization and filing
+### Performance
+- Profile before optimizing
+- Use appropriate data structures
+- Avoid premature optimization
+- Cache expensive computations when appropriate
+- Use lazy loading for large datasets
+- Batch operations when possible
 
-### Installation Scripts
-- **installLinuxApps.sh**: Install common Linux applications
-- **setupBattlenetPrefix.sh**: Configure gaming environment
+### Maintainability
+- Keep dependencies minimal and well-documented
+- Write tests that document expected behavior
+- Use version control effectively
+- Document breaking changes
+- Consider backward compatibility
+- Maintain compatibility through wrapper functions when needed
 
-## When Contributing
+---
 
-- Test scripts in a safe environment before production use
-- Preserve existing file organization patterns
-- Include help text and usage examples
-- Verify scripts work on both Ubuntu and Pop!_OS
-- Check for required dependencies before execution
-- Document any new tools or significant changes
-- Use `--dry-run` for testing file operations
-- Maintain backward compatibility with existing scripts
+**This master document contains generic guidelines applicable across all projects. For project-specific details, architecture, and custom workflows, always refer to `additional-copilot-instructions.md` in the `.github` directory of each repository.**
