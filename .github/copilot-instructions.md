@@ -1,5 +1,7 @@
 # GitHub Copilot Instructions - Generic Development Guidelines
 
+<!-- This file is synced from the master template in Glawster/organiseMyProjects -->
+
 ## Overview
 
 These are generic development guidelines for Python projects supporting multiple frameworks and patterns. They establish consistent coding standards, naming conventions, and best practices that can be applied across projects.

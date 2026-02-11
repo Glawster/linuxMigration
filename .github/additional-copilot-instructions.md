@@ -28,7 +28,7 @@ This file contains project-specific details for the **linuxMigration** repositor
 ```
 linuxMigration/
 ├── .github/
-│   ├── copilot-instructions.md           # Generic guidelines (DO NOT MODIFY)
+│   ├── copilot-instructions.md           # Generic guidelines (synced from Glawster/organiseMyProjects)
 │   └── additional-copilot-instructions.md # Project-specific (this file)
 ├── recoveryTools/                        # Photo/video recovery pipeline (subproject)
 │   ├── recoveryPipeline.py               # Main recovery orchestration
