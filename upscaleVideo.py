@@ -217,7 +217,8 @@ def main():
         help="Real-ESRGAN model name (default: realesrgan-x2plus).",
     )
     parser.add_argument(
-        "--dryRun",
+        "--dry-run",
+        dest="dryRun",
         action="store_true",
         help="Show what would be done without doing it.",
     )
