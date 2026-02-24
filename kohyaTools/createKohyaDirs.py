@@ -89,10 +89,9 @@ def parseArgs() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--dry-run",
-        dest="dryRun",
+        "--confirm",
         action="store_true",
-        help="show what would be done without changing anything",
+        help="execute changes (default is dry-run mode)",
     )
 
     parser.add_argument(
@@ -377,7 +376,10 @@ def undoStyleFolder(styleDir: Path, dryRun: bool, prefix: str) -> None:
 
 def main() -> None:
     args = parseArgs()
-    prefix = "...[]" if args.dryRun else "..."
+    dryRun = True
+    if args.confirm:
+        dryRun = False
+    prefix = "...[]" if dryRun else "..."
 
     global logger
     logger = getLogger("createKohyaDirs", includeConsole=True)
@@ -401,7 +403,7 @@ def main() -> None:
     }
     configChanged = updateConfigFromArgs(cfg, updates=updates)
 
-    if configChanged and not args.dryRun:
+    if configChanged and not dryRun:
         saveConfig(cfg)
 
     if configChanged:
@@ -410,13 +412,13 @@ def main() -> None:
     if args.undo:
         logger.info(f"{prefix} undoing train structure in: {trainingRoot}")
         for styleDir in styleFolders:
-            undoStyleFolder(styleDir=styleDir, dryRun=args.dryRun, prefix=prefix)
+            undoStyleFolder(styleDir=styleDir, dryRun=dryRun, prefix=prefix)
         return
 
     if args.check:
         logger.info(f"{prefix} checking existing kohya structure in: {trainingRoot}")
         for styleDir in styleFolders:
-            checkAndFixStyleFolder(styleDir, args.captionExtension, args.captionTemplate, args.dryRun, prefix)
+            checkAndFixStyleFolder(styleDir, args.captionExtension, args.captionTemplate, dryRun, prefix)
         return
 
     logger.info(f"{prefix} scanning: {trainingRoot}")
@@ -426,7 +428,7 @@ def main() -> None:
             styleDir=styleDir,
             captionTemplate=args.captionTemplate,
             captionExtension=args.captionExtension,
-            dryRun=args.dryRun,
+            dryRun=dryRun,
             includeOriginalsDir=args.includeOriginalsDir,
             prefix=prefix,
         )

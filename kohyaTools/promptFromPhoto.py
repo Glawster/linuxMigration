@@ -303,9 +303,9 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
 
     p.add_argument("--force", action="store_true", help="overwrite existing sidecars")
     p.add_argument(
-        "--dry-run",
+        "--confirm",
         action="store_true",
-        help="do not write sidecars (still calls llava)",
+        help="execute changes (default is dry-run mode)",
     )
     p.add_argument(
         "--print",
@@ -382,6 +382,9 @@ def main() -> int:
 
     cfg = loadConfig()
     args = parseArgs(cfg)
+    dryRun = True
+    if args.confirm:
+        dryRun = False
 
     llavaUrl = str(args.remote).strip()
     if args.remote:
@@ -413,7 +416,7 @@ def main() -> int:
     logger.info("...llava url: %s", llavaUrl)
     logger.info("...question: %s", args.question)
     logger.info("...identity: %s", args.identity)
-    logger.info("...dry run: %s", bool(args.dry_run))
+    logger.info("...dry run: %s", bool(dryRun))
 
     fixtureOut: Optional[Path] = (
         args.fixture_out.expanduser().resolve() if args.fixture_out else None
@@ -516,7 +519,7 @@ def main() -> int:
                     )
                     logger.info("wrote fixture: %s", fixturePath.name)
 
-            if args.dry_run:
+            if dryRun:
                 logger.info("...dry run: not writing sidecar")
             else:
                 sidecarPath.write_text(

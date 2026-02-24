@@ -51,7 +51,7 @@ def parseArgs() -> argparse.Namespace:
     parser.add_argument("--training", type=Path, default=defaultTrainingRoot)
     parser.add_argument("--style", type=str, default=None)
     parser.add_argument("--captionExtension", type=str, default=defaultCaptionExtension)
-    parser.add_argument("--dry-run", dest="dryRun", action="store_true")
+    parser.add_argument("--confirm", action="store_true")
     return parser.parse_args()
 
 
@@ -157,7 +157,10 @@ def renameSafe(src: Path, dst: Path, dryRun: bool, prefix: str, logger) -> None:
 
 def main() -> None:
     args = parseArgs()
-    prefix = "...[]" if args.dryRun else "..."
+    dryRun = True
+    if args.confirm:
+        dryRun = False
+    prefix = "...[]" if dryRun else "..."
     logger = getLogger("migrateKohyaRemoveDate", includeConsole=True)
 
     trainingRoot = args.training.expanduser().resolve()
@@ -166,7 +169,7 @@ def main() -> None:
     cfg = loadConfig()
     updates = {"trainingRoot": str(args.training), "captionExtension": str(args.captionExtension)}
     configChanged = updateConfigFromArgs(cfg, updates=updates)
-    if configChanged and not args.dryRun:
+    if configChanged and not dryRun:
         saveConfig(cfg)
     if configChanged:
         logger.info("%s updated config: %s", prefix, Path.home() / ".config/kohya/kohyaConfig.json")
@@ -222,7 +225,7 @@ def main() -> None:
 
             # If target is same name, this is effectively just stripping date with no collision
             # If collision occurred, chosenIdx will differ and name will change.
-            renameSafe(img, newImg, args.dryRun, prefix, logger)
+            renameSafe(img, newImg, dryRun, prefix, logger)
             totalImages += 1
 
             if srcCap.exists():
@@ -231,7 +234,7 @@ def main() -> None:
                 if dstCap.exists() and srcCap != dstCap:
                     logger.error("Destination exists, cannot rename: %s -> %s", srcCap.name, dstCap.name)
                 else:
-                    renameSafe(srcCap, dstCap, args.dryRun, prefix, logger)
+                    renameSafe(srcCap, dstCap, dryRun, prefix, logger)
                     totalCaptions += 1
 
     logger.info(

@@ -2,11 +2,12 @@
 set -euo pipefail
 
 DOCS_DIR="$HOME/Documents"
-DRYRUN=0
+dryRun=1
 
-if [[ "${1:-}" == "--dryrun" || "${1:-}" == "--dry-run" ]]; then
-    DRYRUN=1
-    echo "=== DRY RUN: no files will actually be moved ==="
+if [[ "${1:-}" == "--confirm" ]]; then
+    dryRun=0
+else
+    echo "=== DRY RUN: no files will actually be moved. Pass --confirm to execute. ==="
 fi
 
 if [ ! -e "$DOCS_DIR" ]; then
@@ -25,7 +26,7 @@ doMove() {
     local src="$1"
     local destDir="$2"
 
-    if [ "$DRYRUN" -eq 1 ]; then
+    if [ "$dryRun" -eq 1 ]; then
         echo "$src would be moved to $destDir"
         return 0
     fi
@@ -87,7 +88,7 @@ done
 
 echo
 echo "=== done fixing direct payment statements ==="
-if [ "$DRYRUN" -eq 1 ]; then
+if [ "$dryRun" -eq 1 ]; then
     echo "NOTE: this was a dry run; no files were actually moved."
 fi
 

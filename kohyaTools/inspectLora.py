@@ -6,7 +6,7 @@ Inspect a .safetensors file (typically a LoRA) and print useful diagnostics.
 
 Conventions:
 - --dry-run kept for toolchain consistency (no side effects anyway)
-- prefix = "...[]" if args.dryRun else "..."
+- prefix = "...[]" if dryRun else "..."
 - logging via organiseMyProjects.logUtils.getLogger
 """
 
@@ -35,10 +35,9 @@ def parseArgs() -> argparse.Namespace:
     parser.add_argument("--max-keys", type=int, default=0, help="limit number of keys printed (0 = unlimited)")
 
     parser.add_argument(
-        "--dry-run",
-        dest="dryRun",
+        "--confirm",
         action="store_true",
-        help="show what would be done without changing anything",
+        help="execute changes (default is dry-run mode)",
     )
 
     return parser.parse_args()
@@ -184,7 +183,10 @@ def compareKeys(logger, prefix: str, leftName: str, leftKeys: List[str], rightNa
 
 def main() -> None:
     args = parseArgs()
-    prefix = "...[]" if args.dryRun else "..."
+    dryRun = True
+    if args.confirm:
+        dryRun = False
+    prefix = "...[]" if dryRun else "..."
     logger = getLogger("inspectLora", includeConsole=True)
 
     try:

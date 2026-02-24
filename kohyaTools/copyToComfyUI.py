@@ -457,10 +457,9 @@ def main() -> None:
     parser.add_argument("--comfyin", help="ComfyUI input folder (overrides config)")
     parser.add_argument("--comfyout", help="ComfyUI output folder (overrides config)")
     parser.add_argument(
-        "--dry-run",
-        dest="dryRun",
+        "--confirm",
         action="store_true",
-        help="show what would be done without changing anything",
+        help="execute changes (default is dry-run mode)",
     )
     parser.add_argument("--skip-dir", action="append", default=[])
     parser.add_argument("--include-portrait", action="store_true")
@@ -468,12 +467,15 @@ def main() -> None:
                         help="Reverse mode: scan fixed* folders under ComfyUI input/output and replace originals in trainingRoot (with backup).")
 
     args = parser.parse_args()
+    dryRun = True
+    if args.confirm:
+        dryRun = False
 
     global logger
     logger = getLogger("copyToComfyUI", includeConsole=True)
 
     global prefix
-    prefix = "...[]" if args.dryRun else "..."
+    prefix = "...[]" if dryRun else "..."
 
     logger.info(f"{prefix} dry run enabled")
 
@@ -519,7 +521,7 @@ def main() -> None:
 
     # update config if CLI args provided new values
     configChanged = updateConfigFromArgs(config, configUpdates)
-    if configChanged and not args.dryRun:
+    if configChanged and not dryRun:
         saveConfig(config)
     if configChanged:
         logger.info(f"{prefix} updated config: {DEFAULT_CONFIG_PATH}")
@@ -535,7 +537,7 @@ def main() -> None:
             trainingRoot=trainingRoot,
             comfyIn=comfyInput,
             comfyOut=comfyOutput,
-            dryRun=args.dryRun,
+            dryRun=dryRun,
         )
         return
 
@@ -628,7 +630,7 @@ def main() -> None:
 
             matched += 1
 
-            _ = copyFile(imagePath, destDir, args.dryRun, tag, extra)
+            _ = copyFile(imagePath, destDir, dryRun, tag, extra)
             copied += 1
 
         except Exception as ex:

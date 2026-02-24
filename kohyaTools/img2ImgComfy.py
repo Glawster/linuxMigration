@@ -32,7 +32,7 @@ Conventions:
 - logging via organiseMyProjects.logUtils.getLogger
 - --dry-run: no side effects (no network calls, no file writes), but logs the same messages
 - prefix:
-    prefix = "...[]" if args.dryRun else "..."
+    prefix = "...[]" if dryRun else "..."
 """
 
 from __future__ import annotations
@@ -288,7 +288,7 @@ class ComfyClient:
 def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run ComfyUI img2img workflows locally or remotely (RunPod).")
 
-    parser.add_argument("--dry-run", dest="dryRun", action="store_true", help="show what would be done without changing anything")
+    parser.add_argument("--confirm", action="store_true", help="execute changes (default is dry-run mode)")
     parser.add_argument("--limit", type=int, default=0, help="process at most N images (0 = no limit)")
 
     # Mode selection
@@ -392,8 +392,11 @@ def writeOutputs(
 def main() -> int:
     cfg = loadConfig()
     args = parseArgs(cfg)
+    dryRun = True
+    if args.confirm:
+        dryRun = False
 
-    prefix = "...[]" if args.dryRun else "..."
+    prefix = "...[]" if dryRun else "..."
     logger = getLogger("img2ImgComfy", includeConsole=bool(args.logconsole))
     setLogger(logger)
 
@@ -423,7 +426,7 @@ def main() -> int:
     }
 
     configChanged = updateConfigFromArgs(cfg, updates)
-    if configChanged and not args.dryRun:
+    if configChanged and not dryRun:
         saveConfig(cfg)
     if configChanged:
         logger.info("%s updated config: %s", prefix, DEFAULT_CONFIG_PATH)
@@ -509,7 +512,7 @@ def main() -> int:
 
     client = ComfyClient(baseUrl, args.timeoutseconds, isRemote=(mode == "remote"))
 
-    if not args.dryRun:
+    if not dryRun:
         try:
             availableNodes = getAvailableNodes(client.session, baseUrl)
             logger.info("%s fetched available ComfyUI nodes: %d", prefix, len(availableNodes))
@@ -545,7 +548,7 @@ def main() -> int:
         else:
             remoteName = f"{stemSafe}{imgPath.suffix.lower()}"
             logger.info("%s [%d/%d] upload %s: %s", prefix, i, len(jobs), bucket, rel)
-            if args.dryRun:
+            if dryRun:
                 loadRef = f"{remoteSubfolder}/{remoteName}" if remoteSubfolder else remoteName
             else:
                 try:
@@ -569,7 +572,7 @@ def main() -> int:
 
         logger.info("%s [%d/%d] processing %s: %s", prefix, i, len(jobs), bucket, rel)
 
-        if args.dryRun:
+        if dryRun:
             continue
 
         try:
@@ -588,7 +591,7 @@ def main() -> int:
                 mirrorDir=mirrorDir,
                 fixedPrefix=fixedPrefix,
                 stemSafe=stemSafe,
-                dryRun=args.dryRun,
+                dryRun=dryRun,
             )
 
             if nOut == 0:

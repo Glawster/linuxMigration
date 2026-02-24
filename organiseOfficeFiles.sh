@@ -7,10 +7,11 @@ set -euo pipefail
 DOCS_DIR="$HOME/Documents"
 ONEDRIVE_DIR="$HOME/Cloud/OneDrive"   # CHANGE IF NEEDED
 
-DRYRUN=0
-if [[ "${1:-}" == "--dryrun" || "${1:-}" == "--dry-run" ]]; then
-    DRYRUN=1
-    echo "=== DRY RUN: no files will actually be moved ==="
+dryRun=1
+if [[ "${1:-}" == "--confirm" ]]; then
+    dryRun=0
+else
+    echo "=== DRY RUN: no files will actually be moved. Pass --confirm to execute. ==="
 fi
 
 echo "=== organising Office-style files under: $DOCS_DIR ==="
@@ -32,7 +33,7 @@ doMove() {
     local src="$1"
     local destDir="$2"
 
-    if [ "$DRYRUN" -eq 1 ]; then
+    if [ "$dryRun" -eq 1 ]; then
         echo "$src would be moved to $destDir"
         return 0
     fi
@@ -162,7 +163,7 @@ findFiles "*.mmap" | while read -r file; do
 done
 
 echo "=== done organising Office-style files ==="
-if [ "$DRYRUN" -eq 1 ]; then
+if [ "$dryRun" -eq 1 ]; then
     echo "NOTE: this was a dry run; no files were actually moved."
 fi
 

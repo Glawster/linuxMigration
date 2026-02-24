@@ -212,7 +212,7 @@ class ComfyClient:
 def parseArgs() -> argparse.Namespace:
     p = argparse.ArgumentParser("Run text2img via ComfyUI using .prompt.json sidecars (full-body only)")
 
-    p.add_argument("--dry-run", action="store_true", help="log what would happen (no network, no file writes)")
+    p.add_argument("--confirm", action="store_true", help="execute changes (default is dry-run mode)")
     p.add_argument("--limit", type=int, default=0, help="process at most N images (0 = all)")
     p.add_argument("--variants", type=int, default=1, help="generate N variants per input image")
 
@@ -252,8 +252,11 @@ def resolveBaseUrl(args: argparse.Namespace, cfg: Dict[str, Any]) -> str:
 def main() -> int:
     cfg = loadConfig()
     args = parseArgs()
+    dryRun = True
+    if args.confirm:
+        dryRun = False
 
-    prefix = "...[]" if args.dry_run else "..."
+    prefix = "...[]" if dryRun else "..."
     logger = getLogger("txt2imgComfy", includeConsole=True)
     setLogger(logger)
 
@@ -313,8 +316,8 @@ def main() -> int:
     if args.limit and args.limit > 0:
         logger.info("%s limit: %d", prefix, args.limit)
 
-    ensureDir(runDir, args.dry_run)
-    ensureDir(comfyOutput, args.dry_run)
+    ensureDir(runDir, dryRun)
+    ensureDir(comfyOutput, dryRun)
 
     # gather images (full-body only; we still take any images present)
     images: List[Path] = [
@@ -328,7 +331,7 @@ def main() -> int:
 
     logger.info("%s found images: %d", prefix, len(images))
 
-    if args.dry_run:
+    if dryRun:
         client = None
     else:
         client = ComfyClient(baseUrl, timeoutSeconds)
@@ -385,7 +388,7 @@ def main() -> int:
 
             logger.info("%s ...variant v%02d seed=%d prefix=%s", prefix, v, seed, savePrefix)
 
-            if args.dry_run:
+            if dryRun:
                 continue
 
             try:
@@ -400,7 +403,7 @@ def main() -> int:
 
                 # Save under runDir for traceability AND mirror to comfyOutput
                 imgRunDir = runDir / "fullbody" / stem / f"v{v:02d}"
-                ensureDir(imgRunDir, args.dry_run)
+                ensureDir(imgRunDir, dryRun)
 
                 for n, meta in enumerate(outs, start=1):
                     data = client.download(meta["filename"], meta.get("subfolder", ""), meta.get("type", "output"))
