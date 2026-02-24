@@ -38,10 +38,11 @@ profileRoot="$HOME/.var/app/org.mozilla.Thunderbird/.thunderbird"
 # Argument parsing
 # ------------------------------------------------------------------
 
-dryRun=0
-if [[ "${1-}" == "--dry-run" ]]; then
-  dryRun=1
-  echo "Dry-run mode enabled — no files will be copied."
+dryRun=1
+if [[ "${1-}" == "--confirm" ]]; then
+  dryRun=0
+else
+  echo "Dry-run mode — no files will be copied. Pass --confirm to execute."
   echo
 fi
 

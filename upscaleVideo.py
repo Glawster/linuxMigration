@@ -217,10 +217,10 @@ def main():
         help="Real-ESRGAN model name (default: realesrgan-x2plus).",
     )
     parser.add_argument(
-        "--dry-run",
+        "--confirm",
         dest="dryRun",
-        action="store_true",
-        help="Show what would be done without doing it.",
+        action="store_false",
+        help="Execute the upscaling process (default is dry-run mode).",
     )
     parser.add_argument(
         "--crf",

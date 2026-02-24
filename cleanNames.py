@@ -6,11 +6,11 @@ Remove known torrent/index prefixes from file and directory names, then remove
 directories that do not contain any video files in their subtree.
 
 Usage:
-    python3 cleanNames.py [--source PATH] [--dry-run]
+    python3 cleanNames.py [--source PATH] [--confirm]
 
 Examples:
     python3 cleanNames.py
-    python3 cleanNames.py --source ~/Downloads --dry-run
+    python3 cleanNames.py --source ~/Downloads --confirm
 """
 
 import argparse
@@ -92,9 +92,10 @@ def parseArguments() -> argparse.Namespace:
         help="Source directory to process (default: /mnt/video2/toFile)",
     )
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be renamed/removed without changing anything",
+        "--confirm",
+        dest="dryRun",
+        action="store_false",
+        help="Execute changes (default is dry-run mode).",
     )
     return parser.parse_args()
 
@@ -102,7 +103,7 @@ def parseArguments() -> argparse.Namespace:
 def main() -> None:
     args = parseArguments()
     folder = args.source
-    dryRun = args.dry_run
+    dryRun = args.dryRun
 
     for oldName in os.listdir(folder):
         match = regex.match(oldName)

@@ -35,10 +35,10 @@ def parseArgs() -> argparse.Namespace:
     parser.add_argument("--max-keys", type=int, default=0, help="limit number of keys printed (0 = unlimited)")
 
     parser.add_argument(
-        "--dry-run",
+        "--confirm",
         dest="dryRun",
-        action="store_true",
-        help="show what would be done without changing anything",
+        action="store_false",
+        help="execute changes (default is dry-run mode)",
     )
 
     return parser.parse_args()

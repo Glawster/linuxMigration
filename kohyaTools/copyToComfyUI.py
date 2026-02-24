@@ -457,10 +457,10 @@ def main() -> None:
     parser.add_argument("--comfyin", help="ComfyUI input folder (overrides config)")
     parser.add_argument("--comfyout", help="ComfyUI output folder (overrides config)")
     parser.add_argument(
-        "--dry-run",
+        "--confirm",
         dest="dryRun",
-        action="store_true",
-        help="show what would be done without changing anything",
+        action="store_false",
+        help="execute changes (default is dry-run mode)",
     )
     parser.add_argument("--skip-dir", action="append", default=[])
     parser.add_argument("--include-portrait", action="store_true")

@@ -201,7 +201,7 @@ class ComfyClient:
 def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run img2img workflows on remote ComfyUI (RunPod) while keeping files local.")
 
-    parser.add_argument("--dry-run", dest="dryRun", action="store_true", help="show what would be done without changing anything")
+    parser.add_argument("--confirm", dest="dryRun", action="store_false", help="execute changes (default is dry-run mode)")
     parser.add_argument("--limit", type=int, default=0, help="process at most N images (0 = no limit)")
 
     # Remote ComfyUI base URL: e.g. https://PODID-8188.proxy.runpod.net

@@ -177,10 +177,10 @@ def main():
         help="Root folder to scan (will recurse into subfolders).",
     )
     parser.add_argument(
-        "--dry-run",
+        "--confirm",
         dest="dryRun",
-        action="store_true",
-        help="Do not modify anything, just print what would be done.",
+        action="store_false",
+        help="Execute changes (default is dry-run mode).",
     )
     parser.add_argument(
         "--log-level",

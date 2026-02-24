@@ -153,10 +153,10 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
     parser.add_argument("--trainFor", choices=["style", "person"], default=getCfgValue(cfg, "trainFor", "style"))
 
     parser.add_argument(
-        "--dry-run",
+        "--confirm",
         dest="dryRun",
-        action="store_true",
-        help="show what would be done without changing anything",
+        action="store_false",
+        help="execute changes (default is dry-run mode)",
     )
 
     return parser.parse_args()

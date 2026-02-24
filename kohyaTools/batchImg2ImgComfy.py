@@ -233,10 +233,10 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
 
 
     parser.add_argument(
-        "--dry-run",
+        "--confirm",
         dest="dryRun",
-        action="store_true",
-        help="show what would be done without changing anything",
+        action="store_false",
+        help="execute changes (default is dry-run mode)",
     )
 
     parser.add_argument("--limit", type=int, default=0, help="process at most N images (0 = no limit)")

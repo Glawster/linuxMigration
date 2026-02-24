@@ -7,10 +7,11 @@ set -euo pipefail
 DOCS_DIR="$HOME/Documents"
 ONEDRIVE_DIR="$HOME/Cloud/OneDrive"   # CHANGE IF NEEDED
 
-dryRun=0
-if [[ "${1:-}" == "--dry-run" ]]; then
-    dryRun=1
-    echo "=== DRY RUN: no files will actually be moved ==="
+dryRun=1
+if [[ "${1:-}" == "--confirm" ]]; then
+    dryRun=0
+else
+    echo "=== DRY RUN: no files will actually be moved. Pass --confirm to execute. ==="
 fi
 
 echo "=== organising Office-style files under: $DOCS_DIR ==="

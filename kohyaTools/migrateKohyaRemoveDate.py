@@ -51,7 +51,7 @@ def parseArgs() -> argparse.Namespace:
     parser.add_argument("--training", type=Path, default=defaultTrainingRoot)
     parser.add_argument("--style", type=str, default=None)
     parser.add_argument("--captionExtension", type=str, default=defaultCaptionExtension)
-    parser.add_argument("--dry-run", dest="dryRun", action="store_true")
+    parser.add_argument("--confirm", dest="dryRun", action="store_false")
     return parser.parse_args()
 
 

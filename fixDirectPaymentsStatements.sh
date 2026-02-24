@@ -2,11 +2,12 @@
 set -euo pipefail
 
 DOCS_DIR="$HOME/Documents"
-dryRun=0
+dryRun=1
 
-if [[ "${1:-}" == "--dry-run" ]]; then
-    dryRun=1
-    echo "=== DRY RUN: no files will actually be moved ==="
+if [[ "${1:-}" == "--confirm" ]]; then
+    dryRun=0
+else
+    echo "=== DRY RUN: no files will actually be moved. Pass --confirm to execute. ==="
 fi
 
 if [ ! -e "$DOCS_DIR" ]; then
