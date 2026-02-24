@@ -382,7 +382,9 @@ def main() -> int:
 
     cfg = loadConfig()
     args = parseArgs(cfg)
-    args.dryRun = not args.confirm
+    dryRun = True
+    if args.confirm:
+        dryRun = False
 
     llavaUrl = str(args.remote).strip()
     if args.remote:
@@ -414,7 +416,7 @@ def main() -> int:
     logger.info("...llava url: %s", llavaUrl)
     logger.info("...question: %s", args.question)
     logger.info("...identity: %s", args.identity)
-    logger.info("...dry run: %s", bool(args.dryRun))
+    logger.info("...dry run: %s", bool(dryRun))
 
     fixtureOut: Optional[Path] = (
         args.fixture_out.expanduser().resolve() if args.fixture_out else None
@@ -517,7 +519,7 @@ def main() -> int:
                     )
                     logger.info("wrote fixture: %s", fixturePath.name)
 
-            if args.dryRun:
+            if dryRun:
                 logger.info("...dry run: not writing sidecar")
             else:
                 sidecarPath.write_text(

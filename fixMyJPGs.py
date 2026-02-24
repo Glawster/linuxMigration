@@ -356,7 +356,9 @@ def main():
     )
 
     args = parser.parse_args()
-    args.dryRun = not args.confirm
+    dryRun = True
+    if args.confirm:
+        dryRun = False
     root = Path(args.root).expanduser().resolve()
 
     if not root.is_dir():
@@ -390,7 +392,7 @@ def main():
         if realesrgan_bin:
             print(f"  Using realesrgan: {realesrgan_bin}")
     print(f"16:9 mode: {aspect_mode or 'none'}")
-    if args.dryRun:
+    if dryRun:
         print("[] no files will be changed.\n")
     else:
         print()
@@ -411,7 +413,7 @@ def main():
             path,
             overwrite=overwrite,
             suffix=suffix,
-            dry_run=args.dryRun,
+            dry_run=dryRun,
             ai_upscale=args.ai_upscale,
             realesrgan_bin=realesrgan_bin,
             target_long_edge=args.target_long_edge,

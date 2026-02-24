@@ -14,7 +14,7 @@ Conventions:
 - logging via organiseMyProjects.logUtils.getLogger
 - --dry-run: no side effects (no network calls, no file writes), but logs the same messages
 - prefix:
-    prefix = "...[]" if args.dryRun else "..."
+    prefix = "...[]" if dryRun else "..."
 """
 
 from __future__ import annotations
@@ -259,9 +259,11 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
 def main() -> int:
     cfg = loadConfig()
     args = parseArgs(cfg)
-    args.dryRun = not args.confirm
+    dryRun = True
+    if args.confirm:
+        dryRun = False
 
-    prefix = "...[]" if args.dryRun else "..."
+    prefix = "...[]" if dryRun else "..."
 
     logger = getLogger("batchImg2ImgComfy", includeConsole=bool(args.logconsole))
 
@@ -282,7 +284,7 @@ def main() -> int:
     }
 
     configChanged = updateConfigFromArgs(cfg, updates)
-    if configChanged and not args.dryRun:
+    if configChanged and not dryRun:
         saveConfig(cfg)
     if configChanged:
         logger.info("%s updated config: %s", prefix, DEFAULT_CONFIG_PATH)
@@ -386,7 +388,7 @@ def main() -> int:
 
         logger.info("%s [%d/%d] %s: %s", prefix, i, len(jobs), bucket, rel)
 
-        if args.dryRun:
+        if dryRun:
             continue
 
         try:

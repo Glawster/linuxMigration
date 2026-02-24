@@ -252,9 +252,11 @@ def resolveBaseUrl(args: argparse.Namespace, cfg: Dict[str, Any]) -> str:
 def main() -> int:
     cfg = loadConfig()
     args = parseArgs()
-    args.dryRun = not args.confirm
+    dryRun = True
+    if args.confirm:
+        dryRun = False
 
-    prefix = "...[]" if args.dryRun else "..."
+    prefix = "...[]" if dryRun else "..."
     logger = getLogger("txt2imgComfy", includeConsole=True)
     setLogger(logger)
 
@@ -314,8 +316,8 @@ def main() -> int:
     if args.limit and args.limit > 0:
         logger.info("%s limit: %d", prefix, args.limit)
 
-    ensureDir(runDir, args.dryRun)
-    ensureDir(comfyOutput, args.dryRun)
+    ensureDir(runDir, dryRun)
+    ensureDir(comfyOutput, dryRun)
 
     # gather images (full-body only; we still take any images present)
     images: List[Path] = [
@@ -329,7 +331,7 @@ def main() -> int:
 
     logger.info("%s found images: %d", prefix, len(images))
 
-    if args.dryRun:
+    if dryRun:
         client = None
     else:
         client = ComfyClient(baseUrl, timeoutSeconds)
@@ -386,7 +388,7 @@ def main() -> int:
 
             logger.info("%s ...variant v%02d seed=%d prefix=%s", prefix, v, seed, savePrefix)
 
-            if args.dryRun:
+            if dryRun:
                 continue
 
             try:
@@ -401,7 +403,7 @@ def main() -> int:
 
                 # Save under runDir for traceability AND mirror to comfyOutput
                 imgRunDir = runDir / "fullbody" / stem / f"v{v:02d}"
-                ensureDir(imgRunDir, args.dryRun)
+                ensureDir(imgRunDir, dryRun)
 
                 for n, meta in enumerate(outs, start=1):
                     data = client.download(meta["filename"], meta.get("subfolder", ""), meta.get("type", "output"))

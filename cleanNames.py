@@ -101,9 +101,11 @@ def parseArguments() -> argparse.Namespace:
 
 def main() -> None:
     args = parseArguments()
-    args.dryRun = not args.confirm
+    dryRun = True
+    if args.confirm:
+        dryRun = False
+
     folder = args.source
-    dryRun = args.dryRun
 
     for oldName in os.listdir(folder):
         match = regex.match(oldName)
