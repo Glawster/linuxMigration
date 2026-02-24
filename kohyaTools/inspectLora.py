@@ -36,8 +36,7 @@ def parseArgs() -> argparse.Namespace:
 
     parser.add_argument(
         "--confirm",
-        dest="dryRun",
-        action="store_false",
+        action="store_true",
         help="execute changes (default is dry-run mode)",
     )
 
@@ -184,6 +183,7 @@ def compareKeys(logger, prefix: str, leftName: str, leftKeys: List[str], rightNa
 
 def main() -> None:
     args = parseArgs()
+    args.dryRun = not args.confirm
     prefix = "...[]" if args.dryRun else "..."
     logger = getLogger("inspectLora", includeConsole=True)
 

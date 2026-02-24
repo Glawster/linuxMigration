@@ -234,8 +234,7 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
 
     parser.add_argument(
         "--confirm",
-        dest="dryRun",
-        action="store_false",
+        action="store_true",
         help="execute changes (default is dry-run mode)",
     )
 
@@ -260,6 +259,7 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
 def main() -> int:
     cfg = loadConfig()
     args = parseArgs(cfg)
+    args.dryRun = not args.confirm
 
     prefix = "...[]" if args.dryRun else "..."
 

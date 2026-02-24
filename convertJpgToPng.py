@@ -178,8 +178,7 @@ def main():
     )
     parser.add_argument(
         "--confirm",
-        dest="dryRun",
-        action="store_false",
+        action="store_true",
         help="Execute changes (default is dry-run mode).",
     )
     parser.add_argument(
@@ -190,6 +189,7 @@ def main():
     )
 
     args = parser.parse_args()
+    args.dryRun = not args.confirm
 
     # Setup logging
     logging.basicConfig(

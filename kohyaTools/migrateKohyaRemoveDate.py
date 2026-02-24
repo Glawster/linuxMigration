@@ -51,7 +51,7 @@ def parseArgs() -> argparse.Namespace:
     parser.add_argument("--training", type=Path, default=defaultTrainingRoot)
     parser.add_argument("--style", type=str, default=None)
     parser.add_argument("--captionExtension", type=str, default=defaultCaptionExtension)
-    parser.add_argument("--confirm", dest="dryRun", action="store_false")
+    parser.add_argument("--confirm", action="store_true")
     return parser.parse_args()
 
 
@@ -157,6 +157,7 @@ def renameSafe(src: Path, dst: Path, dryRun: bool, prefix: str, logger) -> None:
 
 def main() -> None:
     args = parseArgs()
+    args.dryRun = not args.confirm
     prefix = "...[]" if args.dryRun else "..."
     logger = getLogger("migrateKohyaRemoveDate", includeConsole=True)
 

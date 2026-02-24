@@ -212,7 +212,7 @@ class ComfyClient:
 def parseArgs() -> argparse.Namespace:
     p = argparse.ArgumentParser("Run text2img via ComfyUI using .prompt.json sidecars (full-body only)")
 
-    p.add_argument("--confirm", dest="dryRun", action="store_false", help="execute changes (default is dry-run mode)")
+    p.add_argument("--confirm", action="store_true", help="execute changes (default is dry-run mode)")
     p.add_argument("--limit", type=int, default=0, help="process at most N images (0 = all)")
     p.add_argument("--variants", type=int, default=1, help="generate N variants per input image")
 
@@ -252,6 +252,7 @@ def resolveBaseUrl(args: argparse.Namespace, cfg: Dict[str, Any]) -> str:
 def main() -> int:
     cfg = loadConfig()
     args = parseArgs()
+    args.dryRun = not args.confirm
 
     prefix = "...[]" if args.dryRun else "..."
     logger = getLogger("txt2imgComfy", includeConsole=True)

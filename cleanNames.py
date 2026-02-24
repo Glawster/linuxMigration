@@ -93,8 +93,7 @@ def parseArguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--confirm",
-        dest="dryRun",
-        action="store_false",
+        action="store_true",
         help="Execute changes (default is dry-run mode).",
     )
     return parser.parse_args()
@@ -102,6 +101,7 @@ def parseArguments() -> argparse.Namespace:
 
 def main() -> None:
     args = parseArguments()
+    args.dryRun = not args.confirm
     folder = args.source
     dryRun = args.dryRun
 

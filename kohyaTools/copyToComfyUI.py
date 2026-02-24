@@ -458,8 +458,7 @@ def main() -> None:
     parser.add_argument("--comfyout", help="ComfyUI output folder (overrides config)")
     parser.add_argument(
         "--confirm",
-        dest="dryRun",
-        action="store_false",
+        action="store_true",
         help="execute changes (default is dry-run mode)",
     )
     parser.add_argument("--skip-dir", action="append", default=[])
@@ -468,6 +467,7 @@ def main() -> None:
                         help="Reverse mode: scan fixed* folders under ComfyUI input/output and replace originals in trainingRoot (with backup).")
 
     args = parser.parse_args()
+    args.dryRun = not args.confirm
 
     global logger
     logger = getLogger("copyToComfyUI", includeConsole=True)

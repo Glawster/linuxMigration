@@ -304,8 +304,7 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
     p.add_argument("--force", action="store_true", help="overwrite existing sidecars")
     p.add_argument(
         "--confirm",
-        dest="dryRun",
-        action="store_false",
+        action="store_true",
         help="execute changes (default is dry-run mode)",
     )
     p.add_argument(
@@ -383,6 +382,7 @@ def main() -> int:
 
     cfg = loadConfig()
     args = parseArgs(cfg)
+    args.dryRun = not args.confirm
 
     llavaUrl = str(args.remote).strip()
     if args.remote:

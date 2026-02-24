@@ -288,7 +288,7 @@ class ComfyClient:
 def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run ComfyUI img2img workflows locally or remotely (RunPod).")
 
-    parser.add_argument("--confirm", dest="dryRun", action="store_false", help="execute changes (default is dry-run mode)")
+    parser.add_argument("--confirm", action="store_true", help="execute changes (default is dry-run mode)")
     parser.add_argument("--limit", type=int, default=0, help="process at most N images (0 = no limit)")
 
     # Mode selection
@@ -392,6 +392,7 @@ def writeOutputs(
 def main() -> int:
     cfg = loadConfig()
     args = parseArgs(cfg)
+    args.dryRun = not args.confirm
 
     prefix = "...[]" if args.dryRun else "..."
     logger = getLogger("img2ImgComfy", includeConsole=bool(args.logconsole))

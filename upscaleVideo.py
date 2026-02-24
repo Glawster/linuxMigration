@@ -218,8 +218,7 @@ def main():
     )
     parser.add_argument(
         "--confirm",
-        dest="dryRun",
-        action="store_false",
+        action="store_true",
         help="Execute the upscaling process (default is dry-run mode).",
     )
     parser.add_argument(
@@ -229,6 +228,7 @@ def main():
         help="CRF for x264 encoding (lower = higher quality, default 18).",
     )
     args = parser.parse_args()
+    args.dryRun = not args.confirm
 
     inputPath = Path(args.input).expanduser().resolve()
     if not inputPath.is_file():
