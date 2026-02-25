@@ -153,10 +153,9 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
     parser.add_argument("--trainFor", choices=["style", "person"], default=getCfgValue(cfg, "trainFor", "style"))
 
     parser.add_argument(
-        "--dry-run",
-        dest="dryRun",
+        "--confirm",
         action="store_true",
-        help="show what would be done without changing anything",
+        help="execute changes (default is dry-run mode)",
     )
 
     return parser.parse_args()
@@ -165,7 +164,10 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
 def main() -> int:
     cfg = loadConfig()
     args = parseArgs(cfg)
-    prefix = "...[]" if args.dryRun else "..."
+    dryRun = True
+    if args.confirm:
+        dryRun = False
+    prefix = "...[]" if dryRun else "..."
     logger = getLogger("trainKohya", includeConsole=True)
 
     updates = {
@@ -176,7 +178,7 @@ def main() -> int:
         "trainFor": str(args.trainFor),
     }
     configChanged = updateConfigFromArgs(cfg, updates)
-    if configChanged and not args.dryRun:
+    if configChanged and not dryRun:
         saveConfig(cfg)
     if configChanged:
         logger.info("%s updated config: %s", prefix, DEFAULT_CONFIG_PATH)
@@ -207,7 +209,7 @@ def main() -> int:
         logger.error("Train dir not found: %s", trainDir)
         return 2
 
-    if not args.dryRun:
+    if not dryRun:
         outputDir.mkdir(parents=True, exist_ok=True)
 
     commandStr = buildTrainingCommand(
@@ -223,7 +225,7 @@ def main() -> int:
 
     logger.info("%s training command: %s", prefix, commandStr)
 
-    if args.dryRun:
+    if dryRun:
         return 0
 
     logger.info("%s launching training", prefix)

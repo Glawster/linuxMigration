@@ -20,7 +20,7 @@ Scan a folder (and subfolders) for JPEG files and:
 
 By default it overwrites files *in place* while preserving timestamps.
 Use --suffix to write new files instead.
-Use --dry-run to only print what would be done.
+Use --confirm to execute changes (dry-run mode is the default).
 """
 
 import argparse
@@ -320,9 +320,9 @@ def main():
              "If empty (default), files are overwritten in place.",
     )
     parser.add_argument(
-        "--dry-run",
+        "--confirm",
         action="store_true",
-        help="Do not modify anything, just print what would be done.",
+        help="Execute changes (default is dry-run mode).",
     )
     parser.add_argument(
         "--ai-upscale",
@@ -356,6 +356,9 @@ def main():
     )
 
     args = parser.parse_args()
+    dryRun = True
+    if args.confirm:
+        dryRun = False
     root = Path(args.root).expanduser().resolve()
 
     if not root.is_dir():
@@ -389,7 +392,7 @@ def main():
         if realesrgan_bin:
             print(f"  Using realesrgan: {realesrgan_bin}")
     print(f"16:9 mode: {aspect_mode or 'none'}")
-    if args.dry_run:
+    if dryRun:
         print("[] no files will be changed.\n")
     else:
         print()
@@ -410,7 +413,7 @@ def main():
             path,
             overwrite=overwrite,
             suffix=suffix,
-            dry_run=args.dry_run,
+            dry_run=dryRun,
             ai_upscale=args.ai_upscale,
             realesrgan_bin=realesrgan_bin,
             target_long_edge=args.target_long_edge,

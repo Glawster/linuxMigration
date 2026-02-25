@@ -177,10 +177,9 @@ def main():
         help="Root folder to scan (will recurse into subfolders).",
     )
     parser.add_argument(
-        "--dry-run",
-        dest="dryRun",
+        "--confirm",
         action="store_true",
-        help="Do not modify anything, just print what would be done.",
+        help="Execute changes (default is dry-run mode).",
     )
     parser.add_argument(
         "--log-level",
@@ -190,6 +189,9 @@ def main():
     )
 
     args = parser.parse_args()
+    dryRun = True
+    if args.confirm:
+        dryRun = False
 
     # Setup logging
     logging.basicConfig(
@@ -210,8 +212,8 @@ def main():
         return 1
 
     logger.info(f"...scanning: {root}")
-    prefix = "...[]" if args.dryRun else "..."
-    if args.dryRun:
+    prefix = "...[]" if dryRun else "..."
+    if dryRun:
         logger.info(f"{prefix} no files will be changed.")
 
     # Collect all JPEG files
@@ -248,7 +250,7 @@ def main():
     for idx, path in enumerate(jpegFiles, start=1):
         printProgress(idx, total, startTime, label="Converting")
 
-        success, msg = convertImage(path, args.dryRun, logger)
+        success, msg = convertImage(path, dryRun, logger)
 
         # Log detailed message
         print()  # Clear progress line

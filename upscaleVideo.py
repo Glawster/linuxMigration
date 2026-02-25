@@ -217,9 +217,9 @@ def main():
         help="Real-ESRGAN model name (default: realesrgan-x2plus).",
     )
     parser.add_argument(
-        "--dryRun",
+        "--confirm",
         action="store_true",
-        help="Show what would be done without doing it.",
+        help="Execute the upscaling process (default is dry-run mode).",
     )
     parser.add_argument(
         "--crf",
@@ -228,6 +228,9 @@ def main():
         help="CRF for x264 encoding (lower = higher quality, default 18).",
     )
     args = parser.parse_args()
+    dryRun = True
+    if args.confirm:
+        dryRun = False
 
     inputPath = Path(args.input).expanduser().resolve()
     if not inputPath.is_file():
@@ -249,7 +252,7 @@ def main():
     parentDir = inputPath.parent
     baseName = inputPath.stem
 
-    upscaleDir = pickUpscaleFolder(baseName, parentDir, args.dryRun)
+    upscaleDir = pickUpscaleFolder(baseName, parentDir, dryRun)
 
     framesDir = upscaleDir / "frames"
     upscaledDir = upscaleDir / "upscaled"
@@ -263,7 +266,7 @@ def main():
     print()
 
     # Create folder structure (frames, upscaled) if not dryRun
-    if args.dryRun:
+    if dryRun:
         print(f"[] would create frames dir   : {framesDir}")
         print(f"[] would create upscaled dir : {upscaledDir}\n")
     else:
@@ -278,8 +281,8 @@ def main():
         "-vsync", "0",
         str(framesDir / "frame_%08d.png"),
     ]
-    rc = runCommand(extractFramesCmd, dryRun=args.dryRun, desc="Extracting frames...")
-    if rc != 0 and not args.dryRun:
+    rc = runCommand(extractFramesCmd, dryRun=dryRun, desc="Extracting frames...")
+    if rc != 0 and not dryRun:
         print("ERROR: failed to extract frames.")
         return
 
@@ -293,8 +296,8 @@ def main():
         "-b:a", "192k",
         str(audioPath),
     ]
-    rcAudio = runCommand(extractAudioCmd, dryRun=args.dryRun, desc="Extracting audio (if any)...")
-    if rcAudio != 0 and not args.dryRun:
+    rcAudio = runCommand(extractAudioCmd, dryRun=dryRun, desc="Extracting audio (if any)...")
+    if rcAudio != 0 and not dryRun:
         print("WARNING: failed to extract audio; output will be silent.")
         audioExists = False
     else:
@@ -308,8 +311,8 @@ def main():
         "-s", "2",
         "-n", args.model,
     ]
-    rc = runCommand(realesrganCmd, dryRun=args.dryRun, desc="Running Real-ESRGAN x2 on frames...")
-    if rc != 0 and not args.dryRun:
+    rc = runCommand(realesrganCmd, dryRun=dryRun, desc="Running Real-ESRGAN x2 on frames...")
+    if rc != 0 and not dryRun:
         print("ERROR: Real-ESRGAN failed.")
         return
 
@@ -345,12 +348,12 @@ def main():
         ffmpegCmd += ["-an"]
     ffmpegCmd.append(str(outputPath))
 
-    rc = runCommand(ffmpegCmd, dryRun=args.dryRun, desc="Encoding final upscaled video...")
-    if rc != 0 and not args.dryRun:
+    rc = runCommand(ffmpegCmd, dryRun=dryRun, desc="Encoding final upscaled video...")
+    if rc != 0 and not dryRun:
         print("ERROR: failed to encode final video.")
         return
 
-    if not args.dryRun:
+    if not dryRun:
         print(f"Done. Output written to : {outputPath}")
         print(f"Source remains at       : {inputPath}")
         print(f"All working files       : {upscaleDir}")
