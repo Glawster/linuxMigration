@@ -228,9 +228,7 @@ def main():
         help="CRF for x264 encoding (lower = higher quality, default 18).",
     )
     args = parser.parse_args()
-    dryRun = True
-    if args.confirm:
-        dryRun = False
+    dryRun = not args.confirm
 
     inputPath = Path(args.input).expanduser().resolve()
     if not inputPath.is_file():

@@ -356,9 +356,7 @@ def main():
     )
 
     args = parser.parse_args()
-    dryRun = True
-    if args.confirm:
-        dryRun = False
+    dryRun = not args.confirm
     root = Path(args.root).expanduser().resolve()
 
     if not root.is_dir():

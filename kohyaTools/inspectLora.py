@@ -183,9 +183,7 @@ def compareKeys(logger, prefix: str, leftName: str, leftKeys: List[str], rightNa
 
 def main() -> None:
     args = parseArgs()
-    dryRun = True
-    if args.confirm:
-        dryRun = False
+    dryRun = not args.confirm
     prefix = "...[]" if dryRun else "..."
     logger = getLogger("inspectLora", includeConsole=True)
 

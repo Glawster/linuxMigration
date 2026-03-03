@@ -467,9 +467,7 @@ def main() -> None:
                         help="Reverse mode: scan fixed* folders under ComfyUI input/output and replace originals in trainingRoot (with backup).")
 
     args = parser.parse_args()
-    dryRun = True
-    if args.confirm:
-        dryRun = False
+    dryRun = not args.confirm
 
     global logger
     logger = getLogger("copyToComfyUI", includeConsole=True)

@@ -259,9 +259,7 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
 def main() -> int:
     cfg = loadConfig()
     args = parseArgs(cfg)
-    dryRun = True
-    if args.confirm:
-        dryRun = False
+    dryRun = not args.confirm
 
     prefix = "...[]" if dryRun else "..."
 
