@@ -17,26 +17,27 @@ set -euo pipefail
 # ----------------------------
 # Fixed configuration (EXPLICIT)
 # ----------------------------
-WINE_PREFIX="/mnt/games2/prefixes/battlenet"
-WINE_BIN="/home/andy/.local/share/lutris/runners/wine/wine-10.20-staging-tkg-amd64/bin/wine"
+WINE_PREFIX="/mnt/games/lutris/games/battlenet"
+WINE_BIN="$HOME/.local/share/lutris/runners/wine/wine-ge-8-26-x86_64/bin/wine"
+#WINE_BIN="/home/andy/.local/share/lutris/runners/wine/wine-10.20-staging-tkg-amd64/bin/wine"
 
 # wineserver/wineboot MUST come from the same runner dir as WINE_BIN
 WINE_DIR="$(dirname "$WINE_BIN")"
 WINE_SERVER="$WINE_DIR/wineserver"
 WINE_BOOT="$WINE_DIR/wineboot"
 
-# Everything lives on /mnt/games2 (installers included)
-INSTALLER_DIR="/mnt/games2/installers"
+# Everything lives on /mnt/games (installers included)
+INSTALLER_DIR="/mnt/games/installers"
 
 # Defaults (override by passing an explicit path argument to install commands)
-DEFAULT_ZYGOR_SETUP="$INSTALLER_DIR/Zygor_Setup.exe"
+DEFAULT_ZYGOR_SETUP="$INSTALLER_DIR/Zygor_Setup_4.8.0.exe"
 DEFAULT_TSM_SETUP="$INSTALLER_DIR/TSM_Desktop_App_Setup.exe"
 
 # Installed app locations (Windows paths inside prefix) — EDIT if yours differ
 ZYGOR_CLIENT_WIN='C:\users\andy\AppData\Local\Zygor\Zygor.exe'
 TSM_CLIENT_WIN='C:\Program Files (x86)\TradeSkillMaster Application\app\TSMApplication.exe'
 
-DEFAULT_WORKDIR="/mnt/games2"
+DEFAULT_WORKDIR="/mnt/games"
 WINEDEBUG_DEFAULT="-all"
 
 # ----------------------------
@@ -141,7 +142,7 @@ cmd_tsm_client() {
 
   show_env
   log "launching tsm desktop app"
-  ( cd "$DEFAULT_WORKDIR" && wine_start "$TSM_CLIENT_WIN" ) >/dev/null 2>&1 & disown || true
+  ( cd "$DEFAULT_WORKDIR" && WINEDEBUG="${WINEDEBUG:-$WINEDEBUG_DEFAULT}" wine_run "$TSM_CLIENT_WIN" ) & disown || true
   log "tsm desktop launched"
 }
 
@@ -211,10 +212,10 @@ Usage: $0 <command> [args...]
 
 Commands:
   zygor-install [installer.exe]   Run Zygor installer in the WoW prefix
-  zygor-client                    Launch installed Zygor client in the WoW prefix
+  zygor                           Launch installed Zygor client in the WoW prefix
 
   tsm-install [installer.exe]     Run TSM Desktop installer in the WoW prefix
-  tsm-client                      Launch installed TSM Desktop app in the WoW prefix
+  tsm                             Launch installed TSM Desktop app in the WoW prefix
 
   wineboot                        Run wineboot -u for this prefix (safe)
   kill                            Stop wineserver + clean leftover wine procs for this prefix
@@ -237,9 +238,9 @@ shift || true
 
 case "$cmd" in
   zygor-install) cmd_zygor_install "$@" ;;
-  zygor-client)  cmd_zygor_client "$@" ;;
+  zygor)         cmd_zygor_client "$@" ;;
   tsm-install)   cmd_tsm_install "$@" ;;
-  tsm-client)    cmd_tsm_client "$@" ;;
+  tsm)           cmd_tsm_client "$@" ;;
   wineboot)      cmd_wineboot "$@" ;;
   kill)          cmd_kill_wine "$@" ;;
   status)        cmd_status "$@" ;;
