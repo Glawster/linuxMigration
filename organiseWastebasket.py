@@ -107,7 +107,8 @@ def groupFilesByFolder(sourceDir: str, confirm: bool = False):
     print("Scanning files...\n")
 
     for filePath in sourcePath.rglob("*.*"):
-        if filePath.is_file() and filePath.parent.name != "Proxy":
+        if filePath.is_file():
+            isProxy = filePath.parent.name == "Proxy"
             filename = filePath.name
 
             title, seasonEpisode, name = parseSeasonEpisode(filename)
@@ -118,7 +119,7 @@ def groupFilesByFolder(sourceDir: str, confirm: bool = False):
                 else:
                     folderName = sanitizeFolderName(f"{title}.{seasonEpisode}.Unknown")
 
-                folderGroups[folderName].append(filePath)
+                folderGroups[folderName].append((filePath, isProxy))
             else:
                 print(f"Could not parse: {filename}")
 
@@ -129,7 +130,10 @@ def groupFilesByFolder(sourceDir: str, confirm: bool = False):
     # Show summary
     print(f"Found {len(folderGroups)} groups to create:\n")
     for folderName, files in sorted(folderGroups.items()):
-        print(f"  {folderName}  ({len(files)} files)")
+        mainCount = sum(1 for _, isProxy in files if not isProxy)
+        proxyCount = sum(1 for _, isProxy in files if isProxy)
+        proxyInfo = f", {proxyCount} {'proxy' if proxyCount == 1 else 'proxies'}" if proxyCount else ""
+        print(f"  {folderName}  ({mainCount} files{proxyInfo})")
 
     # Ask for confirmation if not using --confirm
     if not confirm:
@@ -150,14 +154,17 @@ def groupFilesByFolder(sourceDir: str, confirm: bool = False):
         targetFolder.mkdir(exist_ok=True)
         print(f"\nCreated folder: {folderName}")
 
-        for filePath in files:
-            dest = targetFolder / filePath.name
+        for filePath, isProxy in files:
+            destDir = targetFolder / "Proxy" if isProxy else targetFolder
+            destDir.mkdir(exist_ok=True)
+            dest = destDir / filePath.name
             if dest.exists():
                 print(f"  Skipping (already exists): {filePath.name}")
             else:
                 try:
                     shutil.move(str(filePath), str(dest))
-                    print(f"  Moved: {filePath.name}")
+                    label = "Proxy" if isProxy else "Moved"
+                    print(f"  {label}: {filePath.name}")
                 except Exception as e:
                     print(f"  Error moving {filePath.name}: {e}")
 
