@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-cleanNames.py
+organiseMyVideo.py
 
 Remove known torrent/index prefixes from file and directory names, then remove
 directories that do not contain any video files in their subtree.
 
 Usage:
-    python3 cleanNames.py [--source PATH] [--confirm]
+    python3 organiseMyVideo.py [--source PATH] [--confirm]
 
 Examples:
-    python3 cleanNames.py
-    python3 cleanNames.py --source ~/Downloads --confirm
+    python3 organiseMyVideo.py
+    python3 organiseMyVideo.py --source ~/Downloads --confirm
 """
 
 import argparse
@@ -81,6 +81,7 @@ def removeDirectoriesWithoutVideos(rootDirectory: str, dryRun: bool = False) -> 
 
 
 def parseArguments() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description=(
             "Clean known name prefixes and remove directories that contain no video files."
@@ -100,6 +101,7 @@ def parseArguments() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Entry point."""
     args = parseArguments()
     dryRun = not args.confirm
 
