@@ -130,10 +130,7 @@ def groupFilesByFolder(sourceDir: str, confirm: bool = False):
     # Show summary
     print(f"Found {len(folderGroups)} groups to create:\n")
     for folderName, files in sorted(folderGroups.items()):
-        mainCount = sum(1 for _, isProxy in files if not isProxy)
-        proxyCount = sum(1 for _, isProxy in files if isProxy)
-        proxyInfo = f", {proxyCount} {'proxy' if proxyCount == 1 else 'proxies'}" if proxyCount else ""
-        print(f"  {folderName}  ({mainCount} files{proxyInfo})")
+        print(f"  {folderName}  ({len(files)} files)")
 
     # Ask for confirmation if not using --confirm
     if not confirm:
@@ -154,19 +151,27 @@ def groupFilesByFolder(sourceDir: str, confirm: bool = False):
         targetFolder.mkdir(exist_ok=True)
         print(f"\nCreated folder: {folderName}")
 
+        proxyDirs = set()
         for filePath, isProxy in files:
-            destDir = targetFolder / "Proxy" if isProxy else targetFolder
-            destDir.mkdir(exist_ok=True)
-            dest = destDir / filePath.name
+            dest = targetFolder / filePath.name
             if dest.exists():
                 print(f"  Skipping (already exists): {filePath.name}")
             else:
                 try:
                     shutil.move(str(filePath), str(dest))
-                    label = "Proxy" if isProxy else "Moved"
-                    print(f"  {label}: {filePath.name}")
+                    print(f"  Moved: {filePath.name}")
                 except Exception as e:
                     print(f"  Error moving {filePath.name}: {e}")
+            if isProxy:
+                proxyDirs.add(filePath.parent)
+
+        for proxyDir in proxyDirs:
+            if proxyDir.exists() and not any(proxyDir.iterdir()):
+                try:
+                    proxyDir.rmdir()
+                    print(f"  Removed empty Proxy folder: {proxyDir}")
+                except Exception as e:
+                    print(f"  Error removing Proxy folder {proxyDir}: {e}")
 
     print("\n" + "=" * 60)
     print(f"Organisation completed! {len(folderGroups)} folders created.")
