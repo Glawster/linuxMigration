@@ -1,4 +1,21 @@
-import os
+#!/usr/bin/env python3
+"""
+organiseWastebasket.py
+
+Group wastebasket media files into title/season/episode sub-folders.
+Files are matched by S00E00 patterns in the filename.
+
+By default this runs as a dry-run and only shows what would be done.
+Pass --confirm to actually move files.
+
+Usage:
+    python3 organiseWastebasket.py [--source PATH] [--confirm]
+
+Examples:
+    python3 organiseWastebasket.py --source ~/Downloads/.wastebasket
+    python3 organiseWastebasket.py --source ~/Downloads/.wastebasket --confirm
+"""
+
 import re
 import shutil
 import argparse
