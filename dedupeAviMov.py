@@ -40,6 +40,8 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+from organiseMyProjects.logUtils import getLogger  # type: ignore
+
 try:
     from PIL import Image
     import imagehash
@@ -255,18 +257,20 @@ def safeMove(src: Path, dstDir: Path) -> Path:
 
 def processPairs(sourceDir: Path, confirm: bool) -> None:
     """Scan *sourceDir* for .avi/.mov pairs and handle inferior copies."""
+    logger = getLogger(name="dedupeAviMov", includeConsole=True)
+
     pairs = findPairs(sourceDir)
 
     if not pairs:
-        print("No .avi/.mov pairs found.")
+        logger.info("...no .avi/.mov pairs found")
         return
 
-    print(f"Found {len(pairs)} .avi/.mov pair(s) to compare.\n")
+    logger.info("...found %d .avi/.mov pair(s) to compare", len(pairs))
 
     if not IMAGEHASH_AVAILABLE:
-        print(
-            "NOTE: Pillow / imagehash not found – thumbnail comparison disabled.\n"
-            "      Install with: pip install Pillow imagehash\n"
+        logger.info(
+            "...Pillow / imagehash not found – thumbnail comparison disabled"
+            " (install with: pip install Pillow imagehash)"
         )
 
     dupesDir = sourceDir / "AviMovDuplicates"
@@ -279,14 +283,14 @@ def processPairs(sourceDir: Path, confirm: bool) -> None:
         tmpPath = Path(tmpDir)
 
         for aviPath, movPath in pairs:
-            print(f"  Pair: {aviPath.name}  |  {movPath.name}")
+            logger.info("...checking pair: %s  |  %s", aviPath.name, movPath.name)
 
             aviInfo = getVideoInfo(aviPath)
             movInfo = getVideoInfo(movPath)
 
             if aviInfo is None or movInfo is None:
                 msg = "could not read video info via ffprobe"
-                print(f"    SKIP: {msg}\n")
+                logger.error("Skipping pair – %s: %s / %s", msg, aviPath.name, movPath.name)
                 errors.append((aviPath, movPath, msg))
                 continue
 
@@ -300,7 +304,7 @@ def processPairs(sourceDir: Path, confirm: bool) -> None:
                     f"duration mismatch "
                     f"(avi={aviDur:.1f}s, mov={movDur:.1f}s, diff={durDiff:.1f}s)"
                 )
-                print(f"    SKIP: {msg}\n")
+                logger.info("...skipping pair – %s: %s", msg, aviPath.name)
                 skipped.append((aviPath, movPath, msg))
                 continue
 
@@ -310,65 +314,58 @@ def processPairs(sourceDir: Path, confirm: bool) -> None:
 
             if match is False:
                 msg = "thumbnail perceptual-hash mismatch – files look different"
-                print(f"    SKIP: {msg}\n")
+                logger.info("...skipping pair – %s: %s", msg, aviPath.name)
                 skipped.append((aviPath, movPath, msg))
                 continue
 
             if match is True:
-                print("    Thumbnails match.")
+                logger.info("...thumbnails match: %s", aviPath.name)
             else:
-                print("    Thumbnail comparison skipped (tool unavailable).")
+                logger.info("...thumbnail comparison skipped (tool unavailable): %s", aviPath.name)
 
             # --- Decide which to remove ---
             pathToRemove, reason = decideSurvivor(aviPath, movPath, aviInfo, movInfo)
 
             if pathToRemove is None:
-                print(f"    INFO: {reason} – nothing to do.\n")
+                logger.info("...nothing to do – %s: %s", reason, aviPath.name)
                 skipped.append((aviPath, movPath, reason))
                 continue
 
             pathToKeep = movPath if pathToRemove == aviPath else aviPath
-            print(f"    REMOVE: {pathToRemove.name}  ({reason})")
-            print(f"    KEEP:   {pathToKeep.name}\n")
+            logger.info("...will remove: %s  (%s)", pathToRemove.name, reason)
+            logger.info("...will keep:   %s", pathToKeep.name)
             toRemove.append((pathToRemove, reason))
 
-    print("-" * 60)
-    print(
-        f"Summary: {len(toRemove)} to remove, "
-        f"{len(skipped)} skipped, {len(errors)} error(s).\n"
+    logger.info(
+        "...summary: %d to remove, %d skipped, %d error(s)",
+        len(toRemove), len(skipped), len(errors),
     )
 
     if not toRemove:
-        print("Nothing to do.")
+        logger.info("...nothing to do")
         return
 
     if not confirm:
-        print("=" * 60)
-        print("DRY RUN – no files have been moved.")
-        print(f"Files that would be moved to {dupesDir.name}/:")
+        logger.info("...dry run – no files have been moved")
+        logger.info("...files that would be moved to: %s", str(dupesDir))
         for p, reason in toRemove:
-            print(f"  {p.name}  ({reason})")
-        print()
-        print("To actually move the files, run with --confirm:")
-        print("    python3 dedupeAviMov.py --confirm --source <path>")
-        print("=" * 60)
+            dest = dupesDir / p.name
+            logger.info("...would move: %s  ->  %s  (%s)", str(p), str(dest), reason)
+        logger.info("...to actually move files, run with --confirm")
         return
 
     # --- Confirmed ---
-    print("=" * 60)
-    print(f"CONFIRMED – moving inferior copies to {dupesDir.name}/ ...")
-    print("=" * 60)
+    logger.info("...moving inferior copies to: %s", str(dupesDir))
     moved = 0
     for p, reason in toRemove:
         try:
             dest = safeMove(p, dupesDir)
-            print(f"  Moved: {p.name}  ->  {dest}")
+            logger.info("...moved: %s  ->  %s", str(p), str(dest))
             moved += 1
         except Exception as e:
-            print(f"  ERROR moving {p.name}: {e}")
+            logger.error("Move failed for %s: %s", p.name, str(e))
 
-    print()
-    print(f"Done: {moved} file(s) moved to {dupesDir}")
+    logger.info("...done: %d file(s) moved to %s", moved, str(dupesDir))
 
 
 # ---------------------------------------------------------------------------
@@ -414,8 +411,4 @@ def parseArgs():
 
 if __name__ == "__main__":
     args = parseArgs()
-
-    print("AVI / MOV Duplicate Remover")
-    print("-" * 60)
-
     processPairs(Path(args.source), confirm=args.confirm)
