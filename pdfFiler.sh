@@ -1,6 +1,27 @@
 #!/bin/bash
 #set -x
 
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source logUtils.sh from organiseMyProjects (adjust path if needed)
+_LOG_UTILS="$(python3 -c 'import organiseMyProjects, os; print(os.path.dirname(organiseMyProjects.__file__))' 2>/dev/null)/logUtils.sh"
+if [[ -f "$_LOG_UTILS" ]]; then
+  source "$_LOG_UTILS"
+else
+  # Fallback: basic log function if organiseMyProjects not installed
+  logFile="/dev/null"
+  log_init()  { logFile="${HOME}/.local/state/${1}/${1}-$(date +%Y-%m-%d).log"; mkdir -p "$(dirname "$logFile")"; }
+  log_info()  { echo "...$1"; }
+  log_doing() { echo "$1..."; }
+  log_done()  { echo "...$1"; }
+  log_warn()  { echo "WARNING: $1" >&2; }
+  log_error() { echo "ERROR: $1" >&2; }
+  log_value() { echo "...$1: $2"; }
+  log_action(){ echo "...$1"; }
+  log_box()   { echo "=== $1 ==="; }
+fi
+
+log_init "pdfFiler"
+
 # Configuration
 
 ROOT="/mnt/home/Andy/Documents/myCabinets"

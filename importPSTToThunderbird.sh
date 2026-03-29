@@ -24,6 +24,27 @@ set -euo pipefail
 #        bash importPSTToThunderbird.sh
 #
 
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source logUtils.sh from organiseMyProjects (adjust path if needed)
+_LOG_UTILS="$(python3 -c 'import organiseMyProjects, os; print(os.path.dirname(organiseMyProjects.__file__))' 2>/dev/null)/logUtils.sh"
+if [[ -f "$_LOG_UTILS" ]]; then
+  source "$_LOG_UTILS"
+else
+  # Fallback: basic log function if organiseMyProjects not installed
+  logFile="/dev/null"
+  log_init()  { logFile="${HOME}/.local/state/${1}/${1}-$(date +%Y-%m-%d).log"; mkdir -p "$(dirname "$logFile")"; }
+  log_info()  { echo "...$1"; }
+  log_doing() { echo "$1..."; }
+  log_done()  { echo "...$1"; }
+  log_warn()  { echo "WARNING: $1" >&2; }
+  log_error() { echo "ERROR: $1" >&2; }
+  log_value() { echo "...$1: $2"; }
+  log_action(){ echo "...$1"; }
+  log_box()   { echo "=== $1 ==="; }
+fi
+
+log_init "importPSTToThunderbird"
+
 # ------------------------------------------------------------------
 # Configuration
 # ------------------------------------------------------------------
@@ -74,7 +95,7 @@ findThunderbirdProfile() {
   shopt -u nullglob
 
   if [[ -z "$best" ]]; then
-    echo "ERROR: Thunderbird profile not found under: $profileRoot" >&2
+    log_error "Thunderbird profile not found under: $profileRoot"
     exit 1
   fi
 
@@ -86,7 +107,7 @@ backupLocalFolders() {
   local backupDir
   backupDir="${localFolders}.backup.$(date +%Y%m%d_%H%M%S)"
 
-  echo "...backing up local folders to: $(shortenPath "$backupDir")"
+  log_action "backing up local folders to: $(shortenPath "$backupDir")"
   if [[ $dryRun -eq 0 ]]; then
     cp -a "$localFolders" "$backupDir"
   fi
@@ -104,7 +125,7 @@ importReadpstFolder() {
   # Skip non-mail artifacts that readpst may produce.
   # Calendar and Contacts are not mail folders for Thunderbird Local Folders.
   if [[ "$folderName" == "Calendar" || "$folderName" == "Contacts" ]]; then
-    echo "...skipping non-mail folder: $folderName"
+    log_info "skipping non-mail folder: $folderName"
     return 0
   fi
 
@@ -114,7 +135,7 @@ importReadpstFolder() {
 
   # If this folder contains mail, copy the mbox file to the expected location.
   if [[ -f "$srcMbox" ]]; then
-    echo "...writing mbox: $(shortenPath "$destMbox")"
+    log_action "writing mbox: $(shortenPath "$destMbox")"
     if [[ $dryRun -eq 0 ]]; then
       # If a directory exists where the mbox file should be, remove it.
       if [[ -d "$destMbox" ]]; then
@@ -144,7 +165,7 @@ importReadpstFolder() {
   # If there are subfolders, Thunderbird expects a .sbd directory.
   # If there are none, we leave it as just an mbox file.
   if [[ $hasSubfolders -eq 1 ]]; then
-    echo "...subfolders in: $folderName"
+    log_info "subfolders in: $folderName"
   fi
 }
 
@@ -152,9 +173,9 @@ importTree() {
   local tree="$1"
   local src="$sourceRoot/$tree"
 
-  echo "Importing tree: $tree"
-  echo "  from: $(shortenPath "$src")"
-  echo "  to:   $(shortenPath "$localFolders")"
+  log_doing "importing tree: $tree"
+  log_value "from" "$(shortenPath "$src")"
+  log_value "to" "$(shortenPath "$localFolders")"
 
   local dstRootMbox="$localFolders/$tree"
   local dstRootSbd="$localFolders/${tree}.sbd"
@@ -194,7 +215,7 @@ importTree() {
 # ------------------------------------------------------------------
 
 if [[ ! -d "$sourceRoot" ]]; then
-  echo "ERROR: source directory not found: $sourceRoot" >&2
+  log_error "source directory not found: $sourceRoot"
   exit 1
 fi
 
@@ -202,20 +223,20 @@ findThunderbirdProfile
 localFolders="$profileDir/Mail/Local Folders"
 
 if [[ ! -d "$localFolders" ]]; then
-  echo "ERROR: Thunderbird Local Folders not found: $localFolders" >&2
+  log_error "Thunderbird Local Folders not found: $localFolders"
   exit 1
 fi
 
-echo "Using profile:      $(shortenPath "$profileDir")"
-echo "Local Folders path: $(shortenPath "$localFolders")"
-echo "Source root:        $(shortenPath "$sourceRoot")"
+log_value "using profile" "$(shortenPath "$profileDir")"
+log_value "local folders path" "$(shortenPath "$localFolders")"
+log_value "source root" "$(shortenPath "$sourceRoot")"
 echo
 
 mapfile -t imports < <(find "$sourceRoot" -mindepth 1 -maxdepth 1 -type d -printf "%f
 " | sort)
 
 if [[ ${#imports[@]} -eq 0 ]]; then
-  echo "No PST import directories found in $(shortenPath "$sourceRoot")"
+  log_info "no PST import directories found in $(shortenPath "$sourceRoot")"
   exit 0
 fi
 
@@ -226,5 +247,5 @@ for tree in "${imports[@]}"; do
   importTree "$tree"
 done
 
-echo "Import complete."
-echo "Restart Thunderbird to view the imported folders under Local Folders."
+log_done "import complete"
+log_info "restart Thunderbird to view the imported folders under Local Folders."

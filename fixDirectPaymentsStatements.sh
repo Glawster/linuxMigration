@@ -1,6 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source logUtils.sh from organiseMyProjects (adjust path if needed)
+_LOG_UTILS="$(python3 -c 'import organiseMyProjects, os; print(os.path.dirname(organiseMyProjects.__file__))' 2>/dev/null)/logUtils.sh"
+if [[ -f "$_LOG_UTILS" ]]; then
+  source "$_LOG_UTILS"
+else
+  # Fallback: basic log function if organiseMyProjects not installed
+  logFile="/dev/null"
+  log_init()  { logFile="${HOME}/.local/state/${1}/${1}-$(date +%Y-%m-%d).log"; mkdir -p "$(dirname "$logFile")"; }
+  log_info()  { echo "...$1"; }
+  log_doing() { echo "$1..."; }
+  log_done()  { echo "...$1"; }
+  log_warn()  { echo "WARNING: $1" >&2; }
+  log_error() { echo "ERROR: $1" >&2; }
+  log_value() { echo "...$1: $2"; }
+  log_action(){ echo "...$1"; }
+  log_box()   { echo "=== $1 ==="; }
+fi
+
+log_init "fixDirectPaymentsStatements"
+
 DOCS_DIR="$HOME/Documents"
 dryRun=1
 
@@ -11,15 +32,15 @@ else
 fi
 
 if [ ! -e "$DOCS_DIR" ]; then
-    echo "ERROR: $DOCS_DIR not found."
+    log_error "$DOCS_DIR not found."
     exit 1
 fi
 
 DOCS_DIR="$(readlink -f "$DOCS_DIR")"
 BASE_TARGET="$DOCS_DIR/myCabinets/directPayments/Statements"
 
-echo "Documents resolved to: $DOCS_DIR"
-echo "Base target for statements: $BASE_TARGET"
+log_value "documents resolved to" "$DOCS_DIR"
+log_value "base target for statements" "$BASE_TARGET"
 echo
 
 doMove() {
@@ -27,17 +48,17 @@ doMove() {
     local destDir="$2"
 
     if [ "$dryRun" -eq 1 ]; then
-        echo "$src would be moved to $destDir"
+        log_action "$src would be moved to $destDir"
         return 0
     fi
 
     mkdir -p "$destDir"
     if mv -i "$src" "$destDir/"; then
-        echo "$src moved to $destDir"
+        log_info "$src moved to $destDir"
     fi
 }
 
-echo "=== scanning for statement files ==="
+log_doing "scanning for statement files"
 echo
 
 # Use find to follow symlinks and capture Excel statement files
@@ -45,7 +66,7 @@ find -L "$DOCS_DIR" -type f \( -iname "*.xlsx" -o -iname "*.xls" \) | while read
 
     # Skip files inside the correct target hierarchy already
     if [[ "$file" == "$BASE_TARGET/"* ]]; then
-        echo "skip (already under myCabinets tree): $file"
+        log_info "skip (already under myCabinets tree): $file"
         continue
     fi
 
@@ -82,13 +103,13 @@ find -L "$DOCS_DIR" -type f \( -iname "*.xlsx" -o -iname "*.xls" \) | while read
         continue
     fi
 
-    echo "no match (leaving in place): $file"
+    log_info "no match (leaving in place): $file"
 
 done
 
 echo
-echo "=== done fixing direct payment statements ==="
+log_done "done fixing direct payment statements"
 if [ "$dryRun" -eq 1 ]; then
-    echo "NOTE: this was a dry run; no files were actually moved."
+    log_info "this was a dry run; no files were actually moved."
 fi
 
