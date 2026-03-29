@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
-toolMenu.py
+myTools.py
 
-Qt-based visual launcher and catalogue for all the tools in this repository.
+Qt-based visual launcher and catalogue for all the tools in this repository
+and related ~/Source projects.
 
-Browse tools organised by category (subfolder), read what each one does,
-and launch it — all from a single window.
+Browse tools organised by category (subfolder or source repo), read what each
+one does, and launch it — all from a single window.
 
 Usage:
-    python3 toolMenu.py
-    ./toolMenu.sh
+    python3 myTools.py
+    ./myTools.sh
 
 Requires PyQt6 (preferred) or PySide6.
 PyQt6 is chosen here because it is the most widely packaged Qt6 binding for
@@ -116,13 +117,60 @@ CATEGORY_DIRS = {
 
 # Python files matching these patterns are library/helper files, not tools
 _PY_EXCLUDE_PATTERNS = re.compile(
-    r"(__init__|Config|Utils|Common)\.py$|^toolMenu\.py$", re.IGNORECASE
+    r"(__init__|Config|Utils|Common)\.py$|^myTools\.py$", re.IGNORECASE
 )
 
 # Shebang / boilerplate lines to strip when extracting Bash descriptions
 _BASH_STRIP_PATTERNS = re.compile(
     r"^(#!.*|set\s+-[a-z]+|#\s*-\*-.*-\*-)\s*$", re.IGNORECASE
 )
+
+# ---------------------------------------------------------------------------
+# ~/Source repo catalogue
+# ---------------------------------------------------------------------------
+# Each entry declares a repo that may exist under ~/Source.  If the directory
+# is absent on the current machine it is silently skipped.
+#
+# Fields:
+#   dir    – directory name under ~/Source
+#   label  – category label shown in the tree
+#   scan   – list of sub-paths to scan (relative to the repo root).
+#            Use ["."] to scan the repo root itself.
+#            Each path is scanned one level deep (non-recursive).
+SOURCE_BASE = Path.home() / "Source"
+
+SOURCE_REPOS: List[dict] = [
+    {
+        "dir": "b2-backup-scripts",
+        "label": "B2 Backup",
+        "scan": ["."],
+    },
+    {
+        "dir": "organiseMyProjects",
+        "label": "Organise My Projects",
+        "scan": ["."],
+    },
+    {
+        "dir": "organiseMyPhotos",
+        "label": "Organise My Photos",
+        "scan": ["."],
+    },
+    {
+        "dir": "organiseMyVideo",
+        "label": "Organise My Video",
+        "scan": ["."],
+    },
+    {
+        "dir": "imageRecognition",
+        "label": "Image Recognition",
+        "scan": ["."],
+    },
+    {
+        "dir": "sidecarEditor",
+        "label": "Sidecar Editor",
+        "scan": ["."],
+    },
+]
 
 
 # ---------------------------------------------------------------------------
@@ -240,58 +288,47 @@ def _categoryName(path: Path) -> str:
 
 
 def discoverTools() -> List[dict]:
-    """Scan the repo and return a list of tool metadata dicts."""
+    """Scan the repo and ~/Source repos; return a list of tool metadata dicts."""
     tools: List[dict] = []
 
-    def _scan(directory: Path, maxDepth: int = 1) -> None:
-        for entry in sorted(directory.iterdir()):
-            if entry.name.startswith(".") or entry.name.startswith("_"):
-                continue
-            if entry.is_dir() and maxDepth > 0:
-                if entry.name in CATEGORY_DIRS or entry.name == directory.name:
-                    _scan(entry, maxDepth - 1)
-            elif entry.is_file() and _isRunnable(entry):
-                tools.append(
-                    {
-                        "path": entry,
-                        "name": entry.name,
-                        "type": _toolType(entry),
-                        "category": _categoryName(entry),
-                        "description": _extractDescription(entry),
-                        "usage": "",  # loaded lazily on selection
-                    }
-                )
+    def _addTool(entry: Path, category: str) -> None:
+        tools.append(
+            {
+                "path": entry,
+                "name": entry.name,
+                "type": _toolType(entry),
+                "category": category,
+                "description": _extractDescription(entry),
+                "usage": "",  # loaded lazily on selection
+            }
+        )
 
-    # Root-level files
+    # ---- This repo: root-level files ----------------------------------------
     for entry in sorted(REPO_ROOT.iterdir()):
         if entry.is_file() and _isRunnable(entry):
-            tools.append(
-                {
-                    "path": entry,
-                    "name": entry.name,
-                    "type": _toolType(entry),
-                    "category": "General",
-                    "description": _extractDescription(entry),
-                    "usage": "",
-                }
-            )
+            _addTool(entry, "General")
 
-    # Subfolders
-    for dirName in CATEGORY_DIRS:
+    # ---- This repo: named subfolders ----------------------------------------
+    for dirName, label in CATEGORY_DIRS.items():
         subdir = REPO_ROOT / dirName
         if subdir.is_dir():
             for entry in sorted(subdir.iterdir()):
                 if entry.is_file() and _isRunnable(entry):
-                    tools.append(
-                        {
-                            "path": entry,
-                            "name": entry.name,
-                            "type": _toolType(entry),
-                            "category": CATEGORY_DIRS[dirName],
-                            "description": _extractDescription(entry),
-                            "usage": "",
-                        }
-                    )
+                    _addTool(entry, label)
+
+    # ---- ~/Source repos (each present repo becomes its own category) --------
+    for repo in SOURCE_REPOS:
+        repoRoot = SOURCE_BASE / repo["dir"]
+        if not repoRoot.is_dir():
+            continue
+        label: str = repo["label"]
+        for scanPath in repo["scan"]:
+            scanDir = repoRoot if scanPath == "." else repoRoot / scanPath
+            if not scanDir.is_dir():
+                continue
+            for entry in sorted(scanDir.iterdir()):
+                if entry.is_file() and _isRunnable(entry):
+                    _addTool(entry, label)
 
     return tools
 
@@ -563,7 +600,7 @@ class ToolMenuWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Linux Migration Tools")
+        self.setWindowTitle("My Tools")
         self.setMinimumSize(QSize(900, 600))
 
         self._tools: List[dict] = []
@@ -622,10 +659,13 @@ class ToolMenuWindow(QMainWindow):
         self._tree.clear()
         self._categoryItems = {}
 
-        categoryOrder = ["General"] + list(CATEGORY_DIRS.values())
-        # Collect any extra categories not in the predefined order
-        extraCats = sorted({t["category"] for t in tools} - set(categoryOrder))
-        allCategories = categoryOrder + extraCats
+        # Local repo categories come first in a fixed order, then Source repos
+        # in declaration order, then anything else alphabetically.
+        localOrder = ["General"] + list(CATEGORY_DIRS.values())
+        sourceOrder = [r["label"] for r in SOURCE_REPOS]
+        knownOrder = localOrder + sourceOrder
+        extraCats = sorted({t["category"] for t in tools} - set(knownOrder))
+        allCategories = knownOrder + extraCats
 
         for category in allCategories:
             catTools = [t for t in tools if t["category"] == category]
@@ -675,7 +715,7 @@ class ToolMenuWindow(QMainWindow):
             self._detail.showTool(tool)
 
     def _restoreGeometry(self) -> None:
-        settings = QSettings("Glawster", "linuxMigrationTools")
+        settings = QSettings("Glawster", "myTools")
         geometry = settings.value("windowGeometry")
         if geometry:
             self.restoreGeometry(geometry)
@@ -684,7 +724,7 @@ class ToolMenuWindow(QMainWindow):
             self._splitter.restoreState(splitterState)
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
-        settings = QSettings("Glawster", "linuxMigrationTools")
+        settings = QSettings("Glawster", "myTools")
         settings.setValue("windowGeometry", self.saveGeometry())
         settings.setValue("splitterState", self._splitter.saveState())
         super().closeEvent(event)
@@ -695,7 +735,7 @@ class ToolMenuWindow(QMainWindow):
 # ---------------------------------------------------------------------------
 def main() -> None:
     app = QApplication(sys.argv)
-    app.setApplicationName("Linux Migration Tools")
+    app.setApplicationName("My Tools")
     app.setOrganizationName("Glawster")
     app.setStyle("Fusion")
 
