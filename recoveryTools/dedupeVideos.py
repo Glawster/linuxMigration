@@ -52,6 +52,8 @@ from typing import Dict, List, Optional, Tuple
 from organiseMyProjects.logUtils import getLogger  # type: ignore
 from recoveryCommon import isVideo, printProgress
 
+logger = getLogger("dedupeVideos")
+
 try:
     from PIL import Image
     import imagehash
@@ -112,9 +114,8 @@ def hashFile(path: Path, chunkSize: int = 1024 * 1024) -> str:
     return digest.hexdigest()
 
 
-def runSha256(sourceDir: Path, confirm: bool) -> None:
+def runSha256(sourceDir: Path, confirm: bool, logger) -> None:
     """Exact-dedup all video files under *sourceDir* by SHA-256."""
-    logger = getLogger(name="dedupeVideos.sha256", includeConsole=True)
 
     dupesDir = sourceDir / "VideoDuplicates"
 
@@ -288,7 +289,7 @@ def findPairs(sourceDir: Path) -> List[Tuple[Path, Path]]:
         if not f.is_file():
             continue
         ext = f.suffix.lower()
-        key: Tuple[Path, str] = (f.parent, f.stem.lower())
+        key = (f.parent, f.stem.lower())
         if ext == ".avi":
             avis[key] = f
         elif ext == ".mov":
@@ -344,9 +345,8 @@ def decideSurvivor(
     return None, "files appear identical in resolution and size"
 
 
-def runAviMov(sourceDir: Path, confirm: bool) -> None:
+def runAviMov(sourceDir: Path, confirm: bool, logger) -> None:
     """Scan *sourceDir* for .avi/.mov pairs and move the inferior copy."""
-    logger = getLogger(name="dedupeVideos.avi-mov", includeConsole=True)
 
     pairs = findPairs(sourceDir)
 
@@ -505,11 +505,20 @@ def parseArgs():
     return parser.parse_args()
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Entry point: parse args, initialise logger, and dispatch to the chosen mode."""
     args = parseArgs()
+    dryRun = not args.confirm
+
+    runLogger = getLogger("dedupeVideos", includeConsole=True, dryRun=dryRun)
+
     sourceDir = Path(args.source)
 
     if args.mode == "sha256":
-        runSha256(sourceDir, confirm=args.confirm)
+        runSha256(sourceDir, confirm=args.confirm, logger=runLogger)
     else:
-        runAviMov(sourceDir, confirm=args.confirm)
+        runAviMov(sourceDir, confirm=args.confirm, logger=runLogger)
+
+
+if __name__ == "__main__":
+    main()
