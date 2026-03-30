@@ -570,6 +570,9 @@ class ConfigEditorDialog(QDialog):
     def __init__(self, configPath: Path, parent: Optional[QWidget] = None) -> None:
         """Initialise the dialog with the given config file path."""
         super().__init__(parent)
+        self._configPath = configPath
+        self._setupUi()
+        self.resize(640, 480)
 
     def _setupUi(self) -> None:
         """Build the dialog layout with path label, editor, status label and buttons."""
@@ -872,6 +875,8 @@ class RunDialog(QDialog):
     def _setupUi(self) -> None:
         """Build the dialog layout with options row, output area and buttons."""
         self.setWindowTitle(f"Run — {self._tool['name']}")
+        layout = QVBoxLayout(self)
+        self._setupOptionsRow(layout)
         self._setupOutputArea(layout)
         self._setupButtons(layout)
 
@@ -948,6 +953,7 @@ class DetailPane(QScrollArea):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         """Initialise the scroll-area detail pane with name, description and button widgets."""
         super().__init__(parent)
+        self._currentTool: Optional[dict] = None
         self._container = QWidget()
         self.setWidget(self._container)
         layout = QVBoxLayout(self._container)
