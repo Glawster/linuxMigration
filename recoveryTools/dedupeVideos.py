@@ -501,19 +501,19 @@ def main() -> None:
     args = parseArgs()
     dryRun = not args.confirm
 
-    runLogger = getLogger("dedupeVideos", includeConsole=True, dryRun=dryRun)
+    logger = getLogger("dedupeVideos", includeConsole=True, dryRun=dryRun)
 
     sourceDir = Path(args.source)
 
-    runLogger.doing("dedupeVideos")
-    runLogger.value("source", str(sourceDir))
-    runLogger.value("mode", args.mode)
-    runLogger.value("dry run", str(dryRun))
+    logger.doing("dedupeVideos")
+    logger.value("source", str(sourceDir))
+    logger.value("mode", args.mode)
+    logger.value("dry run", str(dryRun))
 
     if args.mode == "sha256":
-        runSha256(sourceDir, confirm=args.confirm, logger=runLogger)
+        runSha256(sourceDir, confirm=args.confirm, logger=logger)
     else:
-        runAviMov(sourceDir, confirm=args.confirm, logger=runLogger)
+        runAviMov(sourceDir, confirm=args.confirm, logger=logger)
 
 
 if __name__ == "__main__":
