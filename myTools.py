@@ -49,7 +49,7 @@ try:
         QSize,
         QTimer,
     )
-    from PyQt6.QtGui import QFont, QColor, QBrush
+    from PyQt6.QtGui import QFont, QColor, QBrush, QCloseEvent
 
     _QT_BACKEND = "PyQt6"
     _ItemDataRole = Qt.ItemDataRole
@@ -86,7 +86,7 @@ except ImportError:
         QSize,
         QTimer,
     )
-    from PySide6.QtGui import QFont, QColor, QBrush  # type: ignore[no-redef]
+    from PySide6.QtGui import QFont, QColor, QBrush, QCloseEvent  # type: ignore[no-redef]
 
     _QT_BACKEND = "PySide6"
     _ItemDataRole = Qt.ItemDataRole
@@ -97,7 +97,11 @@ except ImportError:
     _SizePolicy = QSizePolicy.Policy
 
 # ---------------------------------------------------------------------------
+import ast
+import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -185,48 +189,33 @@ def _isRunnable(path: Path) -> bool:
     return False
 
 
-def _extractDescription(path: Path) -> str:
-    """Extract a human-readable description from a tool file.
-
-    For Python files: first docstring found.
-    For Bash files: leading block of # comment lines (ignoring shebang /
-    set -euo pipefail lines).
-    """
+def _extractPyDescription(text: str, path: Path) -> str:
+    """Extract description from a Python source file's first usable docstring."""
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return ""
-
-    if path.suffix == ".py":
-        # Walk the token stream looking for the first string literal
-        import ast
-
-        try:
-            tree = ast.parse(text)
-        except SyntaxError:
-            return _fallbackDocstring(text)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
-                val = node.value.value
-                if isinstance(val, str) and val.strip():
-                    # Split into paragraphs; skip bare-filename paragraphs
-                    paragraphs = [p.strip() for p in val.strip().split("\n\n") if p.strip()]
-                    for para in paragraphs:
-                        firstLine = para.splitlines()[0].strip()
-                        # Skip a paragraph whose only content is the filename
-                        if re.match(r"^\w[\w.\-]+\.(py|sh)$", firstLine) and len(para.splitlines()) <= 1:
-                            continue
-                        if firstLine.lower() == path.stem.lower():
-                            continue
-                        return para
-                    return paragraphs[0] if paragraphs else ""
+        tree = ast.parse(text)
+    except SyntaxError:
         return _fallbackDocstring(text)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+            val = node.value.value
+            if isinstance(val, str) and val.strip():
+                paragraphs = [p.strip() for p in val.strip().split("\n\n") if p.strip()]
+                for para in paragraphs:
+                    firstLine = para.splitlines()[0].strip()
+                    if re.match(r"^\w[\w.-]+\.(py|sh)$", firstLine) and len(para.splitlines()) <= 1:
+                        continue
+                    if firstLine.lower() == path.stem.lower():
+                        continue
+                    return para
+                return paragraphs[0] if paragraphs else ""
+    return _fallbackDocstring(text)
 
-    # Bash: collect leading # lines
-    lines = text.splitlines()
+
+def _extractBashDescription(text: str) -> str:
+    """Extract description from the leading comment block of a Bash file."""
     descLines: List[str] = []
     started = False
-    for line in lines:
+    for line in text.splitlines():
         stripped = line.strip()
         if _BASH_STRIP_PATTERNS.match(stripped):
             continue
@@ -236,9 +225,19 @@ def _extractDescription(path: Path) -> str:
                 descLines.append(comment)
                 started = True
         elif started:
-            break  # first non-comment line after we collected some text
-
+            break
     return " ".join(descLines).strip()
+
+
+def _extractDescription(path: Path) -> str:
+    """Extract a human-readable description from a tool file."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    if path.suffix == ".py":
+        return _extractPyDescription(text, path)
+    return _extractBashDescription(text)
 
 
 def _fallbackDocstring(text: str) -> str:
@@ -273,34 +272,163 @@ def _extractUsage(path: Path, timeoutSecs: int = 5) -> str:
         return ""
 
 
+def _collectArgKwargs(node: ast.Call) -> dict:
+    """Collect keyword arguments from an add_argument() Call into a plain dict."""
+    kw: dict = {}
+    for kwNode in node.keywords:
+        if kwNode.arg is None:
+            continue
+        if isinstance(kwNode.value, ast.Constant):
+            kw[kwNode.arg] = kwNode.value.value
+        elif isinstance(kwNode.value, ast.Name):
+            kw[kwNode.arg] = kwNode.value.id
+    return kw
+
+
+def _resolveArgDest(flags: List[str], kw: dict, isPositional: bool) -> str:
+    """Derive the argparse dest name from flags and keyword args."""
+    dest: str = str(kw.get("dest", ""))
+    if dest:
+        return dest
+    if isPositional:
+        return flags[0]
+    longFlags = [f for f in flags if f.startswith("--")]
+    chosen = longFlags[0] if longFlags else flags[0]
+    return chosen.lstrip("-").replace("-", "_")
+
+
+def _parseOneArgDef(node: ast.Call) -> Optional[dict]:
+    """Parse a single add_argument() AST Call node into an argument descriptor.
+
+    Returns None if the call cannot be interpreted as a usable argument.
+    """
+    flags: List[str] = [
+        a.value
+        for a in node.args
+        if isinstance(a, ast.Constant) and isinstance(a.value, str)
+    ]
+    if not flags:
+        return None
+    kw = _collectArgKwargs(node)
+    action: str = str(kw.get("action", "store"))
+    isBoolean = action in ("store_true", "store_false")
+    isPositional = not any(f.startswith("-") for f in flags)
+    dest = _resolveArgDest(flags, kw, isPositional)
+    defaultVal = kw.get("default", None)
+    if isBoolean and defaultVal is None:
+        defaultVal = action == "store_false"
+    return {
+        "flags": flags,
+        "dest": dest,
+        "help": str(kw.get("help", "")),
+        "default": defaultVal,
+        "action": action,
+        "required": bool(kw.get("required", False)),
+        "metavar": kw.get("metavar", None),
+        "isBoolean": isBoolean,
+        "isPositional": isPositional,
+    }
+
+
 def _parseArguments(path: Path) -> List[dict]:
     """Parse add_argument() calls from a Python source file.
 
-    Returns a list of argument descriptor dicts with keys:
-        flags       – list of flag strings, e.g. ['--source', '-s']
-        dest        – resolved dest name (e.g. 'source')
-        help        – help string
-        default     – default value or None
-        action      – argparse action string ('store', 'store_true', …)
-        required    – bool
-        metavar     – metavar string or None
-        isBoolean   – True when action is store_true or store_false
-        isPositional – True when no flag starts with '-'
-
-    Only called lazily when the user first presses Run.
-    Returns an empty list for Bash files or files that cannot be parsed.
+    Returns a list of argument descriptor dicts.  Only called lazily when the
+    user first presses Run.  Returns an empty list for Bash files or files
+    that cannot be parsed.
     """
     if path.suffix != ".py":
         return []
-    import ast
-
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-        tree = ast.parse(text)
+        tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
     except (OSError, SyntaxError):
         return []
 
     argDefs: List[dict] = []
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "add_argument"
+        ):
+            argDef = _parseOneArgDef(node)
+            if argDef:
+                argDefs.append(argDef)
+    return argDefs
+
+
+def _evalPathExpr(node: ast.expr) -> Optional[Path]:
+    """Evaluate a simple Path-construction AST expression to a concrete Path.
+
+    Handles Path.home(), Path("str"), and chained / binary operations.
+    Returns None for expressions that cannot be statically evaluated.
+    """
+    if isinstance(node, ast.Call):
+        func = node.func
+        if (
+            isinstance(func, ast.Attribute)
+            and func.attr == "home"
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "Path"
+        ):
+            return Path.home()
+        if (
+            isinstance(func, ast.Name)
+            and func.id == "Path"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+        ):
+            return Path(str(node.args[0].value))
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        left = _evalPathExpr(node.left)
+        if left is not None and isinstance(node.right, ast.Constant):
+            return left / str(node.right.value)
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return Path(node.value)
+    return None
+
+
+def _extractConfigPathFromModule(modulePath: Path) -> Optional[Path]:
+    """Find and evaluate the DEFAULT_CONFIG_PATH assignment in a module."""
+    try:
+        tree = ast.parse(modulePath.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, SyntaxError):
+        return None
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == "DEFAULT_CONFIG_PATH":
+                return _evalPathExpr(node.value)
+    return None
+
+
+def _findConfigPathByDocstring(text: str) -> Optional[Path]:
+    """Strategy 1: scan source text for a ~/... config path literal."""
+    for m in re.finditer(r"~[/\\][\w/\\.-]+\.(?:json|cfg|ini|toml|yaml|yml)", text):
+        candidate = Path(m.group(0)).expanduser()
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _findConfigPathByImport(tree: ast.AST, toolDir: Path) -> Optional[Path]:
+    """Strategy 2: DEFAULT_CONFIG_PATH imported from a local sibling module."""
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.ImportFrom) and node.module):
+            continue
+        if "DEFAULT_CONFIG_PATH" not in [a.name for a in node.names]:
+            continue
+        candidate = toolDir / f"{node.module.split('.')[-1]}.py"
+        if candidate.exists():
+            cfgPath = _extractConfigPathFromModule(candidate)
+            if cfgPath and cfgPath.exists():
+                return cfgPath
+    return None
+
+
+def _findConfigPathByArgparse(tree: ast.AST, toolDir: Path) -> Optional[Path]:
+    """Strategy 3: add_argument("--config*", default="<path>") with a file default."""
     for node in ast.walk(tree):
         if not (
             isinstance(node, ast.Call)
@@ -308,59 +436,43 @@ def _parseArguments(path: Path) -> List[dict]:
             and node.func.attr == "add_argument"
         ):
             continue
-
-        # Positional string args to add_argument() are option flags or a positional name
-        flags: List[str] = []
-        for posArg in node.args:
-            if isinstance(posArg, ast.Constant) and isinstance(posArg.value, str):
-                flags.append(posArg.value)
-        if not flags:
+        flags = [
+            a.value
+            for a in node.args
+            if isinstance(a, ast.Constant) and isinstance(a.value, str)
+        ]
+        if not any("config" in f.lower() for f in flags):
             continue
+        for kw in node.keywords:
+            if kw.arg == "default" and isinstance(kw.value, ast.Constant):
+                val = kw.value.value
+                if isinstance(val, str) and val:
+                    candidate = Path(val).expanduser()
+                    if not candidate.is_absolute():
+                        candidate = toolDir / candidate
+                    if candidate.exists():
+                        return candidate
+    return None
 
-        # Collect keyword args (plain constants and bare Name ids like type=int)
-        kw: dict = {}
-        for kwNode in node.keywords:
-            if kwNode.arg is None:
-                continue
-            if isinstance(kwNode.value, ast.Constant):
-                kw[kwNode.arg] = kwNode.value.value
-            elif isinstance(kwNode.value, ast.Name):
-                kw[kwNode.arg] = kwNode.value.id
 
-        action: str = str(kw.get("action", "store"))
-        isBoolean = action in ("store_true", "store_false")
-        isPositional = not any(f.startswith("-") for f in flags)
+def _findConfigPath(toolPath: Path) -> Optional[Path]:
+    """Detect the config file path used by a Python tool.
 
-        # Resolve dest
-        dest: str = str(kw.get("dest", ""))
-        if not dest:
-            if isPositional:
-                dest = flags[0]
-            else:
-                longFlags = [f for f in flags if f.startswith("--")]
-                chosen = longFlags[0] if longFlags else flags[0]
-                dest = chosen.lstrip("-").replace("-", "_")
-
-        defaultVal = kw.get("default", None)
-        if isBoolean and defaultVal is None:
-            # store_true defaults to False; store_false defaults to True
-            defaultVal = action == "store_false"
-
-        argDefs.append(
-            {
-                "flags": flags,
-                "dest": dest,
-                "help": str(kw.get("help", "")),
-                "default": defaultVal,
-                "action": action,
-                "required": bool(kw.get("required", False)),
-                "metavar": kw.get("metavar", None),
-                "isBoolean": isBoolean,
-                "isPositional": isPositional,
-            }
-        )
-
-    return argDefs
+    Tries three strategies in order: docstring path literal,
+    DEFAULT_CONFIG_PATH import, and add_argument --config* default.
+    """
+    if toolPath.suffix != ".py":
+        return None
+    try:
+        text = toolPath.read_text(encoding="utf-8", errors="replace")
+        tree = ast.parse(text)
+    except (OSError, SyntaxError):
+        return None
+    return (
+        _findConfigPathByDocstring(text)
+        or _findConfigPathByImport(tree, toolPath.parent)
+        or _findConfigPathByArgparse(tree, toolPath.parent)
+    )
 
 
 def _toolType(path: Path) -> str:
@@ -377,50 +489,272 @@ def _categoryName(path: Path) -> str:
     return "General"
 
 
+def _scanDir(directory: Path, label: str, tools: List[dict]) -> None:
+    """Append all runnable tools found directly inside directory to tools."""
+    if not directory.is_dir():
+        return
+    for entry in sorted(directory.iterdir()):
+        if entry.is_file() and _isRunnable(entry):
+            tools.append(
+                {
+                    "path": entry,
+                    "name": entry.name,
+                    "type": _toolType(entry),
+                    "category": label,
+                    "description": _extractDescription(entry),
+                    "usage": "",
+                }
+            )
+
+
 def discoverTools() -> List[dict]:
     """Scan the repo and ~/Source repos; return a list of tool metadata dicts."""
     tools: List[dict] = []
-
-    def _addTool(entry: Path, category: str) -> None:
-        tools.append(
-            {
-                "path": entry,
-                "name": entry.name,
-                "type": _toolType(entry),
-                "category": category,
-                "description": _extractDescription(entry),
-                "usage": "",  # loaded lazily on selection
-            }
-        )
-
-    # ---- This repo: root-level files ----------------------------------------
-    for entry in sorted(REPO_ROOT.iterdir()):
-        if entry.is_file() and _isRunnable(entry):
-            _addTool(entry, "General")
-
-    # ---- This repo: named subfolders ----------------------------------------
+    _scanDir(REPO_ROOT, "General", tools)
     for dirName, label in CATEGORY_DIRS.items():
-        subdir = REPO_ROOT / dirName
-        if subdir.is_dir():
-            for entry in sorted(subdir.iterdir()):
-                if entry.is_file() and _isRunnable(entry):
-                    _addTool(entry, label)
-
-    # ---- ~/Source repos (each present repo becomes its own category) --------
+        _scanDir(REPO_ROOT / dirName, label, tools)
     for repo in SOURCE_REPOS:
         repoRoot = SOURCE_BASE / repo["dir"]
         if not repoRoot.is_dir():
             continue
-        label: str = repo["label"]
         for scanPath in repo["scan"]:
             scanDir = repoRoot if scanPath == "." else repoRoot / scanPath
-            if not scanDir.is_dir():
-                continue
-            for entry in sorted(scanDir.iterdir()):
-                if entry.is_file() and _isRunnable(entry):
-                    _addTool(entry, label)
-
+            _scanDir(scanDir, repo["label"], tools)
     return tools
+
+
+# ---------------------------------------------------------------------------
+# Config editor dialog
+# ---------------------------------------------------------------------------
+class ConfigEditorDialog(QDialog):
+    """Editable view of a tool's JSON (or other plain-text) config file."""
+
+    def __init__(self, configPath: Path, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self._configPath = configPath
+        self._setupUi()
+        self.setWindowModality(_WindowModality.WindowModal)
+        self.resize(640, 500)
+
+    def _setupUi(self) -> None:
+        self.setWindowTitle(f"Config — {self._configPath.name}")
+        layout = QVBoxLayout(self)
+
+        pathLabel = QLabel(str(self._configPath))
+        pathLabel.setStyleSheet("color:#666; font-size:9pt;")
+        pathLabel.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(pathLabel)
+
+        self._editor = QPlainTextEdit()
+        self._editor.setFont(QFont("Monospace", 10))
+        layout.addWidget(self._editor)
+
+        self._statusLabel = QLabel("")
+        layout.addWidget(self._statusLabel)
+
+        self._addButtons(layout)
+        self._loadContent()
+
+    def _addButtons(self, layout: QVBoxLayout) -> None:
+        """Add Save / Reload / Close buttons."""
+        btnRow = QHBoxLayout()
+        saveBtn = QPushButton("💾  Save")
+        saveBtn.setDefault(True)
+        saveBtn.clicked.connect(self._onSave)
+        reloadBtn = QPushButton("↺  Reload")
+        reloadBtn.clicked.connect(self._loadContent)
+        closeBtn = QPushButton("Close")
+        closeBtn.clicked.connect(self.close)
+        btnRow.addWidget(saveBtn)
+        btnRow.addWidget(reloadBtn)
+        btnRow.addStretch()
+        btnRow.addWidget(closeBtn)
+        layout.addLayout(btnRow)
+
+    def _loadContent(self) -> None:
+        """Read the config file and populate the editor."""
+        try:
+            rawText = self._configPath.read_text(encoding="utf-8", errors="replace")
+            if self._configPath.suffix == ".json":
+                try:
+                    rawText = json.dumps(json.loads(rawText), indent=2)
+                except json.JSONDecodeError:
+                    pass
+            self._editor.setPlainText(rawText)
+            self._statusLabel.setText("")
+        except OSError as exc:
+            self._editor.setPlainText("")
+            self._statusLabel.setText(f"Could not read: {exc}")
+
+    def _onSave(self) -> None:
+        """Validate (if JSON) and write the editor content back to disk."""
+        text = self._editor.toPlainText()
+        if self._configPath.suffix == ".json":
+            try:
+                json.loads(text)
+            except json.JSONDecodeError as exc:
+                self._statusLabel.setText(f"Invalid JSON — not saved: {exc}")
+                return
+        try:
+            self._configPath.write_text(text, encoding="utf-8")
+            self._statusLabel.setText("Saved ✓")
+        except OSError as exc:
+            self._statusLabel.setText(f"Save failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Arguments form dialog
+# ---------------------------------------------------------------------------
+class ArgsDialog(QDialog):
+    """Pre-run form for configuring arguments and reviewing the config file."""
+
+    def __init__(
+        self,
+        tool: dict,
+        argDefs: List[dict],
+        configPath: Optional[Path] = None,
+        parent: Optional[QWidget] = None,
+    ) -> None:
+        super().__init__(parent)
+        self._tool = tool
+        self._argDefs = argDefs
+        self._configPath = configPath
+        self._widgets: List[Tuple[dict, QWidget]] = []
+        self._skipped = False
+        self._setupUi()
+        self.setWindowModality(_WindowModality.WindowModal)
+        self.resize(520, min(140 + len(argDefs) * 52, 600))
+
+    def _setupUi(self) -> None:
+        self.setWindowTitle(f"Arguments — {self._tool['name']}")
+        layout = QVBoxLayout(self)
+        self._addConfigRow(layout)
+        if self._argDefs:
+            self._addArgForm(layout)
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(sep)
+        self._addButtonRow(layout)
+
+    def _addConfigRow(self, layout: QVBoxLayout) -> None:
+        """Add the config file label + Show Config button (when a config is detected)."""
+        if not self._configPath:
+            return
+        cfgRow = QHBoxLayout()
+        cfgLabel = QLabel(f"Config: {self._configPath.name}")
+        cfgLabel.setStyleSheet("color:#666; font-size:9pt;")
+        cfgBtn = QPushButton("⚙  Show Config")
+        cfgBtn.setFlat(True)
+        cfgBtn.clicked.connect(self._onShowConfig)
+        cfgRow.addWidget(cfgLabel)
+        cfgRow.addStretch()
+        cfgRow.addWidget(cfgBtn)
+        layout.addLayout(cfgRow)
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.HLine)
+        divider.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(divider)
+
+    def _addArgForm(self, layout: QVBoxLayout) -> None:
+        """Add the scrollable form with one row per argument."""
+        infoLabel = QLabel("Configure arguments, then click <b>Run</b>:")
+        infoLabel.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(infoLabel)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        formWidget = QWidget()
+        formLayout = QVBoxLayout(formWidget)
+        formLayout.setSpacing(6)
+        formLayout.setContentsMargins(4, 4, 4, 4)
+        for argDef in self._argDefs:
+            self._addArgRow(formLayout, argDef)
+        formLayout.addStretch()
+        scroll.setWidget(formWidget)
+        layout.addWidget(scroll)
+
+    def _addArgRow(self, formLayout: QVBoxLayout, argDef: dict) -> None:
+        """Add a label + input widget row for one argument definition."""
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        flagStr = ", ".join(argDef["flags"])
+        helpText = argDef["help"] or flagStr
+        lbl = QLabel(flagStr)
+        lbl.setFixedWidth(180)
+        lbl.setToolTip(helpText)
+        if argDef["required"]:
+            font = lbl.font()
+            font.setBold(True)
+            lbl.setFont(font)
+        row.addWidget(lbl)
+        if argDef["isBoolean"]:
+            widget: QWidget = QCheckBox()
+            widget.setChecked(bool(argDef["default"]))
+            widget.setToolTip(helpText)
+            row.addWidget(widget)
+            row.addStretch()
+        else:
+            widget = QLineEdit()
+            if argDef["default"] is not None:
+                widget.setText(str(argDef["default"]))
+            widget.setPlaceholderText(
+                str(argDef["metavar"]) if argDef["metavar"] else argDef["dest"]
+            )
+            widget.setToolTip(helpText)
+            row.addWidget(widget)
+        formLayout.addLayout(row)
+        self._widgets.append((argDef, widget))
+
+    def _addButtonRow(self, layout: QVBoxLayout) -> None:
+        """Add Run / Cancel / Run-without-arguments buttons."""
+        btnRow = QHBoxLayout()
+        runBtn = QPushButton("▶  Run")
+        runBtn.setDefault(True)
+        runBtn.clicked.connect(self.accept)
+        cancelBtn = QPushButton("Cancel")
+        cancelBtn.clicked.connect(self.reject)
+        btnRow.addWidget(runBtn)
+        btnRow.addWidget(cancelBtn)
+        if self._argDefs:
+            skipBtn = QPushButton("Run without arguments")
+            skipBtn.setFlat(True)
+            skipBtn.setStyleSheet("color:#888;")
+            skipBtn.clicked.connect(self._onSkip)
+            btnRow.addStretch()
+            btnRow.addWidget(skipBtn)
+        layout.addLayout(btnRow)
+
+    def _onShowConfig(self) -> None:
+        if self._configPath:
+            ConfigEditorDialog(self._configPath, self).exec()
+
+    def _onSkip(self) -> None:
+        self._skipped = True
+        self.accept()
+
+    def buildArgs(self) -> List[str]:
+        """Convert form widget values to a CLI argument list."""
+        if self._skipped:
+            return []
+        result: List[str] = []
+        for argDef, widget in self._widgets:
+            if argDef["isBoolean"]:
+                checked = isinstance(widget, QCheckBox) and widget.isChecked()
+                if argDef["action"] == "store_true" and checked:
+                    result.append(argDef["flags"][0])
+                elif argDef["action"] == "store_false" and not checked:
+                    result.append(argDef["flags"][0])
+            elif argDef["isPositional"]:
+                val = widget.text().strip() if isinstance(widget, QLineEdit) else ""
+                if val:
+                    result.append(val)
+            else:
+                val = widget.text().strip() if isinstance(widget, QLineEdit) else ""
+                if val:
+                    longFlags = [f for f in argDef["flags"] if f.startswith("--")]
+                    flag = longFlags[0] if longFlags else argDef["flags"][0]
+                    result.extend([flag, val])
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -429,33 +763,44 @@ def discoverTools() -> List[dict]:
 class RunDialog(QDialog):
     """Terminal-style dialog that runs a tool via QProcess."""
 
-    def __init__(self, tool: dict, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        tool: dict,
+        extraArgs: Optional[List[str]] = None,
+        parent: Optional[QWidget] = None,
+    ) -> None:
         super().__init__(parent)
         self._tool = tool
+        self._extraArgs = extraArgs  # None → manual mode; list → auto-start mode
         self._process: Optional[QProcess] = None
         self._confirmCheck: Optional[QCheckBox] = None
         self._setupUi()
         self.setWindowModality(_WindowModality.WindowModal)
         self.resize(700, 500)
+        if self._extraArgs is not None:
+            QTimer.singleShot(0, self._runTool)
 
-    def _setupUi(self) -> None:
-        self.setWindowTitle(f"Run — {self._tool['name']}")
-        layout = QVBoxLayout(self)
+    def _setupOptionsRow(self, layout: QVBoxLayout) -> None:
+        """Add either an args-preview label or the --confirm checkbox."""
+        if self._extraArgs is not None:
+            if self._extraArgs:
+                previewLabel = QLabel("Args: " + " ".join(self._extraArgs))
+                previewLabel.setStyleSheet("color:#666; font-size:9pt;")
+                previewLabel.setTextFormat(Qt.TextFormat.PlainText)
+                layout.addWidget(previewLabel)
+        else:
+            optionsRow = QHBoxLayout()
+            desc = self._tool.get("description", "")
+            usage = self._tool.get("usage", "")
+            if "--confirm" in (desc + " " + usage).lower():
+                self._confirmCheck = QCheckBox("Execute changes (default is dry-run)")
+                self._confirmCheck.setChecked(False)
+                optionsRow.addWidget(self._confirmCheck)
+            optionsRow.addStretch()
+            layout.addLayout(optionsRow)
 
-        # Options row
-        optionsRow = QHBoxLayout()
-        self._confirmCheck: Optional[QCheckBox] = None
-        desc = self._tool.get("description", "")
-        usage = self._tool.get("usage", "")
-        combined = (desc + " " + usage).lower()
-        if "--confirm" in combined:
-            self._confirmCheck = QCheckBox("Execute changes (default is dry-run)")
-            self._confirmCheck.setChecked(False)
-            optionsRow.addWidget(self._confirmCheck)
-        optionsRow.addStretch()
-        layout.addLayout(optionsRow)
-
-        # Output area
+    def _setupOutputArea(self, layout: QVBoxLayout) -> None:
+        """Add the monospace output text area."""
         self._output = QPlainTextEdit()
         self._output.setReadOnly(True)
         self._output.setFont(QFont("Monospace", 10))
@@ -464,11 +809,10 @@ class RunDialog(QDialog):
         )
         layout.addWidget(self._output)
 
-        # Status label
+    def _setupButtons(self, layout: QVBoxLayout) -> None:
+        """Add Run / Stop / Close buttons."""
         self._statusLabel = QLabel("Ready.")
         layout.addWidget(self._statusLabel)
-
-        # Buttons
         btnRow = QHBoxLayout()
         self._runBtn = QPushButton("▶  Run")
         self._runBtn.setDefault(True)
@@ -484,12 +828,22 @@ class RunDialog(QDialog):
         btnRow.addWidget(closeBtn)
         layout.addLayout(btnRow)
 
+    def _setupUi(self) -> None:
+        self.setWindowTitle(f"Run — {self._tool['name']}")
+        layout = QVBoxLayout(self)
+        self._setupOptionsRow(layout)
+        self._setupOutputArea(layout)
+        self._setupButtons(layout)
+
     def _buildCommand(self) -> Tuple[str, List[str]]:
         """Return (program, args) for QProcess."""
         path = self._tool["path"]
-        extraArgs: List[str] = []
-        if self._confirmCheck and self._confirmCheck.isChecked():
-            extraArgs.append("--confirm")
+        if self._extraArgs is not None:
+            extraArgs = list(self._extraArgs)
+        else:
+            extraArgs = []
+            if self._confirmCheck and self._confirmCheck.isChecked():
+                extraArgs.append("--confirm")
         if path.suffix == ".py":
             return sys.executable, [str(path)] + extraArgs
         return "bash", [str(path)] + extraArgs
@@ -534,7 +888,7 @@ class RunDialog(QDialog):
         if self._process and self._process.state() != QProcess.ProcessState.NotRunning:
             self._process.kill()
 
-    def closeEvent(self, event) -> None:  # type: ignore[override]
+    def closeEvent(self, event: QCloseEvent) -> None:  # type: ignore[override]
         self._stopTool()
         super().closeEvent(event)
 
@@ -554,8 +908,14 @@ class DetailPane(QScrollArea):
         layout = QVBoxLayout(self._container)
         layout.setAlignment(_AlignmentFlag.AlignTop)
         layout.setSpacing(8)
+        self._setupNameSection(layout)
+        self._setupDescriptionSection(layout)
+        self._setupButtonRow(layout)
+        layout.addStretch()
+        self._showEmpty()
 
-        # Name label
+    def _setupNameSection(self, layout: QVBoxLayout) -> None:
+        """Add name label, type badge, and horizontal separator."""
         self._nameLabel = QLabel()
         nameFont = QFont()
         nameFont.setPointSize(16)
@@ -564,36 +924,32 @@ class DetailPane(QScrollArea):
         self._nameLabel.setWordWrap(True)
         layout.addWidget(self._nameLabel)
 
-        # Type badge
         self._typeBadge = QLabel()
         self._typeBadge.setFixedHeight(24)
         self._typeBadge.setAlignment(_AlignmentFlag.AlignLeft | _AlignmentFlag.AlignVCenter)
         layout.addWidget(self._typeBadge)
 
-        # Separator
-        sep1 = QFrame()
-        sep1.setFrameShape(QFrame.Shape.HLine)
-        sep1.setFrameShadow(QFrame.Shadow.Sunken)
-        layout.addWidget(sep1)
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(sep)
 
-        # Description header
+    def _setupDescriptionSection(self, layout: QVBoxLayout) -> None:
+        """Add description label, usage label, and horizontal separator."""
         descHeader = QLabel("Description")
         descHeader.setFont(QFont("", -1, QFont.Weight.Bold))
         layout.addWidget(descHeader)
 
-        # Description text
         self._descLabel = QLabel()
         self._descLabel.setWordWrap(True)
         self._descLabel.setAlignment(_AlignmentFlag.AlignTop)
         self._descLabel.setTextFormat(Qt.TextFormat.PlainText)
         layout.addWidget(self._descLabel)
 
-        # Usage header
         self._usageHeader = QLabel("Usage / Arguments")
         self._usageHeader.setFont(QFont("", -1, QFont.Weight.Bold))
         layout.addWidget(self._usageHeader)
 
-        # Usage text
         self._usageLabel = QLabel()
         self._usageLabel.setWordWrap(True)
         self._usageLabel.setAlignment(_AlignmentFlag.AlignTop)
@@ -601,12 +957,13 @@ class DetailPane(QScrollArea):
         self._usageLabel.setFont(QFont("Monospace", 9))
         layout.addWidget(self._usageLabel)
 
-        sep2 = QFrame()
-        sep2.setFrameShape(QFrame.Shape.HLine)
-        sep2.setFrameShadow(QFrame.Shadow.Sunken)
-        layout.addWidget(sep2)
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(sep)
 
-        # Buttons
+    def _setupButtonRow(self, layout: QVBoxLayout) -> None:
+        """Add Run and Open-in-Editor buttons."""
         btnRow = QHBoxLayout()
         self._runBtn = QPushButton("▶  Run")
         self._runBtn.setEnabled(False)
@@ -618,10 +975,6 @@ class DetailPane(QScrollArea):
         btnRow.addWidget(self._openBtn)
         btnRow.addStretch()
         layout.addLayout(btnRow)
-
-        layout.addStretch()
-
-        self._showEmpty()
 
     def _showEmpty(self) -> None:
         self._nameLabel.setText("Select a tool")
@@ -664,16 +1017,26 @@ class DetailPane(QScrollArea):
         self._openBtn.setEnabled(True)
 
     def _onRun(self) -> None:
-        if self._currentTool:
-            dlg = RunDialog(self._currentTool, self)
-            dlg.exec()
+        if not self._currentTool:
+            return
+        tool = self._currentTool
+        if "args" not in tool:
+            tool["args"] = _parseArguments(tool["path"])
+            tool["configPath"] = _findConfigPath(tool["path"])
+        argDefs: List[dict] = tool["args"]
+        configPath: Optional[Path] = tool.get("configPath")
+        if argDefs or configPath:
+            dlg = ArgsDialog(tool, argDefs, configPath=configPath, parent=self)
+            if not dlg.exec():
+                return
+            extraArgs = dlg.buildArgs()
+            RunDialog(tool, extraArgs=extraArgs, parent=self).exec()
+        else:
+            RunDialog(tool, parent=self).exec()
 
     def _onOpenEditor(self) -> None:
         if not self._currentTool:
             return
-        import os
-        import shutil
-
         filePath = str(self._currentTool["path"])
         editor = os.environ.get("EDITOR", "")
         if editor and shutil.which(editor):
@@ -797,7 +1160,7 @@ class ToolMenuWindow(QMainWindow):
         ]
         self._rebuildTree(filtered)
 
-    def _onTreeSelectionChanged(self, current: QTreeWidgetItem, previous) -> None:
+    def _onTreeSelectionChanged(self, current: QTreeWidgetItem, previous: Optional[QTreeWidgetItem]) -> None:
         if current is None:
             return
         tool = current.data(0, _ItemDataRole.UserRole)
@@ -813,7 +1176,7 @@ class ToolMenuWindow(QMainWindow):
         if splitterState:
             self._splitter.restoreState(splitterState)
 
-    def closeEvent(self, event) -> None:  # type: ignore[override]
+    def closeEvent(self, event: QCloseEvent) -> None:  # type: ignore[override]
         settings = QSettings("Glawster", "myTools")
         settings.setValue("windowGeometry", self.saveGeometry())
         settings.setValue("splitterState", self._splitter.saveState())
