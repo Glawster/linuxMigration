@@ -120,7 +120,7 @@ def runSha256(sourceDir: Path, confirm: bool) -> None:
 
     videos = [p for p in sourceDir.rglob("*") if p.is_file() and isVideo(p)]
     total = len(videos)
-    logger.info("...found %d video file(s) to dedupe", total)
+    logger.info("found %d video file(s) to dedupe", total)
 
     seen: Dict[str, Path] = {}
     kept = moved = errors = 0
@@ -147,24 +147,24 @@ def runSha256(sourceDir: Path, confirm: bool) -> None:
         # duplicate found
         if not confirm:
             moved += 1
-            logger.info("...would move: %s  (dup of %s)", str(v), str(seen[h]))
+            logger.info("would move: %s  (dup of %s)", str(v), str(seen[h]))
             continue
 
         try:
             dst = safeMove(v, dupesDir)
             moved += 1
-            logger.info("...moved: %s  ->  %s  (dup of %s)", str(v), str(dst), str(seen[h]))
+            logger.info("moved: %s  ->  %s  (dup of %s)", str(v), str(dst), str(seen[h]))
         except Exception as e:
             errors += 1
             logger.error("Move failed for %s: %s", v.name, str(e))
 
     print()  # finish the progress bar line
     logger.info(
-        "...summary: total=%d kept=%d moved=%d errors=%d dryRun=%s",
+        "summary: total=%d kept=%d moved=%d errors=%d dryRun=%s",
         total, kept, moved, errors, not confirm,
     )
     if not confirm and moved:
-        logger.info("...to actually move files, run with --confirm")
+        logger.info("to actually move files, run with --confirm")
 
 
 # ---------------------------------------------------------------------------
@@ -350,14 +350,14 @@ def runAviMov(sourceDir: Path, confirm: bool) -> None:
     pairs = findPairs(sourceDir)
 
     if not pairs:
-        logger.info("...no .avi/.mov pairs found")
+        logger.info("no .avi/.mov pairs found")
         return
 
-    logger.info("...found %d .avi/.mov pair(s) to compare", len(pairs))
+    logger.info("found %d .avi/.mov pair(s) to compare", len(pairs))
 
     if not IMAGEHASH_AVAILABLE:
         logger.info(
-            "...Pillow / imagehash not found – thumbnail comparison disabled"
+            "Pillow / imagehash not found – thumbnail comparison disabled"
             " (install with: pip install Pillow imagehash)"
         )
 
@@ -371,7 +371,7 @@ def runAviMov(sourceDir: Path, confirm: bool) -> None:
         tmpPath = Path(tmpDir)
 
         for aviPath, movPath in pairs:
-            logger.info("...checking pair: %s  |  %s", aviPath.name, movPath.name)
+            logger.info("checking pair: %s  |  %s", aviPath.name, movPath.name)
 
             aviInfo = getVideoInfo(aviPath)
             movInfo = getVideoInfo(movPath)
@@ -392,7 +392,7 @@ def runAviMov(sourceDir: Path, confirm: bool) -> None:
                     f"duration mismatch "
                     f"(avi={aviDur:.1f}s, mov={movDur:.1f}s, diff={durDiff:.1f}s)"
                 )
-                logger.info("...skipping pair – %s: %s", msg, aviPath.name)
+                logger.info("skipping pair – %s: %s", msg, aviPath.name)
                 skipped.append((aviPath, movPath, msg))
                 continue
 
@@ -402,58 +402,58 @@ def runAviMov(sourceDir: Path, confirm: bool) -> None:
 
             if match is False:
                 msg = "thumbnail perceptual-hash mismatch – files look different"
-                logger.info("...skipping pair – %s: %s", msg, aviPath.name)
+                logger.info("skipping pair – %s: %s", msg, aviPath.name)
                 skipped.append((aviPath, movPath, msg))
                 continue
 
             if match is True:
-                logger.info("...thumbnails match: %s", aviPath.name)
+                logger.info("thumbnails match: %s", aviPath.name)
             else:
-                logger.info("...thumbnail comparison skipped (tool unavailable): %s", aviPath.name)
+                logger.info("thumbnail comparison skipped (tool unavailable): %s", aviPath.name)
 
             # --- Decide which to remove ---
             pathToRemove, reason = decideSurvivor(aviPath, movPath, aviInfo, movInfo)
 
             if pathToRemove is None:
-                logger.info("...nothing to do – %s: %s", reason, aviPath.name)
+                logger.info("nothing to do – %s: %s", reason, aviPath.name)
                 skipped.append((aviPath, movPath, reason))
                 continue
 
             pathToKeep = movPath if pathToRemove == aviPath else aviPath
-            logger.info("...will remove: %s  (%s)", pathToRemove.name, reason)
-            logger.info("...will keep:   %s", pathToKeep.name)
+            logger.info("will remove: %s  (%s)", pathToRemove.name, reason)
+            logger.info("will keep:   %s", pathToKeep.name)
             toRemove.append((pathToRemove, reason))
 
     logger.info(
-        "...summary: %d to remove, %d skipped, %d error(s)",
+        "summary: %d to remove, %d skipped, %d error(s)",
         len(toRemove), len(skipped), len(errors),
     )
 
     if not toRemove:
-        logger.info("...nothing to do")
+        logger.info("nothing to do")
         return
 
     if not confirm:
-        logger.info("...dry run – no files have been moved")
-        logger.info("...files that would be moved to: %s", str(dupesDir))
+        logger.info("dry run – no files have been moved")
+        logger.info("files that would be moved to: %s", str(dupesDir))
         for p, reason in toRemove:
             dest = dupesDir / p.name
-            logger.info("...would move: %s  ->  %s  (%s)", str(p), str(dest), reason)
-        logger.info("...to actually move files, run with --confirm")
+            logger.info("would move: %s  ->  %s  (%s)", str(p), str(dest), reason)
+        logger.info("to actually move files, run with --confirm")
         return
 
     # --- Confirmed ---
-    logger.info("...moving inferior copies to: %s", str(dupesDir))
+    logger.info("moving inferior copies to: %s", str(dupesDir))
     moved = 0
     for p, reason in toRemove:
         try:
             dest = safeMove(p, dupesDir)
-            logger.info("...moved: %s  ->  %s", str(p), str(dest))
+            logger.info("moved: %s  ->  %s", str(p), str(dest))
             moved += 1
         except Exception as e:
             logger.error("Move failed for %s: %s", p.name, str(e))
 
-    logger.info("...done: %d file(s) moved to %s", moved, str(dupesDir))
+    logger.info("done: %d file(s) moved to %s", moved, str(dupesDir))
 
 
 # ---------------------------------------------------------------------------
