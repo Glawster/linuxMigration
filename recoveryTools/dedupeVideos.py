@@ -276,18 +276,19 @@ def thumbnailsMatch(
 
 def findPairs(sourceDir: Path) -> List[Tuple[Path, Path]]:
     """
-    Return a sorted list of (aviPath, movPath) tuples for all files in
-    *sourceDir* whose stems match (case-insensitive) and whose extensions are
-    .avi and .mov respectively.  Only the top level is searched.
+    Return a sorted list of (aviPath, movPath) tuples for all files found
+    recursively under *sourceDir* whose stems match (case-insensitive) and
+    whose extensions are .avi and .mov respectively.  Only files sharing the
+    same parent directory are paired.
     """
-    avis: Dict[str, Path] = {}
-    movs: Dict[str, Path] = {}
+    avis: Dict[Tuple[Path, str], Path] = {}
+    movs: Dict[Tuple[Path, str], Path] = {}
 
-    for f in sourceDir.iterdir():
+    for f in sourceDir.rglob("*"):
         if not f.is_file():
             continue
         ext = f.suffix.lower()
-        key = f.stem.lower()
+        key: Tuple[Path, str] = (f.parent, f.stem.lower())
         if ext == ".avi":
             avis[key] = f
         elif ext == ".mov":
