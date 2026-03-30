@@ -19,6 +19,7 @@ for k, v in ExifTags.TAGS.items():
 
 
 def getDateTime(path: Path) -> datetime.datetime:
+    """Return the EXIF DateTimeOriginal for an image, falling back to file mtime."""
     # Favour EXIF DateTimeOriginal, fall back to file mtime
     try:
         with Image.open(path) as img:
@@ -34,14 +35,15 @@ def getDateTime(path: Path) -> datetime.datetime:
 
 
 def iterImages(rootDir: Path):
+    """Yield all image files recursively under rootDir."""
     for f in rootDir.rglob("*"):
         if f.is_file() and isImage(f):
             yield f
 
 
 def main():
+    """Parse args, collect image timestamps, sort and write a CSV timeline."""
     parser = argparse.ArgumentParser(
-        description="Build a chronological CSV timeline from images (EXIF DateTimeOriginal or file mtime)."
     )
     parser.add_argument(
         "--source",

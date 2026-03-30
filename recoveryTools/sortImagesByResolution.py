@@ -24,6 +24,7 @@ from recoveryCommon import isImage, printProgress, openStepLog
 
 
 def iterCandidateFiles(srcDir: Path, recursive: bool):
+    """Yield image files from srcDir, recursively if requested."""
     if recursive:
         for p in srcDir.rglob("*"):
             if p.is_file() and isImage(p):
@@ -51,6 +52,7 @@ def buildWidthBins(widths: List[int], binSize: int) -> List[Tuple[int, int]]:
 
 
 def findBin(width: int, bins: List[Tuple[int, int]]) -> Tuple[int, int]:
+    """Return the bin tuple [low, high] that contains the given width."""
     for low, high in bins:
         if low <= width <= high:
             return low, high
@@ -59,10 +61,12 @@ def findBin(width: int, bins: List[Tuple[int, int]]) -> Tuple[int, int]:
 
 
 def binLabel(low: int, high: int) -> str:
+    """Format a bin as a zero-padded label string like 'w_0320-0639'."""
     return f"w_{low:04d}-{high:04d}"
 
 
 def safeRename(src: Path, dst: Path) -> Path:
+    """Rename src to dst, appending a counter suffix if dst already exists."""
     dst.parent.mkdir(parents=True, exist_ok=True)
     target = dst
     i = 1
@@ -92,8 +96,8 @@ def removeEmptyDirs(root: Path, log) -> int:
 
 
 def main():
+    """Parse args, bin images by width and rename them into resolution folders."""
     parser = argparse.ArgumentParser(
-        description="Sort images into folders by resolution, grouped by width buckets."
     )
     parser.add_argument(
         "--source",

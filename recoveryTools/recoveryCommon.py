@@ -25,10 +25,12 @@ VIDEO_EXTS = {
 
 
 def isImage(path: Path) -> bool:
+    """Return True if path has an image file extension."""
     return path.suffix.lower() in IMAGE_EXTS
 
 
 def isVideo(path: Path) -> bool:
+    """Return True if path has a video file extension."""
     return path.suffix.lower() in VIDEO_EXTS
 
 
@@ -49,6 +51,7 @@ def isRelativeTo(path: Path, parent: Path) -> bool:
 # ----------------------------------------------------------------------
 
 def formatEta(seconds: float) -> str:
+    """Format seconds as HH:MM:SS ETA string, returning '--:--:--' for invalid input."""
     if seconds <= 0 or seconds != seconds:
         return "--:--:--"
     seconds = int(seconds)
@@ -68,6 +71,7 @@ def printProgress(
     width: int = 40,
     label: str = "Scanning",
 ):
+    """Print an ASCII progress bar showing percentage, count, and ETA."""
     if total <= 0:
         return
 
@@ -92,6 +96,7 @@ def printProgress(
 # ----------------------------------------------------------------------
 
 def countFiles(paths: Iterable[Path]) -> int:
+    """Count all files under each path, recursing into directories."""
     total = 0
     for p in paths:
         if p.is_dir():
@@ -104,6 +109,7 @@ def countFiles(paths: Iterable[Path]) -> int:
 
 
 def iterFiles(paths: Iterable[Path]):
+    """Yield all files under each path, recursing into directories."""
     for p in paths:
         if p.is_dir():
             yield from (f for f in p.rglob("*") if f.is_file())

@@ -65,6 +65,7 @@ def analyseImage(path: Path, blackMeanThresh: float, blackStdThresh: float) -> T
 
 
 def classifyFile(path: Path, minVideoSize: int) -> str:
+    """Classify a file as 'image', 'video', 'other', or 'skip_tiny'."""
     size = path.stat().st_size
     if size == 0:
         return "skip_tiny"
@@ -79,6 +80,7 @@ def classifyFile(path: Path, minVideoSize: int) -> str:
 
 
 def ensureTargetSubdirs(targetRoot: Path):
+    """Create Images/, Videos/, Other/ subdirectories under targetRoot and return their paths."""
     imgs = targetRoot / "Images"
     vids = targetRoot / "Videos"
     othr = targetRoot / "Other"
@@ -109,6 +111,7 @@ def seedExistingHashes(imgsDir: Path, vidsDir: Path, othDir: Path) -> Set[str]:
     return hashes
 
 def copyFile(src: Path, targetDir: Path, index: int) -> Path:
+    """Copy src into targetDir with a de-duplicated indexed name."""
     name = f"{src.stem}_{index}{src.suffix.lower()}"
     out = targetDir / name
     while out.exists():
@@ -119,9 +122,11 @@ def copyFile(src: Path, targetDir: Path, index: int) -> Path:
 
 
 def numericRecupDirs(sourceRoot: Path):
+    """Return recup_dir.* subdirectories under sourceRoot sorted numerically by suffix."""
     dirs = [p for p in sourceRoot.iterdir() if p.is_dir() and p.name.startswith("recup_dir")]
 
     def key(p):
+        """Extract the numeric suffix from a recup_dir path for sorting."""
         m = re.search(r"(\d+)$", p.name)
         return int(m.group(1)) if m else 10**12
 
@@ -129,6 +134,7 @@ def numericRecupDirs(sourceRoot: Path):
 
 
 def countTotalFiles(recupDirs) -> int:
+    """Count the total number of files across all given directories."""
     total = 0
     for d in recupDirs:
         for f in d.rglob("*"):
@@ -137,6 +143,7 @@ def countTotalFiles(recupDirs) -> int:
     return total
 
 def hashFile(path: Path, chunkSize: int = 1024 * 1024) -> str:
+    """Compute and return the SHA-256 hex digest of a file."""
     digest = hashlib.sha256()
     with path.open("rb") as f:
         while True:
@@ -155,7 +162,7 @@ def processFiles(
     blackStd: float,
     progressLog=None,
 ):
-
+    """Scan recup_dir.* folders, validate and deduplicate files, and copy them to targetRoot."""
     imgsDir, vidsDir, othDir = ensureTargetSubdirs(targetRoot)
     hashesSeen: set[str] = set()
 
@@ -281,6 +288,7 @@ def processFiles(
 
 
 def writeLog(targetRoot: Path, stats: Dict[str, int]):
+    """Write a stats summary to cleanup_log.txt in targetRoot."""
     log = targetRoot / "cleanup_log.txt"
     with log.open("w") as f:
         for k, v in stats.items():
@@ -289,6 +297,7 @@ def writeLog(targetRoot: Path, stats: Dict[str, int]):
 
 
 def main():
+    """Parse args and run the PhotoRec file cleanup pipeline."""
     parser = argparse.ArgumentParser(description="Clean PhotoRec-recovered files.")
     parser.add_argument("--source", default="/home/andy/Recovery",
                         help="Source root containing recup_dir.*")

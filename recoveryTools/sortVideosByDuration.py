@@ -9,6 +9,7 @@ from recoveryCommon import isVideo, printProgress, openStepLog
 
 
 def getDurationSeconds(path: Path):
+    """Use ffprobe to return a video's duration in whole seconds, or None on failure."""
     try:
         cmd = [
             "ffprobe",
@@ -26,6 +27,7 @@ def getDurationSeconds(path: Path):
 
 
 def iterVideos(srcDir: Path, recursive: bool):
+    """Yield video files from srcDir, recursively if requested."""
     if recursive:
         for p in srcDir.rglob("*"):
             if p.is_file() and isVideo(p):
@@ -37,8 +39,8 @@ def iterVideos(srcDir: Path, recursive: bool):
 
 
 def main():
+    """Parse args and sort videos into per-duration folders."""
     parser = argparse.ArgumentParser(
-        description="Sort videos into folders by duration (seconds) using ffprobe."
     )
     parser.add_argument(
         "--source",

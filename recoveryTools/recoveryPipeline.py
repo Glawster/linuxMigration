@@ -15,12 +15,13 @@ import subprocess
 from pathlib import Path
 
 def run(cmd):
+    """Run a subprocess command with a printed header and raise on failure."""
     print(">>", " ".join(str(x) for x in cmd))
     subprocess.check_call(cmd)
 
 def main():
+    """Parse args and run the recovery pipeline (filter black then deduplicate)."""
     parser = argparse.ArgumentParser(
-        description="Run recovery pipeline: filter black images and deduplicate in place."
     )
     parser.add_argument(
         "--source",
