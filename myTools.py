@@ -273,6 +273,96 @@ def _extractUsage(path: Path, timeoutSecs: int = 5) -> str:
         return ""
 
 
+def _parseArguments(path: Path) -> List[dict]:
+    """Parse add_argument() calls from a Python source file.
+
+    Returns a list of argument descriptor dicts with keys:
+        flags       – list of flag strings, e.g. ['--source', '-s']
+        dest        – resolved dest name (e.g. 'source')
+        help        – help string
+        default     – default value or None
+        action      – argparse action string ('store', 'store_true', …)
+        required    – bool
+        metavar     – metavar string or None
+        isBoolean   – True when action is store_true or store_false
+        isPositional – True when no flag starts with '-'
+
+    Only called lazily when the user first presses Run.
+    Returns an empty list for Bash files or files that cannot be parsed.
+    """
+    if path.suffix != ".py":
+        return []
+    import ast
+
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        tree = ast.parse(text)
+    except (OSError, SyntaxError):
+        return []
+
+    argDefs: List[dict] = []
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "add_argument"
+        ):
+            continue
+
+        # Positional string args to add_argument() are option flags or a positional name
+        flags: List[str] = []
+        for posArg in node.args:
+            if isinstance(posArg, ast.Constant) and isinstance(posArg.value, str):
+                flags.append(posArg.value)
+        if not flags:
+            continue
+
+        # Collect keyword args (plain constants and bare Name ids like type=int)
+        kw: dict = {}
+        for kwNode in node.keywords:
+            if kwNode.arg is None:
+                continue
+            if isinstance(kwNode.value, ast.Constant):
+                kw[kwNode.arg] = kwNode.value.value
+            elif isinstance(kwNode.value, ast.Name):
+                kw[kwNode.arg] = kwNode.value.id
+
+        action: str = str(kw.get("action", "store"))
+        isBoolean = action in ("store_true", "store_false")
+        isPositional = not any(f.startswith("-") for f in flags)
+
+        # Resolve dest
+        dest: str = str(kw.get("dest", ""))
+        if not dest:
+            if isPositional:
+                dest = flags[0]
+            else:
+                longFlags = [f for f in flags if f.startswith("--")]
+                chosen = longFlags[0] if longFlags else flags[0]
+                dest = chosen.lstrip("-").replace("-", "_")
+
+        defaultVal = kw.get("default", None)
+        if isBoolean and defaultVal is None:
+            # store_true defaults to False; store_false defaults to True
+            defaultVal = action == "store_false"
+
+        argDefs.append(
+            {
+                "flags": flags,
+                "dest": dest,
+                "help": str(kw.get("help", "")),
+                "default": defaultVal,
+                "action": action,
+                "required": bool(kw.get("required", False)),
+                "metavar": kw.get("metavar", None),
+                "isBoolean": isBoolean,
+                "isPositional": isPositional,
+            }
+        )
+
+    return argDefs
+
+
 def _toolType(path: Path) -> str:
     """Return a display label for the file type."""
     return {"py": "Python", "sh": "Bash"}.get(path.suffix.lstrip("."), "Script")
