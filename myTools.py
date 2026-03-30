@@ -10,7 +10,6 @@ one does, and launch it — all from a single window.
 
 Usage:
     python3 myTools.py
-    ./myTools.sh
 
 Requires PyQt6 (preferred) or PySide6.
 PyQt6 is chosen here because it is the most widely packaged Qt6 binding for
@@ -1142,6 +1141,9 @@ class ToolMenuWindow(QMainWindow):
 
         # Status bar
         self.statusBar().showMessage(f"Qt backend: {_QT_BACKEND}")
+        exitBtn = QPushButton("Exit")
+        exitBtn.clicked.connect(self.close)
+        self.statusBar().addPermanentWidget(exitBtn)
 
     def _loadTools(self) -> None:
         self._tools = discoverTools()
