@@ -11,6 +11,27 @@
 
 set -euo pipefail
 
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source logUtils.sh from organiseMyProjects (adjust path if needed)
+_LOG_UTILS="$(python3 -c 'import organiseMyProjects, os; print(os.path.dirname(organiseMyProjects.__file__))' 2>/dev/null)/logUtils.sh"
+if [[ -f "$_LOG_UTILS" ]]; then
+  source "$_LOG_UTILS"
+else
+  # Fallback: basic log function if organiseMyProjects not installed
+  logFile="/dev/null"
+  log_init()  { logFile="${HOME}/.local/state/${1}/${1}-$(date +%Y-%m-%d).log"; mkdir -p "$(dirname "$logFile")"; }
+  log_info()  { echo "...$1"; }
+  log_doing() { echo "$1..."; }
+  log_done()  { echo "...$1"; }
+  log_warn()  { echo "WARNING: $1" >&2; }
+  log_error() { echo "ERROR: $1" >&2; }
+  log_value() { echo "...$1: $2"; }
+  log_action(){ echo "...$1"; }
+  log_box()   { echo "=== $1 ==="; }
+fi
+
+log_init "supportBundle"
+
 # ------------------------------------------------------------
 # Args
 # ------------------------------------------------------------
@@ -39,7 +60,7 @@ if [[ $# -gt 0 ]]; then
       while [[ $# -gt 0 ]]; do
         case "$1" in
           -h|--help) usage; exit 0 ;;
-          --*) echo "ERROR: unknown option: $1" >&2; usage; exit 1 ;;
+      --*) log_error "unknown option: $1"; usage; exit 1 ;;
           *) PROJECTS+=("$1"); shift ;;
         esac
       done
@@ -49,7 +70,7 @@ if [[ $# -gt 0 ]]; then
       exit 0
       ;;
     *)
-      echo "ERROR: unknown argument: $1" >&2
+      log_error "unknown argument: $1"
       usage
       exit 1
       ;;
@@ -65,7 +86,7 @@ fi
 # Preconditions
 # ------------------------------------------------------------
 if ! command -v zip >/dev/null 2>&1; then
-  echo "ERROR: zip not found on PATH" >&2
+  log_error "zip not found on PATH"
   exit 1
 fi
 
@@ -275,6 +296,5 @@ collectLatestLogs
 )
 
 echo
-echo "support bundle created:"
-echo "  ${ZIP_PATH}"
+log_box "support bundle created: ${ZIP_PATH}"
 echo

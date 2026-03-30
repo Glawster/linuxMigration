@@ -1,9 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source logUtils.sh from organiseMyProjects (adjust path if needed)
+_LOG_UTILS="$(python3 -c 'import organiseMyProjects, os; print(os.path.dirname(organiseMyProjects.__file__))' 2>/dev/null)/logUtils.sh"
+if [[ -f "$_LOG_UTILS" ]]; then
+  source "$_LOG_UTILS"
+else
+  # Fallback: basic log function if organiseMyProjects not installed
+  logFile="/dev/null"
+  log_init()  { logFile="${HOME}/.local/state/${1}/${1}-$(date +%Y-%m-%d).log"; mkdir -p "$(dirname "$logFile")"; }
+  log_info()  { echo "...$1"; }
+  log_doing() { echo "$1..."; }
+  log_done()  { echo "...$1"; }
+  log_warn()  { echo "WARNING: $1" >&2; }
+  log_error() { echo "ERROR: $1" >&2; }
+  log_value() { echo "...$1: $2"; }
+  log_action(){ echo "...$1"; }
+  log_box()   { echo "=== $1 ==="; }
+fi
+
+log_init "organiseHome"
+
 HOME_DIR="$HOME"
 
-echo "=== organising $HOME_DIR ==="
+log_doing "organising $HOME_DIR"
 
 # ----------------------------------------
 # helper: make directory if it doesn't exist
@@ -11,10 +32,10 @@ echo "=== organising $HOME_DIR ==="
 make_dir() {
     local dir="$1"
     if [ ! -d "$dir" ]; then
-        echo "creating directory: $dir"
+        log_action "creating directory: $dir"
         mkdir -p "$dir"
     else
-        echo "directory already exists: $dir"
+        log_info "directory already exists: $dir"
     fi
 }
 
@@ -27,10 +48,10 @@ move_into_if_exists() {
 
     if [ -e "$src" ]; then
         make_dir "$target_dir"
-        echo "moving $src -> $target_dir"
+        log_action "moving $src -> $target_dir"
         mv -i "$src" "$target_dir/"
     else
-        echo "not found (skip): $src"
+        log_info "not found (skip): $src"
     fi
 }
 
@@ -49,7 +70,7 @@ echo
 # ----------------------------------------
 # 2. development-related items
 # ----------------------------------------
-echo "=== organising development-related items ==="
+log_doing "organising development-related items"
 move_into_if_exists "$HOME_DIR/.vscode"     "$HOME_DIR/Development"
 move_into_if_exists "$HOME_DIR/.conda"      "$HOME_DIR/Development"
 move_into_if_exists "$HOME_DIR/miniconda3"  "$HOME_DIR/Development"
@@ -59,7 +80,7 @@ echo
 # ----------------------------------------
 # 3. gaming-related items
 # ----------------------------------------
-echo "=== organising gaming-related items ==="
+log_doing "organising gaming-related items"
 # note: there is already a ~/Games directory; we just gather game stuff into it
 move_into_if_exists "$HOME_DIR/.steam"      "$HOME_DIR/Games"
 move_into_if_exists "$HOME_DIR/.steampath"  "$HOME_DIR/Games"
@@ -71,7 +92,7 @@ echo
 # ----------------------------------------
 # 4. cloud / sync-related items
 # ----------------------------------------
-echo "=== organising cloud-related items ==="
+log_doing "organising cloud-related items"
 move_into_if_exists "$HOME_DIR/iCloudPhotos" "$HOME_DIR/Cloud"
 move_into_if_exists "$HOME_DIR/.pyicloud"    "$HOME_DIR/Cloud"
 
@@ -81,13 +102,13 @@ echo
 # 5. archive stray top-level files (non-dot)
 #    here we just handle the extra 'bashrc' copy
 # ----------------------------------------
-echo "=== archiving miscellaneous items ==="
+log_doing "archiving miscellaneous items"
 if [ -f "$HOME_DIR/bashrc" ]; then
     make_dir "$HOME_DIR/Archive"
-    echo "moving stray bashrc -> Archive/"
+    log_action "moving stray bashrc -> Archive/"
     mv -i "$HOME_DIR/bashrc" "$HOME_DIR/Archive/"
 else
-    echo "no stray bashrc found (skip)"
+    log_info "no stray bashrc found (skip)"
 fi
 
 echo
@@ -95,21 +116,21 @@ echo
 # ----------------------------------------
 # 6. create convenience config symlinks in ~/Configs
 # ----------------------------------------
-echo "=== creating convenience config symlinks in ~/Configs ==="
+log_doing "creating convenience config symlinks in ~/Configs"
 
 create_symlink_if_missing() {
     local target="$1"
     local linkname="$2"
 
     if [ ! -e "$target" ]; then
-        echo "target does not exist (skip link): $target"
+        log_info "target does not exist (skip link): $target"
         return
     fi
 
     if [ -L "$linkname" ] || [ -e "$linkname" ]; then
-        echo "link or file already exists (skip): $linkname"
+        log_info "link or file already exists (skip): $linkname"
     else
-        echo "creating symlink: $linkname -> $target"
+        log_action "creating symlink: $linkname -> $target"
         ln -s "$target" "$linkname"
     fi
 }
@@ -120,5 +141,5 @@ create_symlink_if_missing "$HOME_DIR/.mozilla" "$HOME_DIR/Configs/mozilla"
 create_symlink_if_missing "$HOME_DIR/.cache"  "$HOME_DIR/Configs/cache"
 
 echo
-echo "=== done. review the changes above to make sure everything looks good. ==="
+log_done "done. review the changes above to make sure everything looks good."
 
