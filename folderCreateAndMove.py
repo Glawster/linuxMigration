@@ -1,80 +1,106 @@
+#!/usr/bin/env python3
+"""
+folderCreateAndMove.py
+
+Given a folder, identifies common filename prefixes across files and
+sub-folders, then creates a sub-folder for each prefix and moves all
+matching items into it.
+
+Usage:
+    python3 folderCreateAndMove.py --folder <path>
+
+Requires: tqdm
+"""
+
+import argparse
 import os
+
 import tqdm
 
-def identifyCommonString(folderPath):
-    stringList = []
-    filesCount = 0
-    for root, dirs, files in os.walk(folderPath):
-        for name in dirs + files:
-            filesCount += 1
 
-    # create a progress bar
+def identifyCommonString(folderPath: str) -> list[str]:
+    """Scan folderPath and return a list of common filename prefix strings."""
+    stringList = []
+    filesCount = sum(
+        len(dirs) + len(files) for _, dirs, files in os.walk(folderPath)
+    )
+
     with tqdm.tqdm(total=filesCount) as pbar:
-    
         for root, dirs, files in os.walk(folderPath):
             for name in dirs + files:
                 pbar.update(1)
 
-                # strip the extension from name if there is one and name is a file
                 if os.path.isfile(os.path.join(root, name)):
                     name, _ = os.path.splitext(name)
 
-                # using name look at all the other folders or files and see if there is a common string between name and all the other folders or files
                 for root2, dirs2, files2 in os.walk(folderPath):
                     for name2 in dirs2 + files2:
 
-                        # strip the extension from name2 if there is one
                         if os.path.isfile(os.path.join(root2, name2)):
                             name2, _ = os.path.splitext(name2)
 
                         if name == name2:
                             continue
 
-                        # get the string in name up to the first '.' in name
-                        thisName = name.split('.')[0]
-                        thisName2 = name2.split('.')[0]
+                        thisName = name.split(".")[0]
+                        thisName2 = name2.split(".")[0]
 
-                        # if name or name2 includes ' - ' then split the string at ' - ' and take the first part
-                        if ' - ' in thisName:
-                            thisName = thisName.split(' - ')[0]
-                        if ' - ' in thisName2:
-                            thisName2 = thisName2.split(' - ')[0]
+                        if " - " in thisName:
+                            thisName = thisName.split(" - ")[0]
+                        if " - " in thisName2:
+                            thisName2 = thisName2.split(" - ")[0]
 
-                        commonString = os.path.commonprefix([thisName, thisName2])  
+                        commonString = os.path.commonprefix([thisName, thisName2])
 
                         if len(commonString) < 3:
                             continue
 
-                        # add commonString to a list of common strings unless it is already in the list
                         if commonString not in stringList:
                             stringList.append(commonString)
+
     return stringList
 
-# Example usage
-folderPath = 'Y:\Pron\Other'
-stringList = identifyCommonString(folderPath)
 
-# from common strings identify a string that is a substring of another common string, keep only the larger string
-for commonString in stringList:
-    for commonString2 in stringList:
-        if commonString in commonString2 and commonString != commonString2:
-            try:
-                stringList.remove(commonString)
-            except ValueError:
-                pass
+def dedupeCommonStrings(stringList: list[str]) -> list[str]:
+    """Remove any string that is a substring of another string in the list."""
+    result = list(stringList)
+    for commonString in stringList:
+        for commonString2 in stringList:
+            if commonString in commonString2 and commonString != commonString2:
+                try:
+                    result.remove(commonString)
+                except ValueError:
+                    pass
+    return result
 
-# for each common string, create a folder and move all files with that common string in the name to that folder
-for commonString in stringList:
 
-    folderName = os.path.join(folderPath, commonString)
-    
-    if not os.path.exists(folderName):
-        os.makedirs(folderName)
+def groupByCommonString(folderPath: str, stringList: list[str]) -> None:
+    """Create a sub-folder for each prefix and move matching top-level items into it."""
+    for commonString in stringList:
+        folderName = os.path.join(folderPath, commonString)
+        if not os.path.exists(folderName):
+            os.makedirs(folderName)
+        for fileName in os.listdir(folderPath):
+            if commonString in fileName and commonString != fileName:
+                os.rename(
+                    os.path.join(folderPath, fileName),
+                    os.path.join(folderName, fileName),
+                )
 
-    # for just the top level of the folderPath
-    fileList = os.listdir(folderPath)
-    for file in fileList:
-        if commonString in file:
-            if commonString == file:
-                continue
-            os.rename(os.path.join(folderPath, file), os.path.join(folderName, file))
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Group files by common filename prefix into sub-folders."
+    )
+    parser.add_argument(
+        "--folder",
+        required=True,
+        help="Path to the folder to organise.",
+    )
+    args = parser.parse_args()
+
+    folderPath = args.folder
+    stringList = identifyCommonString(folderPath)
+    stringList = dedupeCommonStrings(stringList)
+    groupByCommonString(folderPath, stringList)
+    print(f"Done. Created {len(stringList)} group(s).")

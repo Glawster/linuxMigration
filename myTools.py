@@ -251,13 +251,52 @@ def _fallbackDocstring(text: str) -> str:
     return ""
 
 
+_ARGPARSE_PATTERN = re.compile(
+    r"\b(?:import\s+argparse|ArgumentParser|add_argument)\b"
+)
+
+
+def _hasArgparse(text: str) -> bool:
+    """Return True if the source text uses argparse."""
+    return bool(_ARGPARSE_PATTERN.search(text))
+
+
+def _hasMainGuard(text: str) -> bool:
+    """Return True if the source has an if __name__ == \"__main__\": guard."""
+    return bool(re.search(r'if\s+__name__\s*==\s*["\']__main__["\']', text))
+
+
+_USAGE_WARNING_LINE = re.compile(
+    r"^\s*(?:.*:\d+:\s+)?"
+    r"(?:SyntaxWarning|DeprecationWarning|ResourceWarning|PendingDeprecationWarning)"
+    r"[:\s]",
+    re.IGNORECASE,
+)
+
+
+def _filterUsageOutput(raw: str) -> str:
+    """Strip Python warning lines from --help output."""
+    filteredLines = [
+        line for line in raw.splitlines() if not _USAGE_WARNING_LINE.match(line)
+    ]
+    return "\n".join(filteredLines).strip()
+
+
 def _extractUsage(path: Path, timeoutSecs: int = 5) -> str:
     """Run the tool with --help and return its output (stdout+stderr).
 
-    Only attempted for Python files; Bash scripts often have no --help flag.
+    Only attempted for Python files that use argparse AND have an
+    if __name__ == \"__main__\": guard so that module-level code is not
+    accidentally executed.  Warning lines are stripped from the output.
     Returns empty string on failure or timeout.
     """
     if path.suffix != ".py":
+        return ""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    if not (_hasArgparse(text) and _hasMainGuard(text)):
         return ""
     try:
         result = subprocess.run(
@@ -266,8 +305,8 @@ def _extractUsage(path: Path, timeoutSecs: int = 5) -> str:
             text=True,
             timeout=timeoutSecs,
         )
-        output = (result.stdout or "") + (result.stderr or "")
-        return output.strip()
+        raw = (result.stdout or "") + (result.stderr or "")
+        return _filterUsageOutput(raw)
     except (subprocess.TimeoutExpired, OSError, subprocess.SubprocessError):
         return ""
 
