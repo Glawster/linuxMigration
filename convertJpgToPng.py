@@ -173,6 +173,7 @@ def convertImage(path: Path, dryRun: bool, logger: logging.Logger) -> Tuple[bool
 def main():
     """Parse args, scan folder for JPEGs and convert each to PNG."""
     parser = argparse.ArgumentParser(
+        description="Convert JPEG images to PNG format and delete originals."
     )
     parser.add_argument(
         "folder",
