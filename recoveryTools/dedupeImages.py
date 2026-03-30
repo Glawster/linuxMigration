@@ -28,6 +28,7 @@ PHASH_THRESHOLD = 0
 def main():
     """Parse args and run perceptual deduplication of images in the source directory."""
     parser = argparse.ArgumentParser(
+        description="Deduplicate images in place using perceptual hashing."
     )
     parser.add_argument(
         "--source",

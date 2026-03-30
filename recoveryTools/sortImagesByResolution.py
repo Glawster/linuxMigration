@@ -98,6 +98,7 @@ def removeEmptyDirs(root: Path, log) -> int:
 def main():
     """Parse args, bin images by width and rename them into resolution folders."""
     parser = argparse.ArgumentParser(
+        description="Sort images into folders by resolution, grouped by width buckets."
     )
     parser.add_argument(
         "--source",

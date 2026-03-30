@@ -41,6 +41,7 @@ def iterVideos(srcDir: Path, recursive: bool):
 def main():
     """Parse args and sort videos into per-duration folders."""
     parser = argparse.ArgumentParser(
+        description="Sort videos into folders by duration (seconds) using ffprobe."
     )
     parser.add_argument(
         "--source",

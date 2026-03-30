@@ -22,6 +22,7 @@ def run(cmd):
 def main():
     """Parse args and run the recovery pipeline (filter black then deduplicate)."""
     parser = argparse.ArgumentParser(
+        description="Run recovery pipeline: filter black images and deduplicate in place."
     )
     parser.add_argument(
         "--source",

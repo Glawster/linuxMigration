@@ -44,6 +44,7 @@ def iterImages(rootDir: Path):
 def main():
     """Parse args, collect image timestamps, sort and write a CSV timeline."""
     parser = argparse.ArgumentParser(
+        description="Build a chronological CSV timeline from images (EXIF DateTimeOriginal or file mtime)."
     )
     parser.add_argument(
         "--source",
