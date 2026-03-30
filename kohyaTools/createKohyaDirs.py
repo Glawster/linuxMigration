@@ -50,6 +50,7 @@ from kohyaConfig import loadConfig, saveConfig, getCfgValue, updateConfigFromArg
 from organiseMyProjects.logUtils import getLogger  # type: ignore
 
 def parseArgs() -> argparse.Namespace:
+    """parse CLI arguments for creating or restoring kohya training directories."""
     cfg = loadConfig()
 
     defaultTrainingRoot = Path(getCfgValue(cfg, "trainingRoot", "/mnt/myVideo/Adult/tumblrForMovie"))
@@ -119,6 +120,7 @@ def parseArgs() -> argparse.Namespace:
 
 
 def getStyleFolders(trainingRoot: Path, styleNameFilter: Optional[str]) -> List[Path]:
+    """return a sorted list of style folders under trainingRoot, optionally filtered by name."""
     if not trainingRoot.is_dir():
         raise FileNotFoundError(f"trainingRoot does not exist or is not a directory: {trainingRoot}")
 
@@ -132,10 +134,12 @@ def getStyleFolders(trainingRoot: Path, styleNameFilter: Optional[str]) -> List[
 
 
 def formatIndex(index: int) -> str:
+    """format an integer as a zero-padded two-digit string."""
     return f"{index:02d}"
 
 
 def listTopLevelImages(styleDir: Path) -> List[Path]:
+    """return a sorted list of image files directly under styleDir."""
     if not styleDir.exists() or not styleDir.is_dir():
         return []
 
@@ -147,11 +151,13 @@ def listTopLevelImages(styleDir: Path) -> List[Path]:
 
 
 def isCorrectKohyaStem(stem: str, styleName: str) -> bool:
+    """return True if stem matches the expected 'styleName-nn' kohya pattern."""
     pattern = re.compile(rf"^{re.escape(styleName)}-(\d+)$", re.IGNORECASE)
     return bool(pattern.match(stem))
 
 
 def renameFileSafe(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> bool:
+    """rename a file to destPath, logging the action and checking for collisions."""
     if srcPath == destPath:
         return False
 
@@ -169,10 +175,12 @@ def renameFileSafe(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> 
 
 
 def buildTargetStem(styleName: str, index: int) -> str:
+    """build the target kohya filename stem 'styleName-nn'."""
     return f"{styleName}-{formatIndex(index)}"
 
 
 def findUsedIndices(trainDir: Path, styleName: str) -> Set[int]:
+    """collect all numeric indices already used in a training directory."""
     used: Set[int] = set()
     if not trainDir.exists():
         return used
@@ -200,6 +208,7 @@ def findUsedIndices(trainDir: Path, styleName: str) -> Set[int]:
 
 
 def nextAvailableIndex(usedIndices: Set[int], startAt: int = 1) -> int:
+    """return the lowest integer >= startAt not in usedIndices, reserving it."""
     index = startAt
     while index in usedIndices:
         index += 1
@@ -208,6 +217,7 @@ def nextAvailableIndex(usedIndices: Set[int], startAt: int = 1) -> int:
 
 
 def moveFile(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> None:
+    """move a file to destPath, logging the action and skipping if dryRun."""
     logger.info(f"{prefix} move: {srcPath.name} -> {destPath}")
     if dryRun:
         return
@@ -217,6 +227,7 @@ def moveFile(srcPath: Path, destPath: Path, dryRun: bool, prefix: str) -> None:
 
 
 def checkAndFixStyleFolder(styleDir: Path, captionExtension: str, captionTemplate: str, dryRun: bool, prefix: str) -> None:
+    """rename any mis-named files/captions in a kohya 10_style directory to match the expected pattern."""
     styleName = styleDir.name
     paths = resolveKohyaPaths(styleName=styleName, trainingRoot=styleDir.parent)
 
@@ -295,6 +306,7 @@ def processStyleFolder(
     includeOriginalsDir: bool,
     prefix: str,
 ) -> None:
+    """set up kohya training subfolder structure for a single style, moving images and creating captions."""
     styleName = styleDir.name
     paths = resolveKohyaPaths(styleName=styleName, trainingRoot=styleDir.parent)
 
@@ -345,6 +357,7 @@ def processStyleFolder(
 
 
 def undoStyleFolder(styleDir: Path, dryRun: bool, prefix: str) -> None:
+    """move files back from the 10_style subfolder to the flat style folder."""
     styleName = styleDir.name
     paths = resolveKohyaPaths(styleName=styleName, trainingRoot=styleDir.parent)
 
@@ -375,6 +388,7 @@ def undoStyleFolder(styleDir: Path, dryRun: bool, prefix: str) -> None:
 
 
 def main() -> None:
+    """parse args and create, check, or restore kohya training folder structures."""
     args = parseArgs()
     dryRun = True
     if args.confirm:

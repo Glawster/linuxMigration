@@ -40,6 +40,7 @@ class TrainPreset:
 
 
 def presetFor(trainFor: str) -> TrainPreset:
+    """return a TrainPreset with hyperparameters appropriate for the given training target ('person' or 'style')."""
     if trainFor == "person":
         return TrainPreset(
             networkDim=16,
@@ -63,6 +64,7 @@ def presetFor(trainFor: str) -> TrainPreset:
 
 
 def findTrainScript(kohyaRoot: Path) -> Path:
+    """locate and return the path to sd-scripts/train_network.py under kohyaRoot, raising FileNotFoundError if absent."""
     candidate = kohyaRoot / "sd-scripts" / "train_network.py"
     if candidate.exists():
         return candidate
@@ -79,6 +81,7 @@ def buildTrainingCommand(
     numCpuThreads: int,
     preset: TrainPreset,
 ) -> str:
+    """assemble and return the full shell command string to launch kohya LoRA training."""
     launch = (
         f"cd {kohyaRoot} && "
         f"source ~/miniconda3/etc/profile.d/conda.sh && "
@@ -143,6 +146,7 @@ def buildTrainingCommand(
 
 
 def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
+    """build and parse CLI arguments, filling defaults from cfg."""
     parser = argparse.ArgumentParser(description="run kohya sd-scripts LoRA training")
     parser.add_argument("styleName", help="style/person name (used for folder + output name)")
 
@@ -162,6 +166,7 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
 
 
 def main() -> int:
+    """load config, parse args, validate paths and launch kohya LoRA training."""
     cfg = loadConfig()
     args = parseArgs(cfg)
     dryRun = True

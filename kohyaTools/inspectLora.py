@@ -24,6 +24,7 @@ from organiseMyProjects.logUtils import getLogger  # type: ignore
 
 
 def parseArgs() -> argparse.Namespace:
+    """parse CLI arguments for inspecting a safetensors file."""
     parser = argparse.ArgumentParser(description="Inspect a LoRA / safetensors file.")
     parser.add_argument("file", type=Path, help="path to .safetensors file")
     parser.add_argument("--compare", type=Path, default=None, help="optional second .safetensors to compare against")
@@ -44,6 +45,7 @@ def parseArgs() -> argparse.Namespace:
 
 
 def loadSafeTensors(path: Path) -> Dict[str, Any]:
+    """load and return a safetensors file as a dict of tensors."""
     if not path.exists():
         raise FileNotFoundError(f"file not found: {path}")
     if path.suffix.lower() != ".safetensors":
@@ -52,6 +54,7 @@ def loadSafeTensors(path: Path) -> Dict[str, Any]:
 
 
 def approxTensorBytes(tensor) -> int:
+    """estimate memory used by a tensor in bytes."""
     try:
         return int(tensor.numel()) * int(tensor.element_size())
     except Exception:
@@ -59,6 +62,7 @@ def approxTensorBytes(tensor) -> int:
 
 
 def humanBytes(num: int) -> str:
+    """format a byte count as a human-readable string (e.g. '12.34 MiB')."""
     units = ["B", "KiB", "MiB", "GiB", "TiB"]
     value = float(num)
     for u in units:
@@ -71,6 +75,7 @@ def humanBytes(num: int) -> str:
 
 
 def detectFileType(keys: Iterable[str]) -> str:
+    """classify a safetensors file as 'lora', 'checkpoint-like', 'mixed', or 'unknown' from its keys."""
     keysLower = [k.lower() for k in keys]
     hasLora = any("lora_" in k for k in keysLower) or any("lora_up" in k for k in keysLower) or any("lora_down" in k for k in keysLower)
     hasCheckpointLike = any(k.startswith("model.") for k in keysLower) or any("model.diffusion_model" in k for k in keysLower) or any("first_stage_model" in k for k in keysLower)
@@ -85,6 +90,7 @@ def detectFileType(keys: Iterable[str]) -> str:
 
 
 def classifyParts(keys: Iterable[str]) -> Counter:
+    """count tensor keys by model part (unet, text_encoder, other, non-lora)."""
     counts = Counter()
     for k in keys:
         kl = k.lower()
@@ -101,6 +107,7 @@ def classifyParts(keys: Iterable[str]) -> Counter:
 
 
 def summarizeTensors(data: Dict[str, Any]) -> Tuple[int, int, int, Counter, Counter]:
+    """return aggregate stats (count, params, bytes, dtype counts, shape counts) for all tensors."""
     # returns: tensorCount, totalParams, totalBytes, dtypeCounts, shapeCounts
     tensorCount = len(data)
     totalParams = 0
@@ -127,6 +134,7 @@ def summarizeTensors(data: Dict[str, Any]) -> Tuple[int, int, int, Counter, Coun
 
 
 def inferLoraRanks(data: Dict[str, Any]) -> Dict[int, int]:
+    """infer LoRA rank counts from lora_up/lora_down tensor shapes."""
     rankCounts: Counter[int] = Counter()
     for k, t in data.items():
         kl = k.lower()
@@ -153,6 +161,7 @@ def inferLoraRanks(data: Dict[str, Any]) -> Dict[int, int]:
 
 
 def logKeyList(logger, prefix: str, keys: List[str], maxKeys: int = 0) -> None:
+    """log each key with an index, truncating at maxKeys if given."""
     limit = maxKeys if maxKeys and maxKeys > 0 else len(keys)
     for i, k in enumerate(keys[:limit], start=1):
         logger.info("%s key %5d: %s", prefix, i, k)
@@ -161,6 +170,7 @@ def logKeyList(logger, prefix: str, keys: List[str], maxKeys: int = 0) -> None:
 
 
 def compareKeys(logger, prefix: str, leftName: str, leftKeys: List[str], rightName: str, rightKeys: List[str]) -> None:
+    """log a diff of two key lists (added, removed, common)."""
     leftSet = set(leftKeys)
     rightSet = set(rightKeys)
 
@@ -182,6 +192,7 @@ def compareKeys(logger, prefix: str, leftName: str, leftKeys: List[str], rightNa
 
 
 def main() -> None:
+    """parse args, load safetensors file(s) and log an inspection report."""
     args = parseArgs()
     dryRun = True
     if args.confirm:

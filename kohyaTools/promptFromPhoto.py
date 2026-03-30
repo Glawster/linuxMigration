@@ -116,7 +116,9 @@ def squashToPromptFragment(text: str) -> str:
     return _cleanPiece(", ".join(deduped))
 
 def logFieldLayout(logger, imageName: str, llavaJson: Dict[str, Any]) -> None:
+    """log each prompt field from a LLaVA JSON response."""
     def g(k: str) -> str:
+        """safely get a string value from llavaJson for key k."""
         v = llavaJson.get(k, "")
         return v if isinstance(v, str) else str(v)
 
@@ -129,15 +131,18 @@ def logFieldLayout(logger, imageName: str, llavaJson: Dict[str, Any]) -> None:
     logger.info("...cameraPrompt  : %s", g("cameraPrompt"))
 
 def _nowUtcIso() -> str:
+    """return the current UTC time as an ISO 8601 string."""
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
 def _cleanPiece(value: str) -> str:
+    """strip and normalise whitespace in a prompt piece."""
     # Keep this deliberately conservative; we want prompts stable.
     return " ".join(str(value).strip().split())
 
 
 def _joinPieces(pieces: List[str]) -> str:
+    """join cleaned prompt pieces with ', ' separators, skipping empty strings."""
     cleaned = [_cleanPiece(p) for p in pieces if _cleanPiece(p)]
     return ", ".join(cleaned)
 
@@ -161,6 +166,7 @@ def detectConflicts(text: str) -> List[str]:
 
 
 def promptMetrics(positive: str, negative: str) -> Dict[str, Any]:
+    """compute and return a metrics dict for a positive/negative prompt pair."""
     posPieces = [p.strip() for p in positive.split(",") if p.strip()]
     negPieces = [p.strip() for p in negative.split(",") if p.strip()]
     posUnique = len({p.lower() for p in posPieces})
@@ -281,6 +287,7 @@ def buildSidecar(
 
 
 def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
+    """parse CLI arguments for the prompt-from-photo tool."""
     p = argparse.ArgumentParser("Generate prompt sidecars from photos")
     p.add_argument("--input", type=Path, default=Path(getCfgValue(cfg, "comfyInput")))
     p.add_argument("--remote", required=True, default=getCfgValue(cfg, "llavaUrl"))
@@ -340,6 +347,7 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
 
 
 def postToLlava(llavaUrl: str, img: Path, question: str) -> Dict[str, Any]:
+    """post an image and question to a LLaVA endpoint and return the JSON response."""
     # Note: content-type should match actual file; but most servers are fine with octet-stream.
     # We keep it simple and stable.
     with img.open("rb") as f:
@@ -370,6 +378,7 @@ def askSingleField(llavaUrl: str, img: Path, question: str) -> str:
     return _cleanPiece(val) if isinstance(val, str) else ""
 
 def listImages(inputDir: Path, onlyContains: str) -> List[Path]:
+    """return a sorted list of image files under inputDir, optionally filtered by name substring."""
     images = [
         p for p in inputDir.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS
     ]
@@ -379,7 +388,7 @@ def listImages(inputDir: Path, onlyContains: str) -> List[Path]:
 
 
 def main() -> int:
-
+    """load config, iterate images, call LLaVA and write prompt sidecars."""
     cfg = loadConfig()
     args = parseArgs(cfg)
     dryRun = True
