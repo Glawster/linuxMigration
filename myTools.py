@@ -568,13 +568,11 @@ class ConfigEditorDialog(QDialog):
     """Editable view of a tool's JSON (or other plain-text) config file."""
 
     def __init__(self, configPath: Path, parent: Optional[QWidget] = None) -> None:
+        """Initialise the dialog with the given config file path."""
         super().__init__(parent)
-        self._configPath = configPath
-        self._setupUi()
-        self.setWindowModality(_WindowModality.WindowModal)
-        self.resize(640, 500)
 
     def _setupUi(self) -> None:
+        """Build the dialog layout with path label, editor, status label and buttons."""
         self.setWindowTitle(f"Config — {self._configPath.name}")
         layout = QVBoxLayout(self)
 
@@ -653,6 +651,7 @@ class ArgsDialog(QDialog):
         configPath: Optional[Path] = None,
         parent: Optional[QWidget] = None,
     ) -> None:
+        """Initialise the arguments dialog for the given tool and arg definitions."""
         super().__init__(parent)
         self._tool = tool
         self._argDefs = argDefs
@@ -664,6 +663,7 @@ class ArgsDialog(QDialog):
         self.resize(520, min(140 + len(argDefs) * 52, 600))
 
     def _setupUi(self) -> None:
+        """Build the dialog layout with config row, argument form and button row."""
         self.setWindowTitle(f"Arguments — {self._tool['name']}")
         layout = QVBoxLayout(self)
         self._addConfigRow(layout)
@@ -763,10 +763,12 @@ class ArgsDialog(QDialog):
         layout.addLayout(btnRow)
 
     def _onShowConfig(self) -> None:
+        """Open the ConfigEditorDialog for the current tool's config file."""
         if self._configPath:
             ConfigEditorDialog(self._configPath, self).exec()
 
     def _onSkip(self) -> None:
+        """Mark the dialog as skipped and accept it to run without arguments."""
         self._skipped = True
         self.accept()
 
@@ -807,6 +809,7 @@ class RunDialog(QDialog):
         extraArgs: Optional[List[str]] = None,
         parent: Optional[QWidget] = None,
     ) -> None:
+        """Initialise the run dialog; if extraArgs is not None, auto-starts the tool."""
         super().__init__(parent)
         self._tool = tool
         self._extraArgs = extraArgs  # None → manual mode; list → auto-start mode
@@ -867,9 +870,8 @@ class RunDialog(QDialog):
         layout.addLayout(btnRow)
 
     def _setupUi(self) -> None:
+        """Build the dialog layout with options row, output area and buttons."""
         self.setWindowTitle(f"Run — {self._tool['name']}")
-        layout = QVBoxLayout(self)
-        self._setupOptionsRow(layout)
         self._setupOutputArea(layout)
         self._setupButtons(layout)
 
@@ -887,6 +889,7 @@ class RunDialog(QDialog):
         return "bash", [str(path)] + extraArgs
 
     def _runTool(self) -> None:
+        """Launch the tool as a QProcess and attach output/finished handlers."""
         self._output.clear()
         self._statusLabel.setText("Running…")
         self._runBtn.setEnabled(False)
@@ -900,6 +903,7 @@ class RunDialog(QDialog):
         self._process.start(program, args)
 
     def _onReadyRead(self) -> None:
+        """Append available QProcess output to the text widget."""
         if self._process:
             data = bytes(self._process.readAll()).decode("utf-8", errors="replace")
             self._output.moveCursor(self._output.textCursor().MoveOperation.End)
@@ -907,6 +911,7 @@ class RunDialog(QDialog):
             self._output.moveCursor(self._output.textCursor().MoveOperation.End)
 
     def _onFinished(self, exitCode: int, exitStatus: QProcess.ExitStatus) -> None:
+        """Update the status label when the process finishes."""
         self._runBtn.setEnabled(True)
         self._stopBtn.setEnabled(False)
         statusText = (
@@ -918,15 +923,18 @@ class RunDialog(QDialog):
         self._process = None
 
     def _stopTool(self) -> None:
+        """Request graceful termination of the running process."""
         if self._process:
             self._process.terminate()
             QTimer.singleShot(2000, self._forceKill)
 
     def _forceKill(self) -> None:
+        """Send SIGKILL to the process if it is still running after a terminate request."""
         if self._process and self._process.state() != QProcess.ProcessState.NotRunning:
             self._process.kill()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # type: ignore[override]
+        """Stop the running process before closing the dialog."""
         self._stopTool()
         super().closeEvent(event)
 
@@ -938,9 +946,8 @@ class DetailPane(QScrollArea):
     """Right-hand panel showing tool metadata and action buttons."""
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
+        """Initialise the scroll-area detail pane with name, description and button widgets."""
         super().__init__(parent)
-        self._currentTool: Optional[dict] = None
-        self.setWidgetResizable(True)
         self._container = QWidget()
         self.setWidget(self._container)
         layout = QVBoxLayout(self._container)
@@ -1015,6 +1022,7 @@ class DetailPane(QScrollArea):
         layout.addLayout(btnRow)
 
     def _showEmpty(self) -> None:
+        """Reset the pane to its empty 'select a tool' state."""
         self._nameLabel.setText("Select a tool")
         self._typeBadge.setText("")
         self._descLabel.setText("Choose a tool from the list on the left.")
@@ -1024,6 +1032,7 @@ class DetailPane(QScrollArea):
         self._openBtn.setEnabled(False)
 
     def showTool(self, tool: dict) -> None:
+        """Populate the pane with metadata for the given tool dict."""
         self._currentTool = tool
         self._nameLabel.setText(tool["name"])
 
@@ -1055,6 +1064,7 @@ class DetailPane(QScrollArea):
         self._openBtn.setEnabled(True)
 
     def _onRun(self) -> None:
+        """Show the args dialog if needed and then open the RunDialog for the current tool."""
         if not self._currentTool:
             return
         tool = self._currentTool
@@ -1073,6 +1083,7 @@ class DetailPane(QScrollArea):
             RunDialog(tool, parent=self).exec()
 
     def _onOpenEditor(self) -> None:
+        """Open the current tool's file in $EDITOR or xdg-open."""
         if not self._currentTool:
             return
         filePath = str(self._currentTool["path"])
@@ -1090,8 +1101,8 @@ class ToolMenuWindow(QMainWindow):
     """Main application window."""
 
     def __init__(self) -> None:
+        """Set up the main window, load tools and restore saved geometry."""
         super().__init__()
-        self.setWindowTitle("My Tools")
         self.setMinimumSize(QSize(900, 600))
 
         self._tools: List[dict] = []
@@ -1102,6 +1113,7 @@ class ToolMenuWindow(QMainWindow):
         self._restoreGeometry()
 
     def _setupUi(self) -> None:
+        """Build the main window layout with search bar, tree/detail splitter and status bar."""
         central = QWidget()
         self.setCentralWidget(central)
         mainLayout = QVBoxLayout(central)
@@ -1146,10 +1158,12 @@ class ToolMenuWindow(QMainWindow):
         self.statusBar().addPermanentWidget(exitBtn)
 
     def _loadTools(self) -> None:
+        """Discover all tools and populate the tree."""
         self._tools = discoverTools()
         self._rebuildTree(self._tools)
 
     def _rebuildTree(self, tools: List[dict]) -> None:
+        """Clear and rebuild the tree widget from the given tool list."""
         self._tree.clear()
         self._categoryItems = {}
 
@@ -1187,6 +1201,7 @@ class ToolMenuWindow(QMainWindow):
         self._tree.resizeColumnToContents(0)
 
     def _onSearchChanged(self, text: str) -> None:
+        """Filter the tree to tools matching the search text."""
         query = text.strip().lower()
         if not query:
             self._rebuildTree(self._tools)
@@ -1202,6 +1217,7 @@ class ToolMenuWindow(QMainWindow):
         self._rebuildTree(filtered)
 
     def _onTreeSelectionChanged(self, current: QTreeWidgetItem, previous: Optional[QTreeWidgetItem]) -> None:
+        """Show the selected tool in the detail pane."""
         if current is None:
             return
         tool = current.data(0, _ItemDataRole.UserRole)
@@ -1209,8 +1225,8 @@ class ToolMenuWindow(QMainWindow):
             self._detail.showTool(tool)
 
     def _restoreGeometry(self) -> None:
+        """Restore saved window and splitter geometry from QSettings."""
         settings = QSettings("Glawster", "myTools")
-        geometry = settings.value("windowGeometry")
         if geometry:
             self.restoreGeometry(geometry)
         splitterState = settings.value("splitterState")
@@ -1218,8 +1234,8 @@ class ToolMenuWindow(QMainWindow):
             self._splitter.restoreState(splitterState)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # type: ignore[override]
+        """Save window and splitter geometry to QSettings before closing."""
         settings = QSettings("Glawster", "myTools")
-        settings.setValue("windowGeometry", self.saveGeometry())
         settings.setValue("splitterState", self._splitter.saveState())
         super().closeEvent(event)
 
@@ -1228,6 +1244,7 @@ class ToolMenuWindow(QMainWindow):
 # Entry point
 # ---------------------------------------------------------------------------
 def main() -> None:
+    """Create the QApplication, show the main window and enter the event loop."""
     app = QApplication(sys.argv)
     app.setApplicationName("My Tools")
     app.setOrganizationName("Glawster")
