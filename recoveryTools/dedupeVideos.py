@@ -43,6 +43,7 @@ Examples:
 import argparse
 import hashlib
 import json
+import logging
 import subprocess
 import tempfile
 import time
@@ -114,11 +115,12 @@ def hashFile(path: Path, chunkSize: int = 1024 * 1024) -> str:
     return digest.hexdigest()
 
 
-def runSha256(sourceDir: Path, confirm: bool, logger) -> None:
+def runSha256(sourceDir: Path, confirm: bool, logger: logging.LoggerAdapter) -> None:
     """Exact-dedup all video files under *sourceDir* by SHA-256."""
-
+    dryRun = not confirm
     dupesDir = sourceDir / "VideoDuplicates"
 
+    logger.doing(f"scanning {sourceDir} for duplicate videos")
     videos = [p for p in sourceDir.rglob("*") if p.is_file() and isVideo(p)]
     total = len(videos)
     logger.info("found %d video file(s) to dedupe", total)
@@ -146,25 +148,20 @@ def runSha256(sourceDir: Path, confirm: bool, logger) -> None:
             continue
 
         # duplicate found
-        if not confirm:
-            moved += 1
-            logger.info("would move: %s  (dup of %s)", str(v), str(seen[h]))
-            continue
-
-        try:
-            dst = safeMove(v, dupesDir)
-            moved += 1
-            logger.info("moved: %s  ->  %s  (dup of %s)", str(v), str(dst), str(seen[h]))
-        except Exception as e:
-            errors += 1
-            logger.error("Move failed for %s: %s", v.name, str(e))
+        logger.action(f"move: {v}  (dup of {seen[h]})")
+        moved += 1
+        if confirm:
+            try:
+                dst = safeMove(v, dupesDir)
+                logger.done(f"moved to: {dst}")
+            except Exception as e:
+                moved -= 1
+                errors += 1
+                logger.error("Move failed for %s: %s", v.name, str(e))
 
     print()  # finish the progress bar line
-    logger.info(
-        "summary: total=%d kept=%d moved=%d errors=%d dryRun=%s",
-        total, kept, moved, errors, not confirm,
-    )
-    if not confirm and moved:
+    logger.done(f"summary: total={total}  kept={kept}  moved={moved}  errors={errors}")
+    if dryRun and moved:
         logger.info("to actually move files, run with --confirm")
 
 
@@ -345,13 +342,15 @@ def decideSurvivor(
     return None, "files appear identical in resolution and size"
 
 
-def runAviMov(sourceDir: Path, confirm: bool, logger) -> None:
+def runAviMov(sourceDir: Path, confirm: bool, logger: logging.LoggerAdapter) -> None:
     """Scan *sourceDir* for .avi/.mov pairs and move the inferior copy."""
+    dryRun = not confirm
 
+    logger.doing(f"scanning {sourceDir} for .avi/.mov pairs")
     pairs = findPairs(sourceDir)
 
     if not pairs:
-        logger.info("no .avi/.mov pairs found")
+        logger.done("no .avi/.mov pairs found")
         return
 
     logger.info("found %d .avi/.mov pair(s) to compare", len(pairs))
@@ -372,7 +371,7 @@ def runAviMov(sourceDir: Path, confirm: bool, logger) -> None:
         tmpPath = Path(tmpDir)
 
         for aviPath, movPath in pairs:
-            logger.info("checking pair: %s  |  %s", aviPath.name, movPath.name)
+            logger.doing(f"checking: {aviPath.name}  |  {movPath.name}")
 
             aviInfo = getVideoInfo(aviPath)
             movInfo = getVideoInfo(movPath)
@@ -393,7 +392,7 @@ def runAviMov(sourceDir: Path, confirm: bool, logger) -> None:
                     f"duration mismatch "
                     f"(avi={aviDur:.1f}s, mov={movDur:.1f}s, diff={durDiff:.1f}s)"
                 )
-                logger.info("skipping pair – %s: %s", msg, aviPath.name)
+                logger.info("skipping pair – %s: %s", aviPath.name, msg)
                 skipped.append((aviPath, movPath, msg))
                 continue
 
@@ -403,7 +402,7 @@ def runAviMov(sourceDir: Path, confirm: bool, logger) -> None:
 
             if match is False:
                 msg = "thumbnail perceptual-hash mismatch – files look different"
-                logger.info("skipping pair – %s: %s", msg, aviPath.name)
+                logger.info("skipping pair – %s: %s", aviPath.name, msg)
                 skipped.append((aviPath, movPath, msg))
                 continue
 
@@ -416,45 +415,37 @@ def runAviMov(sourceDir: Path, confirm: bool, logger) -> None:
             pathToRemove, reason = decideSurvivor(aviPath, movPath, aviInfo, movInfo)
 
             if pathToRemove is None:
-                logger.info("nothing to do – %s: %s", reason, aviPath.name)
+                logger.info("nothing to do – %s: %s", aviPath.name, reason)
                 skipped.append((aviPath, movPath, reason))
                 continue
 
             pathToKeep = movPath if pathToRemove == aviPath else aviPath
-            logger.info("will remove: %s  (%s)", pathToRemove.name, reason)
-            logger.info("will keep:   %s", pathToKeep.name)
+            logger.value("will remove", f"{pathToRemove.name}  ({reason})")
+            logger.value("will keep", pathToKeep.name)
             toRemove.append((pathToRemove, reason))
 
-    logger.info(
-        "summary: %d to remove, %d skipped, %d error(s)",
-        len(toRemove), len(skipped), len(errors),
+    logger.done(
+        f"summary: {len(toRemove)} to remove, {len(skipped)} skipped, {len(errors)} error(s)"
     )
 
     if not toRemove:
-        logger.info("nothing to do")
         return
 
-    if not confirm:
-        logger.info("dry run – no files have been moved")
-        logger.info("files that would be moved to: %s", str(dupesDir))
-        for p, reason in toRemove:
-            dest = dupesDir / p.name
-            logger.info("would move: %s  ->  %s  (%s)", str(p), str(dest), reason)
-        logger.info("to actually move files, run with --confirm")
-        return
-
-    # --- Confirmed ---
-    logger.info("moving inferior copies to: %s", str(dupesDir))
+    logger.value("destination folder", str(dupesDir))
     moved = 0
     for p, reason in toRemove:
-        try:
-            dest = safeMove(p, dupesDir)
-            logger.info("moved: %s  ->  %s", str(p), str(dest))
-            moved += 1
-        except Exception as e:
-            logger.error("Move failed for %s: %s", p.name, str(e))
+        logger.action(f"move: {p}  ->  {dupesDir / p.name}  ({reason})")
+        if confirm:
+            try:
+                safeMove(p, dupesDir)
+                moved += 1
+            except Exception as e:
+                logger.error("Move failed for %s: %s", p.name, str(e))
 
-    logger.info("done: %d file(s) moved to %s", moved, str(dupesDir))
+    if confirm:
+        logger.done(f"{moved} file(s) moved to {dupesDir}")
+    else:
+        logger.info("to actually move files, run with --confirm")
 
 
 # ---------------------------------------------------------------------------
@@ -513,6 +504,11 @@ def main() -> None:
     runLogger = getLogger("dedupeVideos", includeConsole=True, dryRun=dryRun)
 
     sourceDir = Path(args.source)
+
+    runLogger.doing("dedupeVideos")
+    runLogger.value("source", str(sourceDir))
+    runLogger.value("mode", args.mode)
+    runLogger.value("dry run", str(dryRun))
 
     if args.mode == "sha256":
         runSha256(sourceDir, confirm=args.confirm, logger=runLogger)
