@@ -34,6 +34,7 @@ from PIL import Image, ImageOps, ImageStat, UnidentifiedImageError
 
 
 def is_jpeg(path: Path) -> bool:
+    """Return True if path has a .jpg or .jpeg extension."""
     return path.suffix.lower() in {".jpg", ".jpeg"}
 
 
@@ -308,6 +309,7 @@ def process_image(
 
 
 def main():
+    """Parse args, scan folder for JPEGs and normalise each one in place."""
     parser = argparse.ArgumentParser(description="Clean and optionally AI-upscale JPEGs for DaVinci Resolve.")
     parser.add_argument(
         "root",

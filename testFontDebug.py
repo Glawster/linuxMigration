@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+"""testFontDebug.py
+
+Debug helper: display Tkinter font resolution info for each tested font family.
+"""
 
 import tkinter as tk
 from tkinter import ttk
@@ -16,6 +20,7 @@ fonts_to_test = [
 ]
 
 def main():
+    """Open a Tkinter window and print font resolution debug info to stdout."""
     root = tk.Tk()
     root.title("Tk font debug")
 

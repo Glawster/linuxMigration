@@ -25,6 +25,7 @@ try:
 except ImportError:
     # Fallback implementation if recoveryCommon is not available
     def formatEta(seconds: float) -> str:
+        """Format a duration in seconds as HH:MM:SS."""
         if seconds <= 0 or seconds != seconds:
             return "--:--:--"
         seconds = int(seconds)
@@ -43,6 +44,7 @@ except ImportError:
         width: int = 40,
         label: str = "Progress",
     ):
+        """Print an ASCII progress bar to stdout showing count, percentage and ETA."""
         if total <= 0:
             return
         ratio = min(done / total, 1.0)
@@ -169,8 +171,8 @@ def convertImage(path: Path, dryRun: bool, logger: logging.Logger) -> Tuple[bool
 
 
 def main():
+    """Parse args, scan folder for JPEGs and convert each to PNG."""
     parser = argparse.ArgumentParser(
-        description="Convert JPEG images to PNG format and delete originals."
     )
     parser.add_argument(
         "folder",
