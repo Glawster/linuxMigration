@@ -53,7 +53,7 @@ from typing import Dict, List, Optional, Tuple
 from organiseMyProjects.logUtils import getLogger  # type: ignore
 from recoveryCommon import isVideo, printProgress
 
-logger = getLogger("dedupeVideos")
+logger = getLogger(Path(__file__).stem)
 
 try:
     from PIL import Image
@@ -500,6 +500,7 @@ def main() -> None:
     """Entry point: parse args, initialise logger, and dispatch to the chosen mode."""
     args = parseArgs()
     dryRun = not args.confirm
+
     _name = Path(__file__).stem
     logger = getLogger(_name, includeConsole=True, dryRun=dryRun)
 
