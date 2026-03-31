@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+set -x
 
 # ============================================================
 # wowAddonHelper.sh — WoW addon helper (Linux / Wine)
@@ -16,6 +17,7 @@ set -euo pipefail
 
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Source logUtils.sh from organiseMyProjects (adjust path if needed)
+# make sure a conda env is activated for this to work
 _LOG_UTILS="$(python3 -c 'import organiseMyProjects, os; print(os.path.dirname(organiseMyProjects.__file__))' 2>/dev/null)/logUtils.sh"
 if [[ -f "$_LOG_UTILS" ]]; then
   source "$_LOG_UTILS"

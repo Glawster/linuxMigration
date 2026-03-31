@@ -500,12 +500,12 @@ def main() -> None:
     """Entry point: parse args, initialise logger, and dispatch to the chosen mode."""
     args = parseArgs()
     dryRun = not args.confirm
-
-    logger = getLogger("dedupeVideos", includeConsole=True, dryRun=dryRun)
+    _name = Path(__file__).stem
+    logger = getLogger(_name, includeConsole=True, dryRun=dryRun)
 
     sourceDir = Path(args.source)
 
-    logger.doing("dedupeVideos")
+    logger.doing(_name)
     logger.value("source", str(sourceDir))
     logger.value("mode", args.mode)
     logger.value("dry run", str(dryRun))
