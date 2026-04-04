@@ -9,24 +9,26 @@ Two modes of video deduplication:
              duplicates to a VideoDuplicates/ folder inside the source folder.
              Designed to be run AFTER recovery/flattening.
 
-  avi-mov  – Smart deduplication of .avi/.mov pairs sharing the same base
-             name.  For each pair the script:
-               1. Reads duration and pixel dimensions via ffprobe.
-               2. Skips the pair if durations differ by more than
-                  DURATION_TOLERANCE seconds (different content).
-               3. Extracts a sample frame from each file and compares them
-                  with a perceptual hash (requires Pillow + imagehash).
-                  Skips the pair if the frames look different.
-               4. Decides which copy is inferior:
-                    - Lower pixel count  →  inferior
-                    - Same pixel count   →  larger file size is inferior
-               5. Moves the inferior copy to AviMovDuplicates/.
+  avi-mov  – Smart deduplication of same-name video files in the same
+                 folder, regardless of extension. For each matching group
+                 the script:
+                    1. Reads duration and pixel dimensions via ffprobe.
+                    2. Skips file comparisons if durations differ by more than
+                        DURATION_TOLERANCE seconds (different content).
+                    3. Extracts a sample frame from matching candidates and
+                        compares them with a perceptual hash
+                        (requires Pillow + imagehash).
+                        Skips comparisons if the frames look different.
+                    4. Decides which copy is inferior within each matching set:
+                          - Lower pixel count  -> inferior
+                          - Same pixel count   -> larger file size is inferior
+                    5. Moves inferior copies to AviMovDuplicates/.
 
 Both modes default to a dry-run; pass --confirm / -c to actually move files.
 
 Requirements:
     pip install Pillow imagehash
-    (ffprobe and ffmpeg must be on PATH for avi-mov mode)
+    (ffprobe and ffmpeg must be on PATH for same-name mode)
 
 Usage:
     python3 dedupeVideos.py [--sha256] [--source <path>] [--confirm]
@@ -41,6 +43,7 @@ Examples:
 
 import argparse
 import hashlib
+import itertools
 import json
 import logging
 import subprocess
@@ -304,7 +307,7 @@ def compareFrames(img1: Path, img2: Path) -> Optional[int]:
 
 
 def thumbnailsMatch(
-    aviPath: Path, movPath: Path, duration: float, tmpDir: Path
+    firstPath: Path, secondPath: Path, duration: float, tmpDir: Path
 ) -> Optional[bool]:
     """
     Extract a frame at ~10 % of the video length and compare both files.
@@ -318,8 +321,8 @@ def thumbnailsMatch(
         return None
 
     sampleTime = max(1.0, duration * 0.1)
-    thumb1 = extractThumbnail(aviPath, tmpDir, sampleTime)
-    thumb2 = extractThumbnail(movPath, tmpDir, sampleTime)
+    thumb1 = extractThumbnail(firstPath, tmpDir, sampleTime)
+    thumb2 = extractThumbnail(secondPath, tmpDir, sampleTime)
     if not thumb1 or not thumb2:
         return None
 
@@ -331,90 +334,123 @@ def thumbnailsMatch(
 
 
 # ---------------------------------------------------------------------------
-# avi-mov mode – pair discovery and decision logic
+# avi-mov mode – same-name group discovery and decision logic
 # ---------------------------------------------------------------------------
 
 
-def findPairs(sourceDir: Path) -> List[Tuple[Path, Path]]:
+def findDuplicateGroups(sourceDir: Path) -> List[List[Path]]:
     """
-    Return a sorted list of (aviPath, movPath) tuples for all files found
-    recursively under *sourceDir* whose stems match (case-insensitive) and
-    whose extensions are .avi and .mov respectively.  Only files sharing the
-    same parent directory are paired.
+    Return sorted groups of video files found recursively under *sourceDir*
+    that share the same parent directory and stem (case-insensitive).
     """
-    avis: Dict[Tuple[Path, str], Path] = {}
-    movs: Dict[Tuple[Path, str], Path] = {}
+    groups: Dict[Tuple[Path, str], List[Path]] = {}
 
     for f in sourceDir.rglob("*"):
-        if not f.is_file():
+        if not f.is_file() or not isVideo(f):
             continue
-        ext = f.suffix.lower()
         key = (f.parent, f.stem.lower())
-        if ext == ".avi":
-            avis[key] = f
-        elif ext == ".mov":
-            movs[key] = f
+        groups.setdefault(key, []).append(f)
 
-    return [(avis[key], movs[key]) for key in sorted(avis) if key in movs]
+    return [
+        sorted(group, key=lambda path: (path.suffix.lower(), path.name.lower()))
+        for _, group in sorted(groups.items())
+        if len(group) > 1
+    ]
 
 
-def decideSurvivor(
-    aviPath: Path,
-    movPath: Path,
-    aviInfo: dict,
-    movInfo: dict,
-) -> Tuple[Optional[Path], str]:
-    """
-    Decide which file is inferior and should be moved.
+def videoQualityKey(path: Path, info: dict) -> Tuple[int, int, str, str]:
+    """Return a sort key where lower values represent the preferred survivor."""
+    pixels = (info["width"] or 0) * (info["height"] or 0)
+    size = int(info["size"] or 0)
+    return (-pixels, size, path.suffix.lower(), path.name.lower())
 
-    Returns (pathToRemove, reason_string), or (None, reason_string) when no
-    decision can be made.
-    """
-    aviPixels = (aviInfo["width"] or 0) * (aviInfo["height"] or 0)
-    movPixels = (movInfo["width"] or 0) * (movInfo["height"] or 0)
 
-    if aviPixels != movPixels:
-        if aviPixels > movPixels:
-            return movPath, (
-                f"avi is higher resolution "
-                f"({aviInfo['width']}x{aviInfo['height']} vs "
-                f"{movInfo['width']}x{movInfo['height']})"
-            )
-        return aviPath, (
-            f"mov is higher resolution "
-            f"({movInfo['width']}x{movInfo['height']} vs "
-            f"{aviInfo['width']}x{aviInfo['height']})"
+def reasonToRemove(
+    removePath: Path, keepPath: Path, removeInfo: dict, keepInfo: dict
+) -> str:
+    """Explain why *removePath* is inferior to *keepPath*."""
+    removePixels = (removeInfo["width"] or 0) * (removeInfo["height"] or 0)
+    keepPixels = (keepInfo["width"] or 0) * (keepInfo["height"] or 0)
+
+    if removePixels != keepPixels:
+        return (
+            f"{keepPath.suffix.lower()} is higher resolution "
+            f"({keepInfo['width']}x{keepInfo['height']} vs "
+            f"{removeInfo['width']}x{removeInfo['height']})"
         )
 
-    # Same (or unknown) resolution – remove the larger file
-    if aviInfo["size"] > movInfo["size"]:
-        return aviPath, (
-            f"same resolution, avi is larger "
-            f"({aviInfo['size']:,} vs {movInfo['size']:,} bytes)"
-        )
-    if movInfo["size"] > aviInfo["size"]:
-        return movPath, (
-            f"same resolution, mov is larger "
-            f"({movInfo['size']:,} vs {aviInfo['size']:,} bytes)"
+    removeSize = int(removeInfo["size"] or 0)
+    keepSize = int(keepInfo["size"] or 0)
+    if removeSize != keepSize:
+        return (
+            f"same resolution, {removePath.suffix.lower()} is larger "
+            f"({removeSize:,} vs {keepSize:,} bytes)"
         )
 
-    return None, "files appear identical in resolution and size"
+    return f"same resolution and size; keeping {keepPath.name} by sort order"
+
+
+def pairLooksEquivalent(
+    firstPath: Path,
+    secondPath: Path,
+    firstInfo: dict,
+    secondInfo: dict,
+    tmpPath: Path,
+    logger: logging.LoggerAdapter,
+) -> bool:
+    """Return True when two same-name videos appear to be duplicate content."""
+    firstDur = firstInfo["duration"] or 0.0
+    secondDur = secondInfo["duration"] or 0.0
+    durDiff = abs(firstDur - secondDur)
+
+    if durDiff > DURATION_TOLERANCE:
+        logger.info(
+            "skipping comparison – %s / %s: duration mismatch "
+            "(%ss vs %ss, diff=%ss)",
+            firstPath.name,
+            secondPath.name,
+            f"{firstDur:.1f}",
+            f"{secondDur:.1f}",
+            f"{durDiff:.1f}",
+        )
+        return False
+
+    minDur = min(firstDur, secondDur)
+    match = thumbnailsMatch(firstPath, secondPath, minDur, tmpPath)
+    if match is False:
+        logger.info(
+            "skipping comparison – %s / %s: thumbnail perceptual-hash mismatch",
+            firstPath.name,
+            secondPath.name,
+        )
+        return False
+
+    if match is True:
+        logger.info("thumbnails match: %s / %s", firstPath.name, secondPath.name)
+    else:
+        logger.info(
+            "thumbnail comparison skipped (tool unavailable): %s / %s",
+            firstPath.name,
+            secondPath.name,
+        )
+
+    return True
 
 
 def runAviMov(sourceDir: Path, confirm: bool, logger: logging.LoggerAdapter) -> None:
-    """Scan *sourceDir* for video duplication and move the inferior copy."""
+    """Scan *sourceDir* for same-name video duplication and move inferior copies."""
     dryRun = not confirm
     totalVideos = sum(1 for p in sourceDir.rglob("*") if p.is_file() and isVideo(p))
 
-    logger.doing(f"scanning {sourceDir} for video duplication")
-    pairs = findPairs(sourceDir)
+    logger.doing(f"scanning {sourceDir} for same-name video duplication")
+    groups = findDuplicateGroups(sourceDir)
 
-    if not pairs:
+    if not groups:
         logger.done("no duplicates found")
         logSummaryBox("avi-mov", dryRun, 0, totalVideos, 0, logger)
         return
 
-    logger.info("found %d duplicate(s) to compare", len(pairs))
+    logger.info("found %d same-name video group(s) to compare", len(groups))
 
     if not IMAGEHASH_AVAILABLE:
         logger.info(
@@ -425,74 +461,101 @@ def runAviMov(sourceDir: Path, confirm: bool, logger: logging.LoggerAdapter) -> 
     dupesDir = sourceDir / "AviMovDuplicates"
 
     toRemove: List[Tuple[Path, str, int]] = []
-    skipped: List[Tuple[Path, Path, str]] = []
-    errors: List[Tuple[Path, Path, str]] = []
+    skipped: List[str] = []
+    errors = 0
 
     with tempfile.TemporaryDirectory() as tmpDir:
         tmpPath = Path(tmpDir)
 
-        for aviPath, movPath in pairs:
-            logger.doing(f"checking: {aviPath.name}  |  {movPath.name}")
+        for group in groups:
+            displayNames = ", ".join(path.name for path in group)
+            logger.doing(f"checking group: {displayNames}")
 
-            aviInfo = getVideoInfo(aviPath)
-            movInfo = getVideoInfo(movPath)
+            infoByPath: Dict[Path, dict] = {}
+            readablePaths: List[Path] = []
+            for videoPath in group:
+                videoInfo = getVideoInfo(videoPath)
+                if videoInfo is None:
+                    logger.error(
+                        "Skipping file – could not read video info via ffprobe: %s",
+                        videoPath.name,
+                    )
+                    errors += 1
+                    continue
+                infoByPath[videoPath] = videoInfo
+                readablePaths.append(videoPath)
 
-            if aviInfo is None or movInfo is None:
-                msg = "could not read video info via ffprobe"
-                logger.error(
-                    "Skipping pair – %s: %s / %s", msg, aviPath.name, movPath.name
+            if len(readablePaths) < 2:
+                skipped.append(displayNames)
+                continue
+
+            parentByPath = {path: path for path in readablePaths}
+
+            def find(path: Path) -> Path:
+                while parentByPath[path] != path:
+                    parentByPath[path] = parentByPath[parentByPath[path]]
+                    path = parentByPath[path]
+                return path
+
+            def union(firstPath: Path, secondPath: Path) -> None:
+                firstRoot = find(firstPath)
+                secondRoot = find(secondPath)
+                if firstRoot != secondRoot:
+                    parentByPath[secondRoot] = firstRoot
+
+            for firstPath, secondPath in itertools.combinations(readablePaths, 2):
+                if pairLooksEquivalent(
+                    firstPath,
+                    secondPath,
+                    infoByPath[firstPath],
+                    infoByPath[secondPath],
+                    tmpPath,
+                    logger,
+                ):
+                    union(firstPath, secondPath)
+
+            components: Dict[Path, List[Path]] = {}
+            for videoPath in readablePaths:
+                components.setdefault(find(videoPath), []).append(videoPath)
+
+            matchedComponentFound = False
+            for component in components.values():
+                if len(component) < 2:
+                    continue
+
+                matchedComponentFound = True
+                sortedComponent = sorted(
+                    component,
+                    key=lambda path: videoQualityKey(path, infoByPath[path]),
                 )
-                errors.append((aviPath, movPath, msg))
-                continue
+                keepPath = sortedComponent[0]
+                keepInfo = infoByPath[keepPath]
+                logger.value("keep", keepPath.name)
 
-            # --- Duration check ---
-            aviDur = aviInfo["duration"] or 0.0
-            movDur = movInfo["duration"] or 0.0
-            durDiff = abs(aviDur - movDur)
+                for removePath in sortedComponent[1:]:
+                    removeInfo = infoByPath[removePath]
+                    reason = reasonToRemove(removePath, keepPath, removeInfo, keepInfo)
+                    removeSize = int(removeInfo.get("size") or 0)
+                    logger.value("remove", f"{removePath.name}  ({reason})")
+                    toRemove.append((removePath, reason, removeSize))
 
-            if durDiff > DURATION_TOLERANCE:
-                msg = (
-                    f"duration mismatch "
-                    f"(avi={aviDur:.1f}s, mov={movDur:.1f}s, diff={durDiff:.1f}s)"
-                )
-                logger.info("skipping pair – %s: %s", aviPath.name, msg)
-                skipped.append((aviPath, movPath, msg))
-                continue
-
-            # --- Thumbnail comparison ---
-            minDur = min(aviDur, movDur)
-            match = thumbnailsMatch(aviPath, movPath, minDur, tmpPath)
-
-            if match is False:
-                msg = "thumbnail perceptual-hash mismatch – files look different"
-                logger.info("skipping pair – %s: %s", aviPath.name, msg)
-                skipped.append((aviPath, movPath, msg))
-                continue
-
-            if match is True:
-                logger.info("thumbnails match: %s", aviPath.name)
-            else:
+            if not matchedComponentFound:
                 logger.info(
-                    "thumbnail comparison skipped (tool unavailable): %s", aviPath.name
+                    "nothing to do – no matching duplicate set in group: %s",
+                    displayNames,
                 )
+                skipped.append(displayNames)
 
-            # --- Decide which to remove ---
-            pathToRemove, reason = decideSurvivor(aviPath, movPath, aviInfo, movInfo)
+    uniqueToRemove: Dict[Path, Tuple[str, int]] = {}
+    for path, reason, size in toRemove:
+        if path in uniqueToRemove:
+            continue
+        uniqueToRemove[path] = (reason, size)
 
-            if pathToRemove is None:
-                logger.info("nothing to do – %s: %s", aviPath.name, reason)
-                skipped.append((aviPath, movPath, reason))
-                continue
-
-            pathToKeep = movPath if pathToRemove == aviPath else aviPath
-            removeInfo = aviInfo if pathToRemove == aviPath else movInfo
-            removeSize = int(removeInfo.get("size") or 0)
-            logger.value("remove", f"{pathToRemove.name}  ({reason})")
-            logger.value("keep", pathToKeep.name)
-            toRemove.append((pathToRemove, reason, removeSize))
+    toRemove = [(path, reason, size) for path, (reason, size) in uniqueToRemove.items()]
 
     logger.done(
-        f"summary: {len(toRemove)} to remove, {len(skipped)} skipped, {len(errors)} error(s)"
+        f"summary: {len(toRemove)} to remove, {len(skipped)} skipped, {errors} error(s)"
     )
 
     if not toRemove:
@@ -532,7 +595,7 @@ def parseArgs():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description=(
-            "Deduplicate video files. Defaults to AVI/MOV smart mode; "
+            "Deduplicate video files. Defaults to same-name smart mode; "
             "use --sha256 for exact recursive deduplication."
         )
     )
@@ -541,7 +604,7 @@ def parseArgs():
         action="store_true",
         help=(
             "Use SHA-256 exact deduplication mode (recursive). "
-            "Default mode is AVI/MOV smart comparison."
+            "Default mode is same-name smart comparison."
         ),
     )
     parser.add_argument(
@@ -549,7 +612,7 @@ def parseArgs():
         type=sourceDirPath,
         default=None,
         help=(
-            "Source directory. Default is current directory in AVI/MOV mode, "
+            "Source directory. Default is current directory in same-name mode, "
             "or /mnt/games1/Recovery/Videos with --sha256."
         ),
     )
