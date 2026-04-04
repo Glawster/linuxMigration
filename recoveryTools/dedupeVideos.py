@@ -50,10 +50,11 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from organiseMyProjects.logUtils import getLogger  # type: ignore
+from organiseMyProjects.logUtils import getLogger, thisApplication  # type: ignore
 from recoveryCommon import isVideo, printProgress
 
-logger = getLogger(Path(__file__).stem)
+thisApplication = Path(__file__).stem
+logger = getLogger(thisApplication, includeConsole=True)
 
 try:
     from PIL import Image

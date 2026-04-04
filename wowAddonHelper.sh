@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-set -x
 
 # ============================================================
 # wowAddonHelper.sh — WoW addon helper (Linux / Wine)
