@@ -29,15 +29,14 @@ Requirements:
     (ffprobe and ffmpeg must be on PATH for avi-mov mode)
 
 Usage:
-    python3 dedupeVideos.py sha256  --source <path> [--confirm]
-    python3 dedupeVideos.py avi-mov --source <path> [--confirm]
+    python3 dedupeVideos.py [--sha256] [--source <path>] [--confirm]
 
 Examples:
-    python3 dedupeVideos.py sha256  --source ~/Videos/Recovery
-    python3 dedupeVideos.py sha256  --source ~/Videos/Recovery --confirm
-    python3 dedupeVideos.py avi-mov --source ~/Videos/FionaCooper
-    python3 dedupeVideos.py avi-mov --source ~/Videos/FionaCooper --confirm
-    python3 dedupeVideos.py avi-mov --source ~/Videos/FionaCooper -c
+    python3 dedupeVideos.py
+    python3 dedupeVideos.py --source ~/Videos/FionaCooper
+    python3 dedupeVideos.py --source ~/Videos/FionaCooper --confirm
+    python3 dedupeVideos.py --sha256 --source ~/Videos/Recovery
+    python3 dedupeVideos.py --sha256 --source ~/Videos/Recovery --confirm
 """
 
 import argparse
@@ -50,7 +49,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from organiseMyProjects.logUtils import getLogger, thisApplication  # type: ignore
+from organiseMyProjects.logUtils import drawBox, getLogger, thisApplication  # type: ignore
 from recoveryCommon import isVideo, printProgress
 
 thisApplication = Path(__file__).stem
@@ -59,6 +58,7 @@ logger = getLogger(thisApplication, includeConsole=True)
 try:
     from PIL import Image
     import imagehash
+
     IMAGEHASH_AVAILABLE = True
 except ImportError:
     IMAGEHASH_AVAILABLE = False
@@ -74,6 +74,7 @@ DURATION_TOLERANCE = 2.0
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
 
 def safeMove(src: Path, dstDir: Path) -> Path:
     """Move *src* into *dstDir*, appending a counter to avoid name collisions."""
@@ -100,9 +101,46 @@ def sourceDirPath(value: str) -> str:
     return str(p)
 
 
+def formatBytes(numBytes: int) -> str:
+    """Return a human-readable binary size string for *numBytes*."""
+    value = float(max(numBytes, 0))
+    units = ["B", "KiB", "MiB", "GiB", "TiB"]
+    for unit in units:
+        if value < 1024.0 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(value)} {unit}"
+            return f"{value:.2f} {unit}"
+        value /= 1024.0
+    return f"{int(value)} B"
+
+
+def logSummaryBox(
+    mode: str,
+    dryRun: bool,
+    deletedCount: int,
+    totalCount: int,
+    bytesSaved: int,
+    logger: logging.LoggerAdapter,
+) -> None:
+    """Log a boxed summary with deleted-vs-total and space saved."""
+    filesLabel = "files to delete" if dryRun else "files deleted"
+    spaceLabel = "potential disk space to save" if dryRun else "disk space saved"
+    drawBox(
+        "\n".join(
+            [
+                f"summary ({mode})",
+                f"{filesLabel}: {deletedCount}/{totalCount}",
+                f"{spaceLabel}: {formatBytes(bytesSaved)} ({bytesSaved:,} bytes)",
+            ]
+        ),
+        logger=logger,
+    )
+
+
 # ---------------------------------------------------------------------------
 # sha256 mode
 # ---------------------------------------------------------------------------
+
 
 def hashFile(path: Path, chunkSize: int = 1024 * 1024) -> str:
     """Return the SHA-256 hex digest of *path*."""
@@ -128,6 +166,8 @@ def runSha256(sourceDir: Path, confirm: bool, logger: logging.LoggerAdapter) -> 
 
     seen: Dict[str, Path] = {}
     kept = moved = errors = 0
+    bytesPlanned = 0
+    bytesMoved = 0
     done = 0
     startTime = time.time()
     printProgress(done, total, startTime, label="Dedupe videos")
@@ -149,11 +189,18 @@ def runSha256(sourceDir: Path, confirm: bool, logger: logging.LoggerAdapter) -> 
             continue
 
         # duplicate found
+        duplicateSize = 0
+        try:
+            duplicateSize = v.stat().st_size
+        except OSError:
+            duplicateSize = 0
         logger.action(f"move: {v}  (dup of {seen[h]})")
         moved += 1
+        bytesPlanned += duplicateSize
         if confirm:
             try:
                 dst = safeMove(v, dupesDir)
+                bytesMoved += duplicateSize
                 logger.done(f"moved to: {dst}")
             except Exception as e:
                 moved -= 1
@@ -165,10 +212,15 @@ def runSha256(sourceDir: Path, confirm: bool, logger: logging.LoggerAdapter) -> 
     if dryRun and moved:
         logger.info("to actually move files, run with --confirm")
 
+    deletedCount = moved
+    bytesSaved = bytesPlanned if dryRun else bytesMoved
+    logSummaryBox("sha256", dryRun, deletedCount, total, bytesSaved, logger)
+
 
 # ---------------------------------------------------------------------------
 # avi-mov mode – ffprobe helpers
 # ---------------------------------------------------------------------------
+
 
 def getVideoInfo(path: Path) -> Optional[dict]:
     """
@@ -180,9 +232,12 @@ def getVideoInfo(path: Path) -> Optional[dict]:
     try:
         cmd = [
             "ffprobe",
-            "-v", "quiet",
-            "-print_format", "json",
-            "-show_entries", "stream=width,height:format=duration,size",
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_entries",
+            "stream=width,height:format=duration,size",
             str(path),
         ]
         out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
@@ -213,14 +268,20 @@ def extractThumbnail(videoPath: Path, outDir: Path, timestamp: float) -> Optiona
     try:
         cmd = [
             "ffmpeg",
-            "-ss", str(timestamp),
-            "-i", str(videoPath),
-            "-frames:v", "1",
-            "-q:v", "2",
+            "-ss",
+            str(timestamp),
+            "-i",
+            str(videoPath),
+            "-frames:v",
+            "1",
+            "-q:v",
+            "2",
             "-y",
             str(thumbPath),
         ]
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
+        )
         if thumbPath.exists() and thumbPath.stat().st_size > 0:
             return thumbPath
     except Exception:
@@ -273,6 +334,7 @@ def thumbnailsMatch(
 # avi-mov mode – pair discovery and decision logic
 # ---------------------------------------------------------------------------
 
+
 def findPairs(sourceDir: Path) -> List[Tuple[Path, Path]]:
     """
     Return a sorted list of (aviPath, movPath) tuples for all files found
@@ -293,11 +355,7 @@ def findPairs(sourceDir: Path) -> List[Tuple[Path, Path]]:
         elif ext == ".mov":
             movs[key] = f
 
-    return [
-        (avis[key], movs[key])
-        for key in sorted(avis)
-        if key in movs
-    ]
+    return [(avis[key], movs[key]) for key in sorted(avis) if key in movs]
 
 
 def decideSurvivor(
@@ -344,17 +402,19 @@ def decideSurvivor(
 
 
 def runAviMov(sourceDir: Path, confirm: bool, logger: logging.LoggerAdapter) -> None:
-    """Scan *sourceDir* for .avi/.mov pairs and move the inferior copy."""
+    """Scan *sourceDir* for video duplication and move the inferior copy."""
     dryRun = not confirm
+    totalVideos = sum(1 for p in sourceDir.rglob("*") if p.is_file() and isVideo(p))
 
-    logger.doing(f"scanning {sourceDir} for .avi/.mov pairs")
+    logger.doing(f"scanning {sourceDir} for video duplication")
     pairs = findPairs(sourceDir)
 
     if not pairs:
-        logger.done("no .avi/.mov pairs found")
+        logger.done("no duplicates found")
+        logSummaryBox("avi-mov", dryRun, 0, totalVideos, 0, logger)
         return
 
-    logger.info("found %d .avi/.mov pair(s) to compare", len(pairs))
+    logger.info("found %d duplicate(s) to compare", len(pairs))
 
     if not IMAGEHASH_AVAILABLE:
         logger.info(
@@ -364,7 +424,7 @@ def runAviMov(sourceDir: Path, confirm: bool, logger: logging.LoggerAdapter) -> 
 
     dupesDir = sourceDir / "AviMovDuplicates"
 
-    toRemove: List[Tuple[Path, str]] = []
+    toRemove: List[Tuple[Path, str, int]] = []
     skipped: List[Tuple[Path, Path, str]] = []
     errors: List[Tuple[Path, Path, str]] = []
 
@@ -379,7 +439,9 @@ def runAviMov(sourceDir: Path, confirm: bool, logger: logging.LoggerAdapter) -> 
 
             if aviInfo is None or movInfo is None:
                 msg = "could not read video info via ffprobe"
-                logger.error("Skipping pair – %s: %s / %s", msg, aviPath.name, movPath.name)
+                logger.error(
+                    "Skipping pair – %s: %s / %s", msg, aviPath.name, movPath.name
+                )
                 errors.append((aviPath, movPath, msg))
                 continue
 
@@ -410,7 +472,9 @@ def runAviMov(sourceDir: Path, confirm: bool, logger: logging.LoggerAdapter) -> 
             if match is True:
                 logger.info("thumbnails match: %s", aviPath.name)
             else:
-                logger.info("thumbnail comparison skipped (tool unavailable): %s", aviPath.name)
+                logger.info(
+                    "thumbnail comparison skipped (tool unavailable): %s", aviPath.name
+                )
 
             # --- Decide which to remove ---
             pathToRemove, reason = decideSurvivor(aviPath, movPath, aviInfo, movInfo)
@@ -421,25 +485,31 @@ def runAviMov(sourceDir: Path, confirm: bool, logger: logging.LoggerAdapter) -> 
                 continue
 
             pathToKeep = movPath if pathToRemove == aviPath else aviPath
-            logger.value("will remove", f"{pathToRemove.name}  ({reason})")
-            logger.value("will keep", pathToKeep.name)
-            toRemove.append((pathToRemove, reason))
+            removeInfo = aviInfo if pathToRemove == aviPath else movInfo
+            removeSize = int(removeInfo.get("size") or 0)
+            logger.value("remove", f"{pathToRemove.name}  ({reason})")
+            logger.value("keep", pathToKeep.name)
+            toRemove.append((pathToRemove, reason, removeSize))
 
     logger.done(
         f"summary: {len(toRemove)} to remove, {len(skipped)} skipped, {len(errors)} error(s)"
     )
 
     if not toRemove:
+        logSummaryBox("avi-mov", dryRun, 0, totalVideos, 0, logger)
         return
 
     logger.value("destination folder", str(dupesDir))
     moved = 0
-    for p, reason in toRemove:
+    bytesPlanned = sum(size for _, _, size in toRemove)
+    bytesMoved = 0
+    for p, reason, size in toRemove:
         logger.action(f"move: {p}  ->  {dupesDir / p.name}  ({reason})")
         if confirm:
             try:
                 safeMove(p, dupesDir)
                 moved += 1
+                bytesMoved += size
             except Exception as e:
                 logger.error("Move failed for %s: %s", p.name, str(e))
 
@@ -448,48 +518,44 @@ def runAviMov(sourceDir: Path, confirm: bool, logger: logging.LoggerAdapter) -> 
     else:
         logger.info("to actually move files, run with --confirm")
 
+    deletedCount = moved if confirm else len(toRemove)
+    bytesSaved = bytesMoved if confirm else bytesPlanned
+    logSummaryBox("avi-mov", dryRun, deletedCount, totalVideos, bytesSaved, logger)
+
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def parseArgs():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Deduplicate video files (SHA-256 exact or AVI/MOV pair comparison)."
+        description=(
+            "Deduplicate video files. Defaults to AVI/MOV smart mode; "
+            "use --sha256 for exact recursive deduplication."
+        )
     )
-    subparsers = parser.add_subparsers(dest="mode", required=True)
-
-    # --- sha256 sub-command ---
-    sha256Parser = subparsers.add_parser(
-        "sha256",
-        help="Exact deduplication using SHA-256 (recursive).",
-    )
-    sha256Parser.add_argument(
-        "--source",
-        type=sourceDirPath,
-        default="/mnt/games1/Recovery/Videos",
-        help="Source folder containing videos (default: /mnt/games1/Recovery/Videos).",
-    )
-    sha256Parser.add_argument(
-        "--confirm", "-c",
+    parser.add_argument(
+        "--sha256",
         action="store_true",
-        help="Actually move files.  Without this flag the script is a dry-run.",
+        help=(
+            "Use SHA-256 exact deduplication mode (recursive). "
+            "Default mode is AVI/MOV smart comparison."
+        ),
     )
-
-    # --- avi-mov sub-command ---
-    aviMovParser = subparsers.add_parser(
-        "avi-mov",
-        help="Smart deduplication of .avi/.mov pairs by duration, thumbnail, and resolution.",
-    )
-    aviMovParser.add_argument(
+    parser.add_argument(
         "--source",
         type=sourceDirPath,
-        default=".",
-        help="Directory to scan for .avi/.mov pairs (default: current directory).",
+        default=None,
+        help=(
+            "Source directory. Default is current directory in AVI/MOV mode, "
+            "or /mnt/games1/Recovery/Videos with --sha256."
+        ),
     )
-    aviMovParser.add_argument(
-        "--confirm", "-c",
+    parser.add_argument(
+        "--confirm",
+        "-c",
         action="store_true",
         help="Actually move files.  Without this flag the script is a dry-run.",
     )
@@ -501,18 +567,24 @@ def main() -> None:
     """Entry point: parse args, initialise logger, and dispatch to the chosen mode."""
     args = parseArgs()
     dryRun = not args.confirm
+    mode = "sha256" if args.sha256 else "avi-mov"
 
     _name = Path(__file__).stem
     logger = getLogger(_name, includeConsole=True, dryRun=dryRun)
 
-    sourceDir = Path(args.source)
+    if args.source is not None:
+        sourceDir = Path(args.source)
+    elif mode == "sha256":
+        sourceDir = Path("/mnt/games1/Recovery/Videos")
+    else:
+        sourceDir = Path(".").resolve()
 
     logger.doing(_name)
     logger.value("source", str(sourceDir))
-    logger.value("mode", args.mode)
+    logger.value("mode", mode)
     logger.value("dry run", str(dryRun))
 
-    if args.mode == "sha256":
+    if mode == "sha256":
         runSha256(sourceDir, confirm=args.confirm, logger=logger)
     else:
         runAviMov(sourceDir, confirm=args.confirm, logger=logger)
