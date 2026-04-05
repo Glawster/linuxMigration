@@ -382,9 +382,7 @@ def main() -> int:
 
     cfg = loadConfig()
     args = parseArgs(cfg)
-    dryRun = True
-    if args.confirm:
-        dryRun = False
+    dryRun = not args.confirm
 
     llavaUrl = str(args.remote).strip()
     if args.remote:

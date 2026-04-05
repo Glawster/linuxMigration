@@ -157,9 +157,7 @@ def renameSafe(src: Path, dst: Path, dryRun: bool, prefix: str, logger) -> None:
 
 def main() -> None:
     args = parseArgs()
-    dryRun = True
-    if args.confirm:
-        dryRun = False
+    dryRun = not args.confirm
     prefix = "...[]" if dryRun else "..."
     logger = getLogger("migrateKohyaRemoveDate", includeConsole=True)
 

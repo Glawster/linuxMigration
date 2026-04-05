@@ -252,9 +252,7 @@ def resolveBaseUrl(args: argparse.Namespace, cfg: Dict[str, Any]) -> str:
 def main() -> int:
     cfg = loadConfig()
     args = parseArgs()
-    dryRun = True
-    if args.confirm:
-        dryRun = False
+    dryRun = not args.confirm
 
     prefix = "...[]" if dryRun else "..."
     logger = getLogger("txt2imgComfy", includeConsole=True)
