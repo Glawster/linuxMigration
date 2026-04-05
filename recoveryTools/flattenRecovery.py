@@ -6,6 +6,7 @@ srcRoot = Path.home() / "Recovery"
 dstRoot = Path.home() / "RecoveryFlat"
 
 def main():
+    """Move all jpg/jpeg/mp4 files from ~/Recovery into a flat ~/RecoveryFlat folder with de-duplicated names."""
     dstRoot.mkdir(exist_ok=True)
     count = 0
     for path in srcRoot.rglob("*"):

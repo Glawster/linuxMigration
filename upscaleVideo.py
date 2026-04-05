@@ -42,6 +42,7 @@ def runCommand(cmd, dryRun: bool = False, desc: str = "") -> int:
 
 
 def ensureTool(name: str) -> bool:
+    """Return True if the named executable is present on PATH."""
     return shutil.which(name) is not None
 
 
@@ -195,6 +196,7 @@ def _findExistingUpscaleSuffixes(baseName: str, parentDir: Path) -> List[int]:
 
 
 def main():
+    """Parse args, validate tools, and run the Real-ESRGAN video upscale pipeline."""
     parser = argparse.ArgumentParser(
         description="Upscale video with Real-ESRGAN x2 to 720p/1080p/4K, preserving 4:3 or converting to 16:9."
     )

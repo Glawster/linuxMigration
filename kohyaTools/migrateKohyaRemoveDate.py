@@ -41,6 +41,7 @@ REST_STYLE_INDEX_RE = re.compile(r"^(?P<style>.+)-(?P<idx>\d+)$", re.IGNORECASE)
 
 
 def parseArgs() -> argparse.Namespace:
+    """parse CLI arguments for the date-prefix migration."""
     cfg = loadConfig()
     defaultTrainingRoot = Path(getCfgValue(cfg, "trainingRoot", str(Path.home())))
     defaultCaptionExtension = str(getCfgValue(cfg, "captionExtension", ".txt"))
@@ -56,6 +57,7 @@ def parseArgs() -> argparse.Namespace:
 
 
 def iterStyleDirs(trainingRoot: Path, styleFilter: Optional[str]) -> Iterable[Path]:
+    """yield style directories to process, filtered by name if given."""
     if not trainingRoot.exists() or not trainingRoot.is_dir():
         raise FileNotFoundError(f"trainingRoot does not exist or is not a directory: {trainingRoot}")
 
@@ -72,11 +74,13 @@ def iterStyleDirs(trainingRoot: Path, styleFilter: Optional[str]) -> Iterable[Pa
 
 
 def trainDirForStyle(styleDir: Path) -> Path:
+    """return the 10_<style> training subdirectory path for a style folder."""
     style = styleDir.name
     return styleDir / f"10_{style}"
 
 
 def isImageFile(p: Path) -> bool:
+    """return True if the path is a file with an image extension."""
     return p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
 
 
@@ -93,6 +97,7 @@ def parseTargetRest(filename: str) -> Optional[str]:
 
 
 def parseStyleAndIndex(stem: str) -> Optional[Tuple[str, int]]:
+    """parse a 'style-nn' stem and return (style, index), or None if it doesn't match."""
     m = REST_STYLE_INDEX_RE.match(stem)
     if not m:
         return None
@@ -105,6 +110,7 @@ def parseStyleAndIndex(stem: str) -> Optional[Tuple[str, int]]:
 
 
 def formatIndex(idx: int, width: int = 2) -> str:
+    """format an integer index as a zero-padded string."""
     return f"{idx:0{width}d}"
 
 
@@ -146,6 +152,7 @@ def nextFreeIndex(preferred: int, used: Set[int]) -> int:
 
 
 def renameSafe(src: Path, dst: Path, dryRun: bool, prefix: str, logger) -> None:
+    """rename src to dst, logging the action and skipping if dryRun."""
     if src == dst:
         return
     logger.info("%s rename: %s -> %s", prefix, src.name, dst.name)
@@ -156,6 +163,7 @@ def renameSafe(src: Path, dst: Path, dryRun: bool, prefix: str, logger) -> None:
 
 
 def main() -> None:
+    """load config, parse args and run the date-prefix removal migration."""
     args = parseArgs()
     dryRun = True
     if args.confirm:

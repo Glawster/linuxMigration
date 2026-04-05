@@ -47,6 +47,7 @@ IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 # ------------------------------------------------------------
 
 def safeStem(stem: str) -> str:
+    """Sanitise a filename stem by replacing non-alphanumeric characters with underscores."""
     out = []
     for c in stem:
         out.append(c if (c.isalnum() or c in "._-") else "_")
@@ -55,6 +56,7 @@ def safeStem(stem: str) -> str:
 
 
 def loadPromptSidecar(imgPath: Path) -> Optional[Dict[str, Any]]:
+    """Load and return a .prompt.json sidecar for an image, or None if the file does not exist."""
     sidecar = imgPath.with_suffix(".prompt.json")
     if not sidecar.exists():
         return None
@@ -66,6 +68,7 @@ def loadPromptSidecar(imgPath: Path) -> Optional[Dict[str, Any]]:
 
 
 def loadWorkflow(path: Path) -> Dict[str, Any]:
+    """Load and return a ComfyUI workflow JSON file as a dict."""
     with path.open("r", encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, dict):
@@ -74,6 +77,7 @@ def loadWorkflow(path: Path) -> Dict[str, Any]:
 
 
 def ensureDir(path: Path, dryRun: bool) -> None:
+    """Create a directory unless dryRun is True."""
     if dryRun:
         return
     path.mkdir(parents=True, exist_ok=True)
@@ -87,11 +91,13 @@ def ensureDir(path: Path, dryRun: bool) -> None:
 # ------------------------------------------------------------
 
 def setClipText(prompt: Dict[str, Any], nodeId: str, text: str) -> None:
+    """Set the text input for a CLIPTextEncode node identified by nodeId."""
     node = prompt[nodeId]
     node["inputs"]["text"] = text
 
 
 def setEmptyLatent(prompt: Dict[str, Any], nodeId: str, w: int, h: int, batch: int) -> None:
+    """Set the width, height and batch size on an EmptyLatentImage node."""
     node = prompt[nodeId]
     node["inputs"]["width"] = int(w)
     node["inputs"]["height"] = int(h)
@@ -108,6 +114,7 @@ def setKSampler(
     sampler: str,
     scheduler: str,
 ) -> None:
+    """Set seed, steps, cfg, sampler and scheduler inputs on a KSampler node."""
     node = prompt[nodeId]
     node["inputs"]["seed"] = int(seed)
     node["inputs"]["steps"] = int(steps)
@@ -117,18 +124,21 @@ def setKSampler(
 
 
 def setLoraStrength(prompt: Dict[str, Any], nodeId: str, model: float, clip: float) -> None:
+    """Set the model and clip strength values on a LoraLoader node."""
     node = prompt[nodeId]
     node["inputs"]["strength_model"] = float(model)
     node["inputs"]["strength_clip"] = float(clip)
 
 
 def setSavePrefix(prompt: Dict[str, Any], prefix: str) -> None:
+    """Set the filename_prefix in all SaveImage nodes."""
     for node in prompt.values():
         if isinstance(node, dict) and node.get("class_type") == "SaveImage":
             node.setdefault("inputs", {})["filename_prefix"] = prefix
 
 
 def extractOutputImages(historyEntry: Dict[str, Any]) -> List[Dict[str, str]]:
+    """Extract and return the list of output image dicts from a ComfyUI history entry."""
     results: List[Dict[str, str]] = []
     outputs = historyEntry.get("outputs", {})
     if not isinstance(outputs, dict):
@@ -161,11 +171,13 @@ def extractOutputImages(historyEntry: Dict[str, Any]) -> List[Dict[str, str]]:
 
 class ComfyClient:
     def __init__(self, baseUrl: str, timeout: int):
+        """Initialise the client with a base URL and request timeout."""
         self.baseUrl = baseUrl.rstrip("/")
         self.timeout = timeout
         self.session = requests.Session()
 
     def submit(self, workflow: Dict[str, Any]) -> str:
+        """POST a workflow prompt to ComfyUI and return the prompt_id."""
         r = self.session.post(
             f"{self.baseUrl}/prompt",
             json={"prompt": workflow},
@@ -179,6 +191,7 @@ class ComfyClient:
         return pid
 
     def wait(self, promptId: str, poll: float, maxWait: int) -> Dict[str, Any]:
+        """Poll the history endpoint until outputs appear, raising TimeoutError if maxWait seconds is exceeded."""
         start = time.time()
         while True:
             r = self.session.get(
@@ -196,6 +209,7 @@ class ComfyClient:
             time.sleep(poll)
 
     def download(self, filename: str, subfolder: str, kind: str) -> bytes:
+        """Download and return an output file from the ComfyUI /view endpoint."""
         r = self.session.get(
             f"{self.baseUrl}/view",
             params={"filename": filename, "subfolder": subfolder, "type": kind},
@@ -210,6 +224,7 @@ class ComfyClient:
 # ------------------------------------------------------------
 
 def parseArgs() -> argparse.Namespace:
+    """Parse CLI arguments for the text-to-image workflow runner."""
     p = argparse.ArgumentParser("Run text2img via ComfyUI using .prompt.json sidecars (full-body only)")
 
     p.add_argument("--confirm", action="store_true", help="execute changes (default is dry-run mode)")
@@ -223,6 +238,7 @@ def parseArgs() -> argparse.Namespace:
 
 
 def resolveBaseUrl(args: argparse.Namespace, cfg: Dict[str, Any]) -> str:
+    """Resolve the ComfyUI base URL from args and config, accepting a RunPod Pod ID or full URL."""
     if args.local and args.remote:
         raise ValueError("use --local OR --remote, not both")
 
@@ -250,6 +266,7 @@ def resolveBaseUrl(args: argparse.Namespace, cfg: Dict[str, Any]) -> str:
 # ------------------------------------------------------------
 
 def main() -> int:
+    """Load config, parse args and run text-to-image workflows using .prompt.json sidecars."""
     cfg = loadConfig()
     args = parseArgs()
     dryRun = True

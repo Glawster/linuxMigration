@@ -39,6 +39,7 @@ def setLogger(externalLogger: logging.Logger) -> None:
     logger = externalLogger
 
 def _log(level: str, message: str) -> None:
+    """log a message at the given level using the module logger."""
     if logger is None:
         print(message)
         return

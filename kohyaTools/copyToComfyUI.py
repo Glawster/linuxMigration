@@ -118,6 +118,7 @@ def getNestedDictValue(config: dict, keys: Tuple[str, ...]) -> Optional[object]:
 # ============================================================
 
 def iterImages(root: Path, skipDirs: set[str]) -> Iterable[Path]:
+    """yield image files under root, skipping listed directories and backup filenames."""
     for dirPath, dirNames, fileNames in os.walk(root):
         dirNames[:] = [d for d in dirNames if d not in skipDirs]
         for name in fileNames:
@@ -143,6 +144,7 @@ def iterImagesAny(root: Path) -> Iterable[Path]:
 
 
 def isFixedFolder(path: Path) -> bool:
+    """return True if path is a directory whose name starts with 'fixed'."""
     return path.is_dir() and path.name.lower().startswith("fixed")
 
 
@@ -160,6 +162,7 @@ def iterFixedFolders(root: Path) -> Iterable[Path]:
 # ============================================================
 
 def loadDetector() -> cv2.CascadeClassifier:
+    """load and return the OpenCV Haar-cascade frontal-face detector."""
     cascadePath = Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml"
     detector = cv2.CascadeClassifier(str(cascadePath))
     if detector.empty():
@@ -167,6 +170,7 @@ def loadDetector() -> cv2.CascadeClassifier:
     return detector
 
 def loadPeopleDetector() -> cv2.HOGDescriptor:
+    """load and return the OpenCV HOG people detector with the default SVM."""
     hog = cv2.HOGDescriptor()
     hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
     return hog
@@ -176,6 +180,7 @@ def detectLargestFace(
     detector: cv2.CascadeClassifier,
     cfg: FaceDetectConfig,
 ):
+    """detect and return the bounding box of the largest face in an image, or None."""
     img = cv2.imread(str(imagePath))
     if img is None:
         return None
@@ -268,6 +273,7 @@ def classifyFraming(
 # ============================================================
 
 def getImageSize(imagePath: Path) -> Optional[Tuple[int, int]]:
+    """return the (width, height) of an image read by OpenCV, or None on failure."""
     img = cv2.imread(str(imagePath))
     if img is None:
         return None
@@ -276,6 +282,7 @@ def getImageSize(imagePath: Path) -> Optional[Tuple[int, int]]:
 
 
 def isLowRes(imagePath: Path, cfg: LowResConfig) -> Tuple[bool, Optional[int], Optional[int]]:
+    """return (isLow, width, height) indicating whether an image falls below the configured resolution thresholds."""
     size = getImageSize(imagePath)
     if size is None:
         return (False, None, None)
@@ -293,6 +300,7 @@ def isLowRes(imagePath: Path, cfg: LowResConfig) -> Tuple[bool, Optional[int], O
 # ============================================================
 
 def uniqueDestPath(destDir: Path, srcPath: Path) -> Path:
+    """return a non-colliding destination path inside destDir for srcPath."""
     destDir.mkdir(parents=True, exist_ok=True)
 
     base = srcPath.stem
@@ -311,6 +319,7 @@ def uniqueDestPath(destDir: Path, srcPath: Path) -> Path:
 
 
 def copyFile(srcPath: Path, destDir: Path, dryRun: bool, tag: str, extra: str = "") -> Path:
+    """copy srcPath into destDir with a unique name, logging the action."""
     destPath = uniqueDestPath(destDir, srcPath)
     extraPart = f" {extra}" if extra else ""
     logger.info(f"{prefix} {tag}: {srcPath} -> {destPath}{extraPart}")
@@ -326,6 +335,7 @@ def copyFile(srcPath: Path, destDir: Path, dryRun: bool, tag: str, extra: str = 
 # ============================================================
 
 def styleFromFilename(filePath: Path) -> Optional[str]:
+    """extract the style name from a filename matching the STYLE_FROM_FILENAME_RE pattern."""
     m = STYLE_FROM_FILENAME_RE.match(filePath.name)
     if not m:
         return None
@@ -380,7 +390,7 @@ def reverseFromFixedFolders(
     comfyOut: Optional[Path],
     dryRun: bool,
 ) -> None:
-
+    """move fixed_* images from ComfyUI folders back into their training directories."""
     scanned = 0
     replaced = 0
     errors = 0
@@ -451,7 +461,7 @@ def reverseFromFixedFolders(
 # ============================================================
 
 def main() -> None:
-
+    """parse args and copy training images into ComfyUI input buckets."""
     parser = argparse.ArgumentParser(description="Copy training images into ComfyUI buckets (logging only, no CSV report).")
     parser.add_argument("--training", help="Training root (overrides config)")
     parser.add_argument("--comfyin", help="ComfyUI input folder (overrides config)")

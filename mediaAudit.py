@@ -148,18 +148,22 @@ def looksLikeNonAuthorFolder(folderName: str) -> Optional[str]:
     return None
 
 def nowUtcIso() -> str:
+    """Return the current UTC time as an ISO 8601 string."""
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def isAudioFile(p: Path) -> bool:
+    """Return True if p is a file with a recognised audio extension."""
     return p.is_file() and p.suffix.lower() in AUDIO_EXTS
 
 
 def isEbookFile(p: Path) -> bool:
+    """Return True if p is a file with a recognised ebook extension."""
     return p.is_file() and p.suffix.lower() in EBOOK_EXTS
 
 
 def ensureDir(path: Path, logger, dryRun: bool) -> None:
+    """Create a directory if it does not exist, logging the action and respecting dryRun."""
     if path.exists():
         return
     if dryRun:
@@ -170,6 +174,7 @@ def ensureDir(path: Path, logger, dryRun: bool) -> None:
 
 
 def movePath(src: Path, dst: Path, logger, dryRun: bool) -> Tuple[bool, Optional[str]]:
+    """Move src to dst, logging the action and returning (ok, error)."""
     try:
         if dryRun:
             logger.info("...dry-run move: %s -> %s", str(src), str(dst))
@@ -184,6 +189,7 @@ def movePath(src: Path, dst: Path, logger, dryRun: bool) -> Tuple[bool, Optional
 
 
 def renamePath(src: Path, dst: Path, logger, dryRun: bool) -> Tuple[bool, Optional[str]]:
+    """Rename src to dst, logging the action and returning (ok, error)."""
     try:
         if dryRun:
             logger.info("...dry-run rename: %s -> %s", str(src), str(dst))
@@ -247,6 +253,7 @@ def mergeAuthorFolders(srcDir: Path, dstDir: Path, logger, dryRun: bool) -> Tupl
     return movedCount, skippedCount, failedCount
 
 def normaliseSpaces(s: str) -> str:
+    """Collapse runs of whitespace and strip the string."""
     return re.sub(r"\s+", " ", (s or "").strip())
 
 def normaliseInitials(given: str) -> str:
@@ -266,6 +273,7 @@ def normaliseInitials(given: str) -> str:
 
         # recognise "R" or "R." as an initial token
         def isInitialTok(x: str) -> bool:
+            """Return True if x is a single alphabetic character with or without a trailing dot."""
             x2 = x.strip()
             if len(x2) == 1 and x2.isalpha():
                 return True
@@ -358,6 +366,7 @@ def canonicalAuthorFolderName(name: str) -> str:
 # -----------------------------
 
 def auditAudiobooks(audiobooksDir: Path, logger) -> Tuple[List[PatternIssue], Dict[str, int], List[Path], List[Path]]:
+    """Scan the Audiobooks directory for pattern issues and return issues, stats, loose audio files, and author dirs."""
     issues: List[PatternIssue] = []
     stats: Dict[str, int] = {
         "audiobooksTopDirs": 0,
@@ -422,6 +431,7 @@ def auditAudiobooks(audiobooksDir: Path, logger) -> Tuple[List[PatternIssue], Di
 
 
 def auditEbooks(ebooksDir: Path, logger) -> Tuple[List[PatternIssue], Dict[str, int]]:
+    """Scan the eBooks directory for pattern issues and return issues and stats."""
     issues: List[PatternIssue] = []
     stats: Dict[str, int] = {
         "ebooksTopEbookFiles": 0,
@@ -554,6 +564,7 @@ def buildReport(
     applyAuthorRenamesFlag: bool,
     applyAuthorMergesFlag: bool
 ) -> AuditReport:
+    """Run a full media-folder audit and return an AuditReport."""
     issues: List[PatternIssue] = []
     plannedMoves: List[MovePlanItem] = []
     plannedRenames: List[RenamePlanItem] = []
@@ -667,6 +678,7 @@ def buildReport(
 
 
 def parseArgs() -> argparse.Namespace:
+    """Parse and return CLI arguments for the media audit tool."""
     parser = argparse.ArgumentParser(description="Audit media folders and identify items not matching naming/location patterns.")
     parser.add_argument("--root", default="/mnt/home", help="root directory containing Media folders (default: /mnt/home)")
     parser.add_argument("--report", default="", help="write JSON report to this path (optional)")
@@ -690,6 +702,7 @@ def parseArgs() -> argparse.Namespace:
 
 
 def writeReport(report: AuditReport, reportPath: str, logger) -> None:
+    """Serialise the AuditReport to a JSON file at reportPath."""
     if not reportPath:
         return
 
@@ -714,6 +727,7 @@ def writeReport(report: AuditReport, reportPath: str, logger) -> None:
 
 
 def main() -> int:
+    """Parse args, run the audit and print a summary report."""
     args = parseArgs()
     dryRun = not args.confirm
 

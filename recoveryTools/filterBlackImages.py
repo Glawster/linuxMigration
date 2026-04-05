@@ -48,6 +48,7 @@ def analyseImage(path: Path, blackMean: float, blackStd: float):
 
 
 def main():
+    """Parse args and move near-black or invalid images into a BlackImages subfolder."""
     parser = argparse.ArgumentParser(
         description="Filter out black or invalid images in place."
     )

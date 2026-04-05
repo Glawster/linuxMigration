@@ -47,10 +47,12 @@ class BucketRules:
 
 
 def safeStem(stem: str) -> str:
+    """Sanitise a filename stem by replacing non-alphanumeric characters with underscores."""
     return re.sub(r"[^a-zA-Z0-9._-]+", "_", stem).strip("_") or "image"
 
 
 def classifyImage(path: Path, rules: List[BucketRules]) -> Optional[str]:
+    """Return the bucket name for an image based on the first matching BucketRules entry, or None."""
     lowerParts = [p.lower() for p in path.parts]
     fileLower = path.name.lower()
 
@@ -64,6 +66,7 @@ def classifyImage(path: Path, rules: List[BucketRules]) -> Optional[str]:
 
 
 def loadApiPromptJson(path: Path) -> Dict[str, Any]:
+    """Load a ComfyUI API-format workflow JSON file and return the prompt dict."""
     data = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(data, dict) and "prompt" in data and isinstance(data["prompt"], dict):
         return data["prompt"]
@@ -73,6 +76,7 @@ def loadApiPromptJson(path: Path) -> Dict[str, Any]:
 
 
 def setLoadImageInput(prompt: Dict[str, Any], imageFilename: str) -> int:
+    """Set the image filename in all LoadImage nodes and return the count of nodes updated."""
     found = 0
     for _, node in prompt.items():
         if isinstance(node, dict) and node.get("class_type") == "LoadImage":
@@ -82,6 +86,7 @@ def setLoadImageInput(prompt: Dict[str, Any], imageFilename: str) -> int:
 
 
 def setSaveImagePrefix(prompt: Dict[str, Any], prefixValue: str) -> int:
+    """Set the filename_prefix in all SaveImage nodes and return the count of nodes updated."""
     found = 0
     for _, node in prompt.items():
         if isinstance(node, dict) and node.get("class_type") == "SaveImage":
@@ -91,6 +96,7 @@ def setSaveImagePrefix(prompt: Dict[str, Any], prefixValue: str) -> int:
 
 
 def extractOutputImages(historyEntry: Dict[str, Any]) -> List[Dict[str, str]]:
+    """Extract and return the list of output image dicts from a ComfyUI history entry."""
     results: List[Dict[str, str]] = []
     outputs = historyEntry.get("outputs", {})
     if not isinstance(outputs, dict):
@@ -118,11 +124,13 @@ def extractOutputImages(historyEntry: Dict[str, Any]) -> List[Dict[str, str]]:
 
 
 def renderTemplate(template: str, **kwargs: str) -> str:
+    """Render a str.format template with the given keyword arguments."""
     return template.format(**kwargs)
 
 
 class ComfyClient:
     def __init__(self, baseUrl: str, timeoutSeconds: int):
+        """Initialise the client with a base URL and request timeout."""
         self.baseUrl = baseUrl.rstrip("/")
         self.timeoutSeconds = timeoutSeconds
         self.session = requests.Session()
@@ -160,6 +168,7 @@ class ComfyClient:
         return remoteRef
 
     def submitPrompt(self, prompt: Dict[str, Any]) -> str:
+        """POST a prompt to ComfyUI and return the prompt_id."""
         url = f"{self.baseUrl}/prompt"
         resp = self.session.post(url, json={"prompt": prompt}, timeout=self.timeoutSeconds)
         resp.raise_for_status()
@@ -170,12 +179,14 @@ class ComfyClient:
         return promptId
 
     def getHistory(self, promptId: str) -> Dict[str, Any]:
+        """GET and return the history entry for a completed prompt."""
         url = f"{self.baseUrl}/history/{promptId}"
         resp = self.session.get(url, timeout=self.timeoutSeconds)
         resp.raise_for_status()
         return resp.json()
 
     def downloadView(self, filename: str, subfolder: str, fileType: str) -> bytes:
+        """Download and return an output image from the ComfyUI /view endpoint."""
         url = f"{self.baseUrl}/view"
         resp = self.session.get(
             url,
@@ -186,6 +197,7 @@ class ComfyClient:
         return resp.content
 
     def waitForOutputs(self, promptId: str, pollSeconds: float, maxWaitSeconds: int) -> Dict[str, Any]:
+        """Poll the history endpoint until outputs appear, raising TimeoutError if maxWaitSeconds is exceeded."""
         start = time.time()
         while True:
             hist = self.getHistory(promptId)
@@ -199,6 +211,7 @@ class ComfyClient:
 
 
 def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
+    """Parse CLI arguments for the remote img2img workflow runner, filling defaults from cfg."""
     parser = argparse.ArgumentParser(description="Run img2img workflows on remote ComfyUI (RunPod) while keeping files local.")
 
     parser.add_argument("--confirm", action="store_true", help="execute changes (default is dry-run mode)")
@@ -230,6 +243,7 @@ def parseArgs(cfg: Dict[str, Any]) -> argparse.Namespace:
 
 
 def main() -> int:
+    """Load config, parse args and run img2img workflows on a remote ComfyUI instance."""
     cfg = loadConfig()
     args = parseArgs(cfg)
     dryRun = True
