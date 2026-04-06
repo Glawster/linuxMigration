@@ -40,15 +40,39 @@ try:
 except ImportError:
     import logging as _logging
 
-    def getLogger(name: str, **kwargs) -> _logging.Logger:  # type: ignore[misc]
-        """Minimal fallback logger when organiseMyProjects is unavailable."""
-        _logger = _logging.getLogger(name)
-        if not _logger.handlers:
-            _h = _logging.StreamHandler()
-            _h.setFormatter(_logging.Formatter("%(message)s"))
-            _logger.addHandler(_h)
-            _logger.setLevel(_logging.INFO)
-        return _logger
+    class _FallbackLogger:
+        """Minimal logger with logUtils-compatible semantic methods."""
+
+        def __init__(self, name: str, dryRun: bool = False) -> None:
+            self._inner = _logging.getLogger(name)
+            if not self._inner.handlers:
+                _h = _logging.StreamHandler()
+                _h.setFormatter(_logging.Formatter("%(message)s"))
+                self._inner.addHandler(_h)
+                self._inner.setLevel(_logging.INFO)
+            self._dryRun = dryRun
+
+        def doing(self, msg: str) -> None:
+            self._inner.info("%s...", msg)
+
+        def done(self, msg: str) -> None:
+            self._inner.info("...%s", msg)
+
+        def info(self, msg: str, *args) -> None:
+            self._inner.info(msg, *args)
+
+        def error(self, msg: str, *args) -> None:
+            self._inner.error(msg, *args)
+
+        def value(self, key: str, val: str) -> None:
+            self._inner.info("...%s: %s", key, val)
+
+        def action(self, msg: str) -> None:
+            prefix = "...[]" if self._dryRun else "..."
+            self._inner.info("%s %s", prefix, msg)
+
+    def getLogger(name: str, dryRun: bool = False, **kwargs) -> _FallbackLogger:  # type: ignore[misc]
+        return _FallbackLogger(name, dryRun=dryRun)
 
 
 CONFIG_DIR = Path.home() / ".config" / "scansnapToVM"
@@ -160,7 +184,7 @@ def saveConfig(config: dict) -> None:
 def clearConfig() -> None:
     if CONFIG_PATH.exists():
         CONFIG_PATH.unlink()
-    logger.info("...config cleared: %s", str(CONFIG_PATH))
+    logger.value("config cleared", str(CONFIG_PATH))
 
 
 def getConfiguredVmName() -> str:
@@ -173,8 +197,8 @@ def saveConfiguredVmName(vmName: str) -> None:
     config = loadConfig()
     config["vmName"] = vmName
     saveConfig(config)
-    logger.info("...config vmName: %s", vmName)
-    logger.info("...config path: %s", str(CONFIG_PATH))
+    logger.value("config vmName", vmName)
+    logger.value("config path", str(CONFIG_PATH))
 
 
 def resolveVmName(argVmName: Optional[str]) -> str:
@@ -332,26 +356,25 @@ def detachDevice(vmName: str, xmlText: str, live: bool = False, config: bool = F
 
 
 def attachScannerToVm(vmName: str, persist: bool, dryRun: bool) -> None:
-    prefix = "...[]" if dryRun else "..."
-    logger.info("%s checking host for scansnap s1300i...", prefix)
+    logger.doing("checking host for scansnap s1300i")
     hostScanner = getHostScanner()
-    logger.info("...host scanner: %s", hostScanner.rawLine)
-    logger.info("...current host usb address: bus=%d device=%d", hostScanner.bus, hostScanner.device)
+    logger.value("host scanner", hostScanner.rawLine)
+    logger.value("current host usb address", f"bus={hostScanner.bus} device={hostScanner.device}")
 
     liveRoot = getDomainXml(vmName)
     liveHostdev = extractScanSnapHostdev(liveRoot)
     liveAddress = extractUsbAddress(liveHostdev)
 
     if liveAddress is not None:
-        logger.info("...live vm usb address: bus=%d device=%d", liveAddress.bus, liveAddress.device)
+        logger.value("live vm usb address", f"bus={liveAddress.bus} device={liveAddress.device}")
         if liveAddress.bus == hostScanner.bus and liveAddress.device == hostScanner.device:
             logger.info("...scanner is already attached live with the current bus/device")
         else:
-            logger.info("%s detaching stale live scansnap attachment...", prefix)
+            logger.action("detaching stale live scansnap attachment")
             if not dryRun:
                 detachDevice(vmName, buildDetachXmlFromHostdev(liveHostdev), live=True)  # type: ignore[arg-type]
 
-            logger.info("%s attaching current scanner to live vm...", prefix)
+            logger.action("attaching current scanner to live vm")
             if not dryRun:
                 attachDevice(
                     vmName,
@@ -359,7 +382,7 @@ def attachScannerToVm(vmName: str, persist: bool, dryRun: bool) -> None:
                     live=True,
                 )
     else:
-        logger.info("%s no live scansnap attachment found; attaching current scanner...", prefix)
+        logger.action("no live scansnap attachment found; attaching current scanner")
         if not dryRun:
             attachDevice(
                 vmName,
@@ -368,32 +391,32 @@ def attachScannerToVm(vmName: str, persist: bool, dryRun: bool) -> None:
             )
 
     if persist:
-        logger.info("%s updating persistent vm config...", prefix)
+        logger.action("updating persistent vm config")
         if not dryRun:
             persistentXml = buildAttachXml()
             detachDevice(vmName, persistentXml, config=True)
             attachDevice(vmName, persistentXml, config=True)
-        logger.info("%s persistent config updated", prefix)
+        logger.info("...persistent config updated")
 
 
 def dropScannerFromVm(vmName: str, persist: bool, dryRun: bool) -> None:
-    prefix = "...[]" if dryRun else "..."
-    logger.info("%s drop mode: detaching scanner from vm...", prefix)
+    logger.doing("drop mode: detaching scanner from vm")
 
     liveRoot = getDomainXml(vmName)
     liveHostdev = extractScanSnapHostdev(liveRoot)
     if liveHostdev is None:
         raise ScanSnapError("no live scansnap device found in vm")
 
+    logger.action("detaching scanner from vm")
     if not dryRun:
         detachDevice(vmName, buildDetachXmlFromHostdev(liveHostdev), live=True)
-    logger.info("%s scanner detached from vm (returned to linux)", prefix)
+    logger.info("...scanner returned to linux")
 
     if persist:
-        logger.info("%s removing persistent vm config...", prefix)
+        logger.action("removing persistent vm config")
         if not dryRun:
             detachDevice(vmName, buildAttachXml(), config=True)
-        logger.info("%s persistent config updated", prefix)
+        logger.info("...persistent config updated")
 
 
 def main() -> int:
@@ -409,11 +432,11 @@ def main() -> int:
     if args.show_config:
         configuredVmName = getConfiguredVmName()
         if configuredVmName:
-            logger.info("...config vmName: %s", configuredVmName)
-            logger.info("...config path: %s", str(CONFIG_PATH))
+            logger.value("config vmName", configuredVmName)
+            logger.value("config path", str(CONFIG_PATH))
         else:
-            logger.info("...config vmName: <not set>")
-            logger.info("...config path: %s", str(CONFIG_PATH))
+            logger.value("config vmName", "<not set>")
+            logger.value("config path", str(CONFIG_PATH))
         return 0
 
     if args.clear_config:
@@ -422,7 +445,7 @@ def main() -> int:
 
     vmName = resolveVmName(args.vmName)
 
-    logger.info("...target vm: %s", vmName)
+    logger.value("target vm", vmName)
     assertVmRunning(vmName)
 
     if args.drop:
@@ -430,7 +453,7 @@ def main() -> int:
     else:
         attachScannerToVm(vmName, args.persist, dryRun)
 
-    logger.info("...done")
+    logger.done("done")
     return 0
 
 
