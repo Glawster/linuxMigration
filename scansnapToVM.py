@@ -372,7 +372,8 @@ def attachScannerToVm(vmName: str, persist: bool, dryRun: bool) -> None:
         else:
             logger.action("detaching stale live scansnap attachment")
             if not dryRun:
-                detachDevice(vmName, buildDetachXmlFromHostdev(liveHostdev), live=True)  # type: ignore[arg-type]
+                assert liveHostdev is not None  # liveAddress is not None implies liveHostdev is not None
+                detachDevice(vmName, buildDetachXmlFromHostdev(liveHostdev), live=True)
 
             logger.action("attaching current scanner to live vm")
             if not dryRun:

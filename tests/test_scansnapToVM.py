@@ -62,13 +62,13 @@ class TestBuildAttachXml:
         assert address.attrib["bus"] == "3"
         assert address.attrib["device"] == "7"
 
-    def test_without_only_bus(self):
+    def test_address_absent_when_only_bus_provided(self):
         """Address element must be absent when only bus is provided."""
         xml = buildAttachXml(bus=1)
         root = ET.fromstring(xml)
         assert root.find("source/address") is None
 
-    def test_without_only_device(self):
+    def test_address_absent_when_only_device_provided(self):
         """Address element must be absent when only device is provided."""
         xml = buildAttachXml(device=5)
         root = ET.fromstring(xml)
