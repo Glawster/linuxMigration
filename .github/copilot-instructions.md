@@ -158,51 +158,7 @@ Never expose `--dry-run` as the CLI flag. Use `dryRun` only as the internal bool
 
 All projects must use centralized logging from `organiseMyProjects.logUtils`.
 
-### Application context
-
-Each project sets its application context once in the root entry point:
-
-```text
-<projectName>/main.py
-```
-
-Use the project folder name unless there is a deliberate reason to override it:
-
-``` python
-from pathlib import Path
-from organiseMyProjects.logUtils import getLogger, setApplication
-
-thisApplication = Path(__file__).parent.name
-setApplication(thisApplication)
-
-logger = getLogger(includeConsole=False)
-```
-
-`setApplication(thisApplication)` stores the active application name and creates the default log directory:
-
-```text
-~/.local/state/<thisApplication>/
-```
-
-After `setApplication()` has run, do not pass `name` or `logDir` to `getLogger()` for normal application logging. `logUtils` owns that context.
-
-### Helper modules
-
-Helper modules must not import `thisApplication` from `main.py` and must not redefine it.
-
-Use this pattern everywhere outside the entry point:
-
-``` python
-from organiseMyProjects.logUtils import getLogger
-
-logger = getLogger()
-```
-
-This works because the entry point sets the application context before importing modules that call `getLogger()`.
-
-### Entry-point initialisation
-
-Initialise the application context before importing modules that rely on logging. Re-initialise console/dry-run behaviour in `main()` after parsing arguments:
+Set application context once in root `main.py`, before importing modules that call `getLogger()`:
 
 ``` python
 from pathlib import Path
@@ -234,72 +190,80 @@ def main() -> None:
     args = parser.parse_args()
     dryRun = not args.confirm
 
-    _name = Path(__file__).stem
     logger = getLogger(includeConsole=True, dryRun=dryRun)
 
-    logger.doing(_name)
+    logger.doing("starting")
     # work here
-    logger.done(_name)
+    logger.done("finished")
 ```
 
-`_name = Path(__file__).stem` identifies the entry-point module for messages such as `logger.doing(_name)`. It is not the application identity.
+Use this in helper modules (do not import or redefine `thisApplication` outside `main.py`):
 
-### Required logging rules
+``` python
+from organiseMyProjects.logUtils import getLogger
 
--   Call `setApplication(thisApplication)` once in root `main.py`\
--   Call `setApplication()` before importing modules that call `getLogger()`\
--   Use `logger = getLogger()` in helper modules\
--   Do not import `thisApplication` into helper modules\
--   Do not pass `name` or `logDir` to `getLogger()` for normal application logging\
--   Let `logUtils` write logs under `~/.local/state/<thisApplication>/`\
--   Use `logger.doing()` / `logger.done()` to bracket major operations\
--   Use `logger.action()` for operations that are skipped in dry-run\
--   Use lowercase messages\
--   Use consistent message patterns\
--   Do not add stdlib logging fallbacks\
--   Do not call `logging.basicConfig()` in application modules\
--   Do not pass module names such as `"myProject.exporter"` to `getLogger()`\
--   Do not construct a manual dry-run prefix for logging
+logger = getLogger()
+```
+
+`setApplication(thisApplication)` defines the active application and default log directory:
+
+```text
+~/.local/state/<thisApplication>/
+```
+
+After context is set, do not pass `name` or `logDir` for normal app logging.
 
 ### Semantic log methods
 
+1. Use `logger.value()` for single values.
+
 ``` python
-logger.doing("scanning files")           # → scanning files...
-logger.done("scan complete")             # → ...scan complete
-logger.info("found n items")             # → ...found n items
-logger.value("source dir", path)         # → ...source dir: /path
-logger.action("moving file: src → dest") # → ...[] moving file: src → dest  (when dryRun=True)
+logger.value("group", config.groupName)
+logger.value("month", config.monthWindow.monthKey)
+logger.value("dryRun", config.dryRun)
 ```
 
-### The `action()` / dry-run guard pattern
+Avoid:
+
+``` python
+logger.info("group: %s", config.groupName)
+logger.doing(f"group...{config.groupName}")
+```
+
+2. Use `logger.info()` for multiple values or narrative messages.
+
+``` python
+logger.info("opening poll %s/%s: %s", index, totalPolls, pollTitle)
+```
+
+3. Use `logger.doing()` only for lifecycle steps with no embedded values.
+
+``` python
+logger.doing("attendance export")
+logger.doing("scraping polls")
+```
+
+Avoid:
+
+``` python
+logger.doing(f"attendance export for {group}")
+```
+
+4. Use `logger.action()` for side effects (dry-run aware).
+
+``` python
+logger.action("write polls.csv rows: %s", count)
+```
+
+Use `logger.action()` with the write guard:
 
 ``` python
 logger.action(f"moving file: {src} → {dest}")
 if not dryRun:
     shutil.move(src, dest)
 ```
-### What not to do
 
-#### Do not do this:
-``` python
-logger.info("...writing file")
-logger.info("would write file")
-logger.info ("[] writing file")
-``` 
-#### Do not branch logging:
-``` python
-if dryRun:
-    logger.info("would write file")
-else:
-    logger.info("writing file")
-```
-#### Correct Pattern
-``` python
-logger.action("write polls.csv: %s rows", count)
-
-if not dryRun:
-    writeCsv(...)
-```
+Do not manually build dry-run prefixes or branch log wording by `dryRun`.
 
 ### No fallback logging
 
@@ -320,6 +284,8 @@ from organiseMyProjects.logUtils import getLogger
 ```
 
 If `setApplication()` has not been called before `getLogger()` is used without an explicit name, the program must raise a `RuntimeError`. This is intentional.
+
+Do not call `logging.basicConfig()` in application modules.
 
 ### `drawBox()` for prominent log entries
 
