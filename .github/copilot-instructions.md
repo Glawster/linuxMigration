@@ -255,12 +255,13 @@ logger.doing(f"attendance export for {group}")
 logger.action("write polls.csv rows: %s", count)
 ```
 
-Use `logger.action()` with the write guard:
+Use `logger.action()` with the write guard. Call `logger.done()` only if the action succeeds:
 
 ``` python
-logger.action(f"moving file: {src} → {dest}")
+logger.action("moving file")
 if not dryRun:
     shutil.move(src, dest)
+    logger.done("moving file")
 ```
 
 Do not manually build dry-run prefixes or branch log wording by `dryRun`.
