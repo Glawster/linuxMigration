@@ -11,14 +11,13 @@
 4.  [Project Structure Standard](#project-structure-standard)\
 5.  [CLI Design Standards](#cli-design-standards)\
 6.  [Environment & Dependency Policy](#environment--dependency-policy)\
-7.  [Framework Guidelines](#framework-guidelines)\
-8.  [Patterns](#patterns)\
-9.  [Error Handling & Logging](#error-handling--logging)\
-10. [Security Standards](#security-standards)\
-11. [Testing Standards](#testing-standards)\
-12. [Performance Guidelines](#performance-guidelines)\
-13. [Refactoring Guidelines](#refactoring-guidelines)\
-14. [Common Principles to Always Follow](#common-principles-to-always-follow)
+7.  [Patterns](#patterns)\
+8.  [Error Handling & Logging](#error-handling--logging)\
+9.  [Security Standards](#security-standards)\
+10. [Testing Standards](#testing-standards)\
+11. [Performance Guidelines](#performance-guidelines)\
+12. [Refactoring Guidelines](#refactoring-guidelines)\
+13. [Common Principles to Always Follow](#common-principles-to-always-follow)
 
 ------------------------------------------------------------------------
 
@@ -158,7 +157,51 @@ Never expose `--dry-run` as the CLI flag. Use `dryRun` only as the internal bool
 
 All projects must use centralized logging from `organiseMyProjects.logUtils`.
 
-Set application context once in root `main.py`, before importing modules that call `getLogger()`:
+### Application context
+
+Each project sets its application context once in the root entry point:
+
+```text
+<projectName>/main.py
+```
+
+Use the project folder name unless there is a deliberate reason to override it:
+
+``` python
+from pathlib import Path
+from organiseMyProjects.logUtils import getLogger, setApplication
+
+thisApplication = Path(__file__).parent.name
+setApplication(thisApplication)
+
+logger = getLogger(includeConsole=False)
+```
+
+`setApplication(thisApplication)` stores the active application name and creates the default log directory:
+
+```text
+~/.local/state/<thisApplication>/
+```
+
+After `setApplication()` has run, do not pass `name` or `logDir` to `getLogger()` for normal application logging. `logUtils` owns that context.
+
+### Helper modules
+
+Helper modules must not import `thisApplication` from `main.py` and must not redefine it.
+
+Use this pattern everywhere outside the entry point:
+
+``` python
+from organiseMyProjects.logUtils import getLogger
+
+logger = getLogger()
+```
+
+This works because the entry point sets the application context before importing modules that call `getLogger()`.
+
+### Entry-point initialisation
+
+Initialise the application context before importing modules that rely on logging. Re-initialise console/dry-run behaviour in `main()` after parsing arguments:
 
 ``` python
 from pathlib import Path
@@ -226,11 +269,14 @@ logger.value("dryRun", config.dryRun)
 Avoid:
 
 ``` python
-logger.info("group: %s", config.groupName)
-logger.doing(f"group...{config.groupName}")
+logger.doing("scanning files")           # → scanning files...
+logger.done("scan complete")             # → ...scan complete
+logger.info("found n items")             # → ...found n items
+logger.value("source dir", path)         # → ...source dir: /path
+logger.action("moving file: src → dest") # → ...[] moving file: src → dest  (when dryRun=True)
 ```
 
-2. Use `logger.info()` for multiple values or narrative messages.
+### The `action()` / dry-run guard pattern
 
 ``` python
 logger.info("opening poll %s/%s: %s", index, totalPolls, pollTitle)
@@ -266,6 +312,18 @@ if not dryRun:
 
 Do not manually build dry-run prefixes or branch log wording by `dryRun`.
 
+### Value Logging Rule
+
+Use `logger.value("name", value)` when logging a single variable.
+
+Do not use:
+- `logger.info("name: %s", value)`
+- f-strings in `doing()` or `done()`
+
+Use `logger.info()` only for:
+- multiple variables
+- narrative messages
+
 ### No fallback logging
 
 External dependencies must fail fast. Never silently replace `logUtils`:
@@ -294,6 +352,51 @@ Do not call `logging.basicConfig()` in application modules.
 from organiseMyProjects.logUtils import drawBox
 
 drawBox("Sync complete\n3 updated, 0 failed", logger=logger)
+```
+
+------------------------------------------------------------------------
+
+### Bash Logging (logUtils.sh)
+
+Bash scripts must source `logUtils.sh` from the `organiseMyProjects` package.
+
+#### Sourcing and initialisation
+
+``` bash
+source "$(python3 -c 'import organiseMyProjects, os; print(os.path.dirname(organiseMyProjects.__file__))')/logUtils.sh"
+setApplication "myScript"
+```
+
+`setApplication "myScript"` writes logs to `~/.local/state/myScript/myScript-<date>.log`.
+
+An optional base directory can be supplied:
+
+``` bash
+setApplication "myScript" "/tmp/logs"
+```
+
+#### Semantic log functions
+
+``` bash
+log_doing "scanning files"           #  →  scanning files...
+log_done  "scan complete"            #  →  ...scan complete
+log_info  "found 5 items"            #  →  ...found 5 items
+log_value "source dir" "/home/andy"  #  →  ...source dir: /home/andy
+log_action "moving file: a → b"      #  →  ...[] moving file: a → b  (when dryRun is non-empty)
+                                     #  →  ...moving file: a → b     (when dryRun is unset/empty)
+log_warn  "file not found"           #  →  WARNING: file not found
+log_error "fatal problem"            #  →  ERROR: fatal problem  (stderr)
+```
+
+#### The `log_action()` / dry-run guard pattern (bash)
+
+``` bash
+dryRun=1  # non-empty = dry-run; unset or empty = live
+
+log_action "moving file: $src → $dest"
+if [[ -z "${dryRun:-}" ]]; then
+    mv "$src" "$dest"
+fi
 ```
 
 ------------------------------------------------------------------------
