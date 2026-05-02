@@ -14,6 +14,7 @@
 #   --no-comfyui     disable ComfyUI setup
 #   --kohya          enable kohya setup (default off)
 #   --llava          enable LLaVA setup (default off)
+#   --upscale        enable video upscale tools setup (default off)
 #   --dry-run        print actions only, don't execute
 #   --force          force rerun of all steps (ignore state)
 #   --from STEP      start from specific step (e.g., 30_conda)
@@ -52,6 +53,7 @@ TESTDIR="$RUNPOD_DIR/test"
 ENABLE_COMFYUI="${ENABLE_COMFYUI:-1}"
 ENABLE_KOHYA="${ENABLE_KOHYA:-0}"
 ENABLE_LLAVA="${ENABLE_LLAVA:-0}"
+ENABLE_UPSCALE="${ENABLE_UPSCALE:-0}"
 
 # joyful is a *mode* controlled by env var JOYFUL (0/1/true/yes/on)
 JOYFUL="${JOYFUL:-0}"
@@ -60,14 +62,14 @@ case "${JOYFUL,,}" in
   *)             JOYFUL=0 ;;
 esac
 
-export DRY_RUN DRY_PREFIX FORCE ENABLE_COMFYUI ENABLE_KOHYA ENABLE_LLAVA JOYFUL
+export DRY_RUN DRY_PREFIX FORCE ENABLE_COMFYUI ENABLE_KOHYA ENABLE_LLAVA ENABLE_UPSCALE JOYFUL
 
 DRY_RUN="${DRY_RUN:-0}"
 DRY_PREFIX="${DRY_PREFIX:-[]}"
 
 FORCE="${FORCE:-0}"
 
-export DRY_RUN DRY_PREFIX FORCE ENABLE_COMFYUI ENABLE_KOHYA ENABLE_LLAVA JOYFUL
+export DRY_RUN DRY_PREFIX FORCE ENABLE_COMFYUI ENABLE_KOHYA ENABLE_LLAVA ENABLE_UPSCALE JOYFUL
 
 FROM_STEP=""
 ONLY_STEP=""
@@ -171,6 +173,7 @@ while [[ $# -gt 0 ]]; do
     --no-comfyui) ENABLE_COMFYUI=0; shift ;;
     --kohya) ENABLE_KOHYA=1; shift ;;
     --llava) ENABLE_LLAVA=1; shift ;;
+    --upscale) ENABLE_UPSCALE=1; shift ;;
     --joyful) JOYFUL=1; ENABLE_LLAVA=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --force) FORCE=1; shift ;;
@@ -323,6 +326,7 @@ log "runpod bootstrap (modular)"
 echo "comfyui   : $ENABLE_COMFYUI"
 echo "kohya     : $ENABLE_KOHYA"
 echo "llava     : $ENABLE_LLAVA"
+echo "upscale   : $ENABLE_UPSCALE"
 echo "joyful    : $JOYFUL"
 echo "dry run   : $DRY_RUN"
 echo "force     : $FORCE"
@@ -345,6 +349,11 @@ for step in "${ALL_AVAILABLE_STEPS[@]}"; do
       ;;
     50_kohya)
       if [[ "$ENABLE_KOHYA" == "1" ]]; then
+        ALL_STEPS+=("$step")
+      fi
+      ;;
+    65_video_upscale)
+      if [[ "$ENABLE_UPSCALE" == "1" ]]; then
         ALL_STEPS+=("$step")
       fi
       ;;
