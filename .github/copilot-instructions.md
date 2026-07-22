@@ -1,8 +1,6 @@
 <!-- synced from Glawster/organiseMyProjects -- do not edit directly -->
 # GitHub Copilot Instructions -- Master Development Guidelines (v2)
 
-------------------------------------------------------------------------
-
 # Table of Contents
 
 1.  [Overview](#overview)\
@@ -12,14 +10,13 @@
 5.  [CLI Design Standards](#cli-design-standards)\
 6.  [Environment & Dependency Policy](#environment--dependency-policy)\
 7.  [Patterns](#patterns)\
-8.  [Error Handling & Logging](#error-handling--logging)\
-9.  [Security Standards](#security-standards)\
-10. [Testing Standards](#testing-standards)\
-11. [Performance Guidelines](#performance-guidelines)\
-12. [Refactoring Guidelines](#refactoring-guidelines)\
-13. [Common Principles to Always Follow](#common-principles-to-always-follow)
-
-------------------------------------------------------------------------
+8.  [User Config Pattern](#user-config-pattern)\
+9.  [Error Handling & Logging](#error-handling--logging)\
+10. [Security Standards](#security-standards)\
+11. [Testing Standards](#testing-standards)\
+12. [Performance Guidelines](#performance-guidelines)\
+13. [Refactoring Guidelines](#refactoring-guidelines)\
+14. [Common Principles to Always Follow](#common-principles-to-always-follow)
 
 # Overview
 
@@ -30,8 +27,7 @@ Project-specific details belong in:
 .github/additional-copilot-instructions.md
 
 This document defines universal rules.
-
-------------------------------------------------------------------------
+If any other repository guidance contradicts this file, this file takes precedence and the conflicting guidance should be removed or aligned.
 
 # Architecture Principles
 
@@ -45,8 +41,6 @@ This document defines universal rules.
 8.  Move files instead of deleting where possible\
 9.  Prefer explicit over implicit behavior\
 10. Validate all paths before use
-
-------------------------------------------------------------------------
 
 # Development Standards
 
@@ -64,7 +58,48 @@ This document defines universal rules.
 -   Utilities isolated in dedicated modules\
 -   Tests mirror source structure
 
-------------------------------------------------------------------------
+## Code Organisation & Function Naming Pattern
+
+- Group functions by domain or purpose.
+- Use `##` section headers with short lowercase names.
+- Function names should use the `domainAction` pattern.
+    - domain first, then action. Use camelCase.
+    - examples:
+        - `configLoad`
+        - `configSave`
+        - `messageExtract`
+        - `messageParse`
+        - `whatsappWaitForReady`
+    - avoid reversing the pattern (e.g. `loadConfig`, `extractMessage`).
+- Keep functions alphabetically ordered within each section unless readability will be reduced or precedence order is needed.
+- Keep public workflow near the top.
+- Keep low-level utilities near the bottom.
+- Private helpers must start with `_`.
+
+### Example
+
+class Example:
+
+    ## config
+
+    def configLoad(self):
+        pass
+
+    def configSave(self):
+        pass
+
+    ## message
+
+    def messageExtract(self):
+        pass
+
+    def messageParse(self):
+        pass
+
+    ## utilities
+
+    def _parseDate(self):
+        pass
 
 # Project Structure Standard
 
@@ -78,7 +113,7 @@ All applications must have a root entry point:
     └── .github/
         └── additional-copilot-instructions.md
 
-Larger applications may also use `src/` and `ui/` folders:
+Larger applications may also use `src/`, `ui/`, and `qt/` folders:
 
     projectName/
     ├── main.py
@@ -89,7 +124,7 @@ Larger applications may also use `src/` and `ui/` folders:
     │       ├── utils/
     │       └── patterns/
     ├── ui/
-    ├── Qt/ui
+    ├── qt/
     ├── tests/
     ├── requirements.txt
     ├── README.md
@@ -102,9 +137,10 @@ Rules:
 -   `main.py` sets the application logging context with `setApplication()`\
 -   `src/` is optional and should be used for larger apps, reusable core logic, or UI-based apps\
 -   `ui/` is optional and should contain UI orchestration/assets where useful\
+-   Documentation rule: only `README.md` may be at the project root; all other documentation must live under `documentation/`, and documentation file names should use camelCase except for `README.md`\
+-   The README must include a near-top Documentation section that links to every living guide in the repo so it remains the canonical entry point for all docs\
+-   Any routine that produces output files must place them in an `output/` folder directly under the project root\
 -   Core/business logic must remain testable without the UI
-
-------------------------------------------------------------------------
 
 # CLI Design Standards
 
@@ -122,6 +158,7 @@ All CLI tools must:
 
 ``` python
 parser.add_argument(
+    "-y",
     "--confirm",
     dest="confirm",
     action="store_true",
@@ -139,8 +176,6 @@ Command behaviour:
 
 Never expose `--dry-run` as the CLI flag. Use `dryRun` only as the internal boolean.
 
-------------------------------------------------------------------------
-
 # Environment & Dependency Policy
 
 -   Target Python 3.10+\
@@ -149,13 +184,12 @@ Never expose `--dry-run` as the CLI flag. Use `dryRun` only as the internal bool
 -   Fail fast if external tools are missing\
 -   Validate system requirements explicitly
 
-------------------------------------------------------------------------
-
 # Patterns
 
 ## Logging Pattern (logUtils)
 
 All projects must use centralized logging from `organiseMyProjects.logUtils`.
+Do not include "..." manually in log messages. logUtils owns prefixes/suffixes.
 
 ### Application context
 
@@ -218,6 +252,7 @@ from ui.mainMenu import mainMenu
 def buildParser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "-y",
         "--confirm",
         dest="confirm",
         action="store_true",
@@ -240,7 +275,7 @@ def main() -> None:
     logger.done("finished")
 ```
 
-Use this in helper modules (do not import or redefine `thisApplication` outside `main.py`):
+Use this in helper modules (do not use `setApplication()` in helper modules):
 
 ``` python
 from organiseMyProjects.logUtils import getLogger
@@ -266,7 +301,7 @@ logger.value("month", config.monthWindow.monthKey)
 logger.value("dryRun", config.dryRun)
 ```
 
-Avoid:
+Output Examples:
 
 ``` python
 logger.doing("scanning files")           # → scanning files...
@@ -312,17 +347,11 @@ if not dryRun:
 
 Do not manually build dry-run prefixes or branch log wording by `dryRun`.
 
-### Value Logging Rule
+### Info/Value Logging Rule
 
-Use `logger.value("name", value)` when logging a single variable.
-
-Do not use:
-- `logger.info("name: %s", value)`
-- f-strings in `doing()` or `done()`
-
-Use `logger.info()` only for:
-- multiple variables
-- narrative messages
+Use logger.info() for narrative messages with no variables, or formatted messages with two or more variables.
+Use logger.value("name", value) for exactly one variable.
+No other logger methods should receive variable arguments.
 
 ### No fallback logging
 
@@ -331,7 +360,7 @@ External dependencies must fail fast. Never silently replace `logUtils`:
 ``` python
 # Do not do this
 try:
-    from organiseMyProjects.logUtils import getLogger
+    from organiseMyProjects.logUtils import getLogger, setApplication
 except Exception:
     import logging
 ```
@@ -353,8 +382,6 @@ from organiseMyProjects.logUtils import drawBox
 
 drawBox("Sync complete\n3 updated, 0 failed", logger=logger)
 ```
-
-------------------------------------------------------------------------
 
 ### Bash Logging (logUtils.sh)
 
@@ -399,8 +426,6 @@ if [[ -z "${dryRun:-}" ]]; then
 fi
 ```
 
-------------------------------------------------------------------------
-
 ## Dry-Run Pattern
 
 Use `--confirm` as the CLI flag. Never expose `--dry-run` as the user-facing flag.
@@ -427,8 +452,6 @@ if not dryRun:
     shutil.move(src, dest)
 ```
 
-------------------------------------------------------------------------
-
 ## Recovery Pipeline Pattern
 
 -   Never destroy original structure\
@@ -437,15 +460,29 @@ if not dryRun:
 -   Support --confirm\
 -   Always validate paths first
 
-------------------------------------------------------------------------
-
 ## Stop File Pattern
 
 -   Check for stop file periodically\
 -   Exit gracefully if detected\
 -   Log cancellation event
 
-------------------------------------------------------------------------
+# User Config Pattern
+
+Applications store user-level defaults and preferences in:
+
+```text
+~/.config/<application>/config.json
+```
+
+Rules:
+
+-   Use JSON objects, not `key=value` files\
+-   Preserve existing and unknown keys when updating config\
+-   Use clear, stable key names such as `source`, `month`, or `groupName`\
+-   Validate config values before using them\
+-   Create the config directory only when writing config\
+-   Preference updates, such as saving a `--source` override, may be written even during dry-run\
+-   Dry-run guards apply to workflow side effects, not to preference persistence unless the user explicitly asks for config preview only
 
 # Error Handling & Logging
 
@@ -454,16 +491,12 @@ if not dryRun:
 -   Always log errors with context\
 -   Never swallow exceptions silently
 
-------------------------------------------------------------------------
-
 # Security Standards
 
 -   Never hardcode credentials\
 -   Never log sensitive data\
 -   Validate and sanitize file paths\
 -   Respect user permissions
-
-------------------------------------------------------------------------
 
 # Testing Standards
 
@@ -472,16 +505,12 @@ if not dryRun:
 -   Use Arrange--Act--Assert\
 -   Use tmp_path for file tests
 
-------------------------------------------------------------------------
-
 # Performance Guidelines
 
 -   Profile before optimizing\
 -   Use lazy loading for large sets\
 -   Cache expensive computations\
 -   Batch filesystem operations
-
-------------------------------------------------------------------------
 
 # Refactoring Guidelines
 
@@ -491,8 +520,6 @@ Refactor when:
 -   Class \> 300 lines\
 -   Nesting \> 3 levels\
 -   Repeated logic appears twice
-
-------------------------------------------------------------------------
 
 # Common Principles to Always Follow
 
@@ -506,7 +533,5 @@ Refactor when:
 8.  Small, focused functions\
 9.  Test before refactor\
 10. Consistency across frameworks
-
-------------------------------------------------------------------------
 
 End of Master Development Guidelines
