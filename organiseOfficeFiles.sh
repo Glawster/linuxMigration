@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Sort Microsoft Office and related documents into appropriate folders.
+
 set -euo pipefail
 
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

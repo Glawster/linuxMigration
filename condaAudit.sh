@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Audit Conda environments and preview available package updates.
+
 set -euo pipefail
 
 DRY_PREFIX="${DRY_PREFIX:-[]}"

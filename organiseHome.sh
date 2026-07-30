@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Organise files and standard folders in the user's home directory.
+
 set -euo pipefail
 
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Find and reorganise Direct Payments spreadsheet statement files.
+
 set -euo pipefail
 
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

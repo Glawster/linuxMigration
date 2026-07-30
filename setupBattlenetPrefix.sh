@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Create and configure a dedicated Wine prefix for Battle.net.
+
 set -e
 
 # --------- CONFIG (change if needed) ----------
@@ -71,4 +73,3 @@ echo "  Wine prefix:     $PFX"
 echo "  Wine version:    wine-ge-8-26-x86_64"
 echo "  DXVK (launcher): OFF"
 echo "  Env vars:        BATTLE_NET_DISABLE_BROWSER=1, CEF_DISABLE_GPU=1, CEF_ENABLE_GPU=0, --no-sandbox=1"
-

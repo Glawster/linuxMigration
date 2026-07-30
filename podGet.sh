@@ -1,3 +1,5 @@
+# Download a file or directory from the configured remote pod over SSH.
+
 podGet() {
   # usage:
   #   podGet /remote/path [/local/dest]

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Launch Star Wars: The Old Republic with the selected Proton profile and logging.
+
 set -euo pipefail
 
 PROFILE="${SWTOR_PROFILE:-baseline}"

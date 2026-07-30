@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Start ComfyUI in a persistent tmux session after checking its port.
+
 set -euo pipefail
 
 WORKSPACE="/workspace"

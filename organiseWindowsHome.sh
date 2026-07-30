@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Archive Windows-era home-directory items while preserving selected folders.
+
 set -euo pipefail
 
 DOCS_DIR="$HOME/Documents"     # symlink to /mnt/home/Andy/Documents
@@ -60,4 +62,3 @@ shopt -u dotglob nullglob
 
 echo
 echo "=== completed. top-level 'my...' kept, everything else archived. ==="
-

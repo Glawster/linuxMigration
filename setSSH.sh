@@ -1,4 +1,6 @@
 # setSSH.sh
+# Parse an SSH command and export its connection settings for pod helpers.
+#
 # usage:
 #   source setSSH.sh "ssh root@213.173.108.199 -p 15386 -i ~/.ssh/id_ed25519"
 

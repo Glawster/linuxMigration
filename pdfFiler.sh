@@ -1,4 +1,6 @@
 #!/bin/bash
+# Extract dates from PDF documents and file them using consistent names.
+
 #set -x
 
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -100,9 +100,11 @@ import ast
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -125,7 +127,8 @@ _PY_EXCLUDE_PATTERNS = re.compile(
 
 # Shebang / boilerplate lines to strip when extracting Bash descriptions
 _BASH_STRIP_PATTERNS = re.compile(
-    r"^(#!.*|set\s+-[a-z]+|#\s*-\*-.*-\*-)\s*$", re.IGNORECASE
+    r"^(#!.*|#?\s*set\s+-[a-z]+(?:\s+.*)?|#\s*-\*-.*-\*-)\s*$",
+    re.IGNORECASE,
 )
 
 # ---------------------------------------------------------------------------
@@ -210,22 +213,83 @@ def _extractPyDescription(text: str, path: Path) -> str:
     return _fallbackDocstring(text)
 
 
-def _extractBashDescription(text: str) -> str:
-    """Extract description from the leading comment block of a Bash file."""
-    descLines: List[str] = []
-    started = False
-    for line in text.splitlines():
-        stripped = line.strip()
-        if _BASH_STRIP_PATTERNS.match(stripped):
+def _extractBashDescription(text: str, path: Path) -> str:
+    """Extract a short description from a Bash file's actual header.
+
+    A header must be the first substantive block after an optional shebang,
+    ``set`` directive, and blank lines.  This deliberately does not scan for
+    comments later in the script, where implementation notes are common.
+    """
+    lines = text.splitlines()
+    index = 0
+    while index < len(lines):
+        stripped = lines[index].strip()
+        if not stripped or _BASH_STRIP_PATTERNS.match(stripped):
+            index += 1
             continue
-        if stripped.startswith("#"):
-            comment = stripped.lstrip("#").strip()
-            if comment:
-                descLines.append(comment)
-                started = True
-        elif started:
+        break
+
+    if index >= len(lines) or not lines[index].lstrip().startswith("#"):
+        return ""
+
+    commentLines: List[str] = []
+    while index < len(lines):
+        stripped = lines[index].strip()
+        if not stripped.startswith("#"):
             break
-    return " ".join(descLines).strip()
+        commentLines.append(stripped.lstrip("#").strip())
+        index += 1
+
+    paragraphs: List[List[str]] = []
+    current: List[str] = []
+    for line in commentLines:
+        # Separator-only lines are decoration, not description text.
+        if line and not re.search(r"[A-Za-z0-9]", line):
+            continue
+        if line:
+            current.append(line)
+        elif current:
+            paragraphs.append(current)
+            current = []
+    if current:
+        paragraphs.append(current)
+
+    sectionHeadings = {
+        "auto mode",
+        "defaults",
+        "example",
+        "examples",
+        "goals",
+        "important",
+        "notes",
+        "options",
+        "output",
+        "typical workflow",
+        "usage",
+    }
+    for paragraph in paragraphs:
+        first = paragraph[0].rstrip(":").strip().lower()
+        if first in sectionHeadings:
+            if first == "important":
+                continue
+            break
+
+        joined = " ".join(paragraph).strip()
+        filenamePattern = rf"^{re.escape(path.name)}(?:\s*\([^)]*\))?\s*"
+        joined = re.sub(filenamePattern, "", joined, flags=re.IGNORECASE)
+        joined = re.sub(
+            r"^[\w.-]+\.sh(?:\s*\([^)]*\))?\s*",
+            "",
+            joined,
+            flags=re.IGNORECASE,
+        )
+        joined = re.sub(r"^[\s—–:.-]+", "", joined)
+        joined = re.sub(r"^purpose\s*:\s*", "", joined, flags=re.IGNORECASE)
+        if joined:
+            if joined.lower() == "purpose":
+                continue
+            return joined
+    return ""
 
 
 def _extractDescription(path: Path) -> str:
@@ -236,7 +300,7 @@ def _extractDescription(path: Path) -> str:
         return ""
     if path.suffix == ".py":
         return _extractPyDescription(text, path)
-    return _extractBashDescription(text)
+    return _extractBashDescription(text, path)
 
 
 def _fallbackDocstring(text: str) -> str:
@@ -635,9 +699,27 @@ class ConfigEditorDialog(QDialog):
                 self._statusLabel.setText(f"Invalid JSON — not saved: {exc}")
                 return
         try:
-            self._configPath.write_text(text, encoding="utf-8")
+            # Write beside the destination and atomically replace it so an
+            # interrupted save cannot leave a partially written config file.
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=self._configPath.parent,
+                prefix=f".{self._configPath.name}.",
+                delete=False,
+            ) as tmp:
+                tmp.write(text)
+                tmpPath = Path(tmp.name)
+            if self._configPath.exists():
+                shutil.copymode(self._configPath, tmpPath)
+            os.replace(tmpPath, self._configPath)
             self._statusLabel.setText("Saved ✓")
         except OSError as exc:
+            if "tmpPath" in locals():
+                try:
+                    tmpPath.unlink(missing_ok=True)
+                except OSError:
+                    pass
             self._statusLabel.setText(f"Save failed: {exc}")
 
 
@@ -748,6 +830,9 @@ class ArgsDialog(QDialog):
 
     def _addButtonRow(self, layout: QVBoxLayout) -> None:
         """Add Run / Cancel / Run-without-arguments buttons."""
+        self._statusLabel = QLabel("")
+        self._statusLabel.setStyleSheet("color:#b00020;")
+        layout.addWidget(self._statusLabel)
         btnRow = QHBoxLayout()
         runBtn = QPushButton("▶  Run")
         runBtn.setDefault(True)
@@ -774,6 +859,27 @@ class ArgsDialog(QDialog):
         """Mark the dialog as skipped and accept it to run without arguments."""
         self._skipped = True
         self.accept()
+
+    def accept(self) -> None:  # type: ignore[override]
+        """Accept only when every required positional or option has a value."""
+        if not self._skipped:
+            missing = []
+            for argDef, widget in self._widgets:
+                if (
+                    not argDef["required"]
+                    and not argDef["isPositional"]
+                ) or argDef["isBoolean"]:
+                    continue
+                value = widget.text().strip() if isinstance(widget, QLineEdit) else ""
+                if not value:
+                    missing.append(", ".join(argDef["flags"]))
+            if missing:
+                self._statusLabel.setText(
+                    "Required argument(s): " + ", ".join(missing)
+                )
+                return
+        self._statusLabel.setText("")
+        super().accept()
 
     def buildArgs(self) -> List[str]:
         """Convert form widget values to a CLI argument list."""
@@ -954,6 +1060,7 @@ class DetailPane(QScrollArea):
         """Initialise the scroll-area detail pane with name, description and button widgets."""
         super().__init__(parent)
         self._currentTool: Optional[dict] = None
+        self.setWidgetResizable(True)
         self._container = QWidget()
         self.setWidget(self._container)
         layout = QVBoxLayout(self._container)
@@ -1094,8 +1201,14 @@ class DetailPane(QScrollArea):
             return
         filePath = str(self._currentTool["path"])
         editor = os.environ.get("EDITOR", "")
-        if editor and shutil.which(editor):
-            QProcess.startDetached(editor, [filePath])
+        try:
+            editorCommand = shlex.split(editor) if editor else []
+        except ValueError:
+            editorCommand = []
+        if editorCommand and shutil.which(editorCommand[0]):
+            QProcess.startDetached(
+                editorCommand[0], editorCommand[1:] + [filePath]
+            )
         else:
             QProcess.startDetached("xdg-open", [filePath])
 
@@ -1233,6 +1346,7 @@ class ToolMenuWindow(QMainWindow):
     def _restoreGeometry(self) -> None:
         """Restore saved window and splitter geometry from QSettings."""
         settings = QSettings("Glawster", "myTools")
+        geometry = settings.value("geometry")
         if geometry:
             self.restoreGeometry(geometry)
         splitterState = settings.value("splitterState")
@@ -1242,6 +1356,7 @@ class ToolMenuWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:  # type: ignore[override]
         """Save window and splitter geometry to QSettings before closing."""
         settings = QSettings("Glawster", "myTools")
+        settings.setValue("geometry", self.saveGeometry())
         settings.setValue("splitterState", self._splitter.saveState())
         super().closeEvent(event)
 
