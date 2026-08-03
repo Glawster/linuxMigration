@@ -1,0 +1,11 @@
+hostname: main-pc
+
+profiles:
+  - common
+  - development
+  - gaming
+  - media
+
+repositories:
+
+git:

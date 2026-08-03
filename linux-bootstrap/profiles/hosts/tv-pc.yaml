@@ -1,0 +1,11 @@
+hostname: tv-pc
+
+profiles:
+  - common
+  - gaming
+  - vr
+  - media
+
+repositories:
+
+git:

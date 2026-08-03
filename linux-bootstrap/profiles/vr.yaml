@@ -1,0 +1,7 @@
+name: vr
+
+apt:
+
+flatpak:
+
+services:

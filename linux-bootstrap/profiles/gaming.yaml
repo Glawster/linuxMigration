@@ -1,0 +1,12 @@
+name: gaming
+
+apt:
+  - steam
+  - lutris
+  - mangohud
+  - gamescope
+
+flatpak:
+  - net.davidotek.pupgui2
+
+services:

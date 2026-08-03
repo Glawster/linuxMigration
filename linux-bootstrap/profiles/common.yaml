@@ -1,0 +1,11 @@
+name: common
+
+apt:
+  - curl
+  - git
+  - openssh-client
+
+services:
+
+git:
+  defaultBranch: main

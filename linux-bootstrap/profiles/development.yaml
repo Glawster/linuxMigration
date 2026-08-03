@@ -1,0 +1,8 @@
+name: development
+
+apt:
+  - build-essential
+  - python3
+  - shellcheck
+
+services:
