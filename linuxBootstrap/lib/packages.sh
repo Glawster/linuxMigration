@@ -7,6 +7,7 @@ packagesApply() {
     case "$manager" in
         apt) packagesAptApply "$@" ;;
         flatpak) packagesFlatpakApply "$@" ;;
+        snap) packagesSnapApply "$@" ;;
         *) logError "unsupported package manager: $manager"; return 2 ;;
     esac
 }
@@ -19,14 +20,26 @@ packagesAptApply() {
             itemSkip "apt package already installed: $package"
         else
             changeRun "install apt package: $package" sudo apt-get install -y "$package"
+        fi
+    done
+}
 
-    packagesManagerRequire "$manager"
+packagesSnapApply() {
     local package
+    if ! command -v snap >/dev/null 2>&1; then
+        if [[ "${dryRun:-1}" == 1 ]]; then
+            for package in "$@"; do
+                changeRun "install snap package: $package" sudo snap install "$package"
+            done
+            return 0
+        fi
+        commandRequire snap
+    fi
     for package in "$@"; do
-        if packagesPackageInstalled "$manager" "$package"; then
-            itemSkip "$manager package already installed: $package"
+        if snap list "$package" >/dev/null 2>&1; then
+            itemSkip "snap package already installed: $package"
         else
-            packagesPackageInstall "$manager" "$package"
+            changeRun "install snap package: $package" sudo snap install "$package"
         fi
     done
 }
@@ -59,10 +72,6 @@ packagesFlatpakRemoteEnsure() {
     else
         changeRun "configure system Flatpak remote: flathub" sudo flatpak remote-add --system --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
     fi
-}
-
-packagesUnsupportedReport() {
-    ((${#profileSnapPackages[@]} == 0)) || logWarning "Snap packages are declared but support is planned: ${profileSnapPackages[*]}"
 }
 
 packagesUpdate() {
@@ -126,31 +135,4 @@ packagesFlatpakUpdatesReport() {
         done
         printf '  %-10s %s\n' "$category" "$package"
     done
-packagesManagerRequire() {
-    case "$1" in
-        apt) commandRequire dpkg-query; commandRequire apt-get ;;
-        flatpak) commandRequire flatpak ;;
-        snap) commandRequire snap ;;
-        *) logError "unsupported package manager: $1"; return 2 ;;
-    esac
-}
-
-packagesPackageInstall() {
-    local manager="$1" package="$2"
-    case "$manager" in
-        apt) changeRun "install apt package: $package" sudo apt-get install -y "$package" ;;
-        flatpak) changeRun "install flatpak package: $package" flatpak install --user --noninteractive flathub "$package" ;;
-        snap) changeRun "install snap package: $package" sudo snap install "$package" ;;
-        *) logError "unsupported package manager: $manager"; return 2 ;;
-    esac
-}
-
-packagesPackageInstalled() {
-    local manager="$1" package="$2"
-    case "$manager" in
-        apt) dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q 'install ok installed' ;;
-        flatpak) flatpak info --user "$package" >/dev/null 2>&1 ;;
-        snap) snap list "$package" >/dev/null 2>&1 ;;
-        *) logError "unsupported package manager: $manager"; return 2 ;;
-    esac
 }

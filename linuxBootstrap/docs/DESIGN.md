@@ -17,8 +17,9 @@ The entry point dispatches explicit operational commands:
 - `status` performs the same inspections without permitting mutation;
 - `profile` lists, displays, validates, or creates profile definitions.
 
-Legacy option-only invocation dispatches to `install`. The reserved `capture`
-command fails clearly until reviewed master-host capture is implemented.
+Legacy option-only invocation dispatches to `install`. The `capture` command
+previews supported settings from the current host and writes them to exactly
+one explicitly selected profile only when confirmed.
 
 ## Execution model
 
@@ -65,6 +66,12 @@ also define its hostname. Bootstrap validates this repository-wide invariant
 before loading requested profiles and reports the master profile and hostname
 in its summary. The declaration authorizes a future explicit capture workflow;
 it does not cause clients to read configuration directly from a live host.
+
+Capture currently includes only reproducible global Git identity and default
+branch settings. It deliberately excludes credentials, signing keys, helpers,
+repository-local configuration, and other secret-bearing state. Each future
+capture domain must define the same allowlist, preview, and focused profile
+update behavior before it is enabled.
 
 ## Module contract
 

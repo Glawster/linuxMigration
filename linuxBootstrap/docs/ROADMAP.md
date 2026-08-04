@@ -33,7 +33,8 @@
 - [x] Subcommand CLI with install, update, status, and profile operations
 - [x] Managed, unmanaged, and system package update reporting
 - [ ] Rich `status` output with per-module health categories
-- [ ] Master-host configuration capture
+- [x] Preview-first global Git configuration capture into an explicit profile
+- [ ] Additional reviewed master-host capture domains
 - [ ] `--repair` using the same inspection paths as normal execution
 - [ ] Cron and systemd user-service management
 - [ ] NetworkManager connection selection and static addressing

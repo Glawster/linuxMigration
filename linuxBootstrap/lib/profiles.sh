@@ -42,7 +42,9 @@ profileMasterResolve() {
 }
 
 profileResolve() {
-    local name="$1" role="$projectDir/profiles/$name.yaml" host="$projectDir/profiles/hosts/$name.yaml"
+    local name="$1" role host
+    role="$projectDir/profiles/$name.yaml"
+    host="$projectDir/profiles/hosts/$name.yaml"
     if [[ -f "$role" ]]; then printf '%s\n' "$role"; return; fi
     if [[ -f "$host" ]]; then printf '%s\n' "$host"; return; fi
     logError "profile not found: $name"

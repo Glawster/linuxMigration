@@ -61,7 +61,7 @@ summaryPrint() {
     printf '\nSummary\n'
     printf '  Command ......... %s\n' "${requestedCommand:-install}"
     printf '  Profiles ........ %s\n' "$profilesText"
-    printf '  Config master ... %s (%s)\n' "$profileMasterName" "$profileMasterHostname"
+    [[ -z "${profileMasterName:-}" ]] || printf '  Config master ... %s (%s)\n' "$profileMasterName" "$profileMasterHostname"
     [[ -z "${profileExpectedIp:-}" ]] || printf '  Expected IP ..... %s (DHCP reservation)\n' "$profileExpectedIp"
     printf '  Mode ............ %s\n' "$([[ "${dryRun:-1}" == 1 ]] && echo dry-run || echo apply)"
     printf '  Changes ......... %d\n' "$summaryChanged"

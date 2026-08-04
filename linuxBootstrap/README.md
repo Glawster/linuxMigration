@@ -74,9 +74,23 @@ Profiles have their own inspection and authoring commands:
 ./bootstrap.sh profile add office-extra --confirm
 ```
 
-`profile add` is also preview-only unless confirmed. `capture` is reserved for
-the planned master-host configuration capture workflow and currently exits
-without changing anything.
+`profile add` is also preview-only unless confirmed.
+
+### Capture supported configuration
+
+Capture reads the supported global Git settings (`user.name`, `user.email`,
+and `init.defaultBranch`) and previews replacing the selected profile's `git`
+map:
+
+```bash
+./bootstrap.sh capture --profile common
+./bootstrap.sh capture --profile common --confirm
+```
+
+Exactly one destination profile must be named. Capture preserves every other
+profile section and never reads credentials, signing keys, credential helpers,
+repository-local settings, or private key material. Commit and review the
+result before applying that profile on another host.
 
 ### Logs
 

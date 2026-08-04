@@ -31,6 +31,7 @@ Commands:
   install              Converge packages and configuration (default for legacy syntax)
   update               Converge, then update installed apt and Flatpak packages
   status               Inspect profile compliance without making changes
+  capture              Capture supported global settings into one profile
   profile list         List role and host profiles
   profile show NAME    Show a profile's merged configuration
   profile validate     Validate all profile definitions
@@ -68,8 +69,7 @@ argumentsParse() {
         requestedCommand="install"
     fi
     case "$requestedCommand" in
-        install|update|status|profile) ;;
-        capture) logError "capture is planned but not implemented yet"; exit 2 ;;
+        capture|install|update|status|profile) ;;
         *) logError "unknown command: $requestedCommand"; usage >&2; exit 2 ;;
     esac
     while (($#)); do
@@ -95,7 +95,9 @@ argumentsParse() {
             *) logError "unknown argument: $1"; usage >&2; exit 2 ;;
         esac
     done
-    if [[ "$requestedCommand" != profile ]]; then
+    if [[ "$requestedCommand" == capture ]]; then
+        ((${#requestedProfiles[@]} == 1)) || { logError "capture requires exactly one --profile NAME"; exit 2; }
+    elif [[ "$requestedCommand" != profile ]]; then
         ((${#requestedProfiles[@]})) || requestedProfiles=(common)
     fi
     [[ "$requestedCommand" != status ]] || dryRun=1
@@ -104,7 +106,7 @@ argumentsParse() {
 
 modulesLoad() {
     local module
-    for module in packages git ssh hostname networking nfs repositories installers steam userConfig; do
+    for module in capture packages git ssh hostname networking nfs repositories installers steam userConfig; do
         # shellcheck source=/dev/null
         source "$projectDir/lib/$module.sh"
     done
@@ -162,6 +164,12 @@ updateRun() {
     summaryPrint
 }
 
+captureRun() {
+    loadedProfiles=("${requestedProfiles[0]}")
+    captureGitProfile "${requestedProfiles[0]}"
+    summaryPrint
+}
+
 bootstrapRun() {
     loggingInitialize
     argumentsParse "$@"
@@ -171,6 +179,7 @@ bootstrapRun() {
     logInfo "linux-bootstrap $requestedCommand starting"
     [[ "$dryRun" == 1 && "$requestedCommand" != status && "$requestedCommand" != profile ]] && logWarning "dry-run mode: no system changes will be made"
     case "$requestedCommand" in
+        capture) captureRun ;;
         install) installRun ;;
         update) updateRun ;;
         status) statusRun ;;

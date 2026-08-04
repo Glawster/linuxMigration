@@ -52,9 +52,9 @@ testHostInheritance() {
 
 testTvPcHostname() {
     local output
-    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" --profile tv-pc)"
-    assertContains "$output" 'set hostname to TV-PC' 'TV PC profile uses actual hostname'
-    assertContains "$output" 'Expected IP ..... 192.168.1.201 (DHCP reservation)' 'TV PC records expected reserved IP'
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile show tv-pc)"
+    assertContains "$output" 'Hostname: TV-PC' 'TV PC profile uses actual hostname'
+    assertContains "$output" 'Expected IP: 192.168.1.201' 'TV PC records expected reserved IP'
 }
 
 testMultipleProfiles() {
@@ -164,8 +164,8 @@ testInvalidIpOctet() {
 
 testNestedPackageProfile() {
     local output
-    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" --profile andy-pc)"
-    assertContains "$output" 'install system Flatpak: com.rustdesk.RustDesk' 'nested package lists merge with current profiles'
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile show andy-pc)"
+    assertContains "$output" 'flatpak: com.rustdesk.RustDesk' 'nested package lists merge with current profiles'
 }
 
 testHostsFileRender() {
@@ -192,6 +192,64 @@ testNfsMountRender() {
     assertContains "$output" 'server:/media /mnt/media nfs4 ro,_netdev,nofail 0 0' 'NFS rendering adds managed mounts'
 }
 
+testCapturePreview() {
+    local captureHome output
+    captureHome="$testStateDir/capture-home"
+    mkdir -p "$captureHome"
+    HOME="$captureHome" git config --global user.name 'Example User'
+    HOME="$captureHome" git config --global user.email 'example@example.com'
+    HOME="$captureHome" git config --global init.defaultBranch main
+    output="$(HOME="$captureHome" NO_COLOR=1 "$projectDir/bootstrap.sh" capture --profile common)"
+    assertContains "$output" 'would capture global Git configuration in profile: common' 'capture previews Git profile changes'
+    assertContains "$output" 'Command ......... capture' 'capture summary identifies its command'
+}
+
+testCaptureProfileRender() {
+    local output source target
+    source="$testStateDir/capture-profile.yaml"
+    target="$testStateDir/capture-rendered.yaml"
+    printf 'name: example\n\ngit:\n  name: Old Name\n  defaultBranch: master\n\nservices:\n  - ssh\n' > "$source"
+    source "$projectDir/lib/capture.sh"
+    captureGitProfileRender "$source" "$target" 'Example User' 'example@example.com' main
+    output="$(<"$target")"
+    assertContains "$output" 'name: Example User' 'capture replaces the Git name'
+    assertContains "$output" 'email: example@example.com' 'capture records the Git email'
+    assertContains "$output" 'defaultBranch: main' 'capture records the default branch'
+    assertContains "$output" '  - ssh' 'capture preserves unrelated profile content'
+}
+
+testCaptureRequiresProfile() {
+    local output status=0
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" capture 2>&1)" || status=$?
+    [[ "$status" -eq 2 ]] && assertContains "$output" 'capture requires exactly one --profile NAME' 'capture requires an explicit destination' || {
+        printf 'FAIL  capture without a profile returned an unexpected status\n'; ((failed += 1));
+    }
+}
+
+testCaptureConfirmWritesProfile() {
+    local captureHome captureProject output
+    captureHome="$testStateDir/capture-confirm-home"
+    captureProject="$testStateDir/capture-project"
+    mkdir -p "$captureHome" "$captureProject/profiles/hosts"
+    printf 'name: common\n\ngit:\n  defaultBranch: master\n' > "$captureProject/profiles/common.yaml"
+    HOME="$captureHome" git config --global user.name 'Captured User'
+    HOME="$captureHome" git config --global user.email 'captured@example.com'
+    HOME="$captureHome" git config --global init.defaultBranch main
+    HOME="$captureHome" bash -c '
+        projectDir="$1"
+        source "$2/lib/logging.sh"
+        source "$2/lib/common.sh"
+        source "$2/lib/profiles.sh"
+        source "$2/lib/capture.sh"
+        dryRun=0
+        captureGitProfile common
+    ' _ "$captureProject" "$projectDir"
+    output="$(<"$captureProject/profiles/common.yaml")"
+    assertContains "$output" 'name: Captured User' 'confirmed capture writes the Git name'
+    assertContains "$output" 'email: captured@example.com' 'confirmed capture writes the Git email'
+    assertContains "$output" 'defaultBranch: main' 'confirmed capture writes the default branch'
+}
+
 testHelp
 testInstallCommand
 testLogging
@@ -210,6 +268,10 @@ testInvalidIpOctet
 testNestedPackageProfile
 testHostsFileRender
 testNfsMountRender
+testCapturePreview
+testCaptureProfileRender
+testCaptureRequiresProfile
+testCaptureConfirmWritesProfile
 
 printf '\n%d passed, %d failed\n' "$passed" "$failed"
 ((failed == 0))
