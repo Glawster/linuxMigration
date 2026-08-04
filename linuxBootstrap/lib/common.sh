@@ -16,7 +16,7 @@ commandRequire() {
 changeRun() {
     local description="$1"
     shift
-    if [[ -n "${dryRun:-}" ]]; then
+    if [[ "${dryRun:-1}" == 1 ]]; then
         logInfo "would $description"
         ((summaryChanged += 1))
         return 0
@@ -59,8 +59,11 @@ summaryPrint() {
         profilesText+="$profile"
     done
     printf '\nSummary\n'
+    printf '  Command ......... %s\n' "${requestedCommand:-install}"
     printf '  Profiles ........ %s\n' "$profilesText"
-    printf '  Mode ............ %s\n' "$([[ -n "${dryRun:-}" ]] && echo dry-run || echo apply)"
+    printf '  Config master ... %s (%s)\n' "$profileMasterName" "$profileMasterHostname"
+    [[ -z "${profileExpectedIp:-}" ]] || printf '  Expected IP ..... %s (DHCP reservation)\n' "$profileExpectedIp"
+    printf '  Mode ............ %s\n' "$([[ "${dryRun:-1}" == 1 ]] && echo dry-run || echo apply)"
     printf '  Changes ......... %d\n' "$summaryChanged"
     printf '  Already OK ...... %d\n' "$summarySkipped"
     printf '  Failures ........ %d\n' "$summaryFailed"

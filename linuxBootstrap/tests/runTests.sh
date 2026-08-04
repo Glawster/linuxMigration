@@ -2,6 +2,10 @@
 set -Eeuo pipefail
 
 projectDir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+testStateDir="${TMPDIR:-/tmp}/linux-bootstrap-tests-$$"
+mkdir -p "$testStateDir"
+export XDG_STATE_HOME="$testStateDir"
+trap 'rm -rf -- "$testStateDir"' EXIT
 passed=0
 failed=0
 
@@ -20,19 +24,118 @@ testHelp() {
     local output
     output="$($projectDir/bootstrap.sh --help)"
     assertContains "$output" '--profile NAME' 'help documents profiles'
+    assertContains "$output" 'profile validate' 'help documents profile subcommands'
+}
+
+testInstallCommand() {
+    local output
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" install --profile media)"
+    assertContains "$output" 'Command ......... install' 'install subcommand dispatches configuration'
+    assertContains "$output" 'Profiles ........ media' 'install subcommand loads requested profile'
+}
+
+testLogging() {
+    local logPath output
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile list)"
+    logPath="$(find "$testStateDir/linuxBootstrap" -type f -name 'bootstrap-*.log' | sort | tail -n 1)"
+    [[ -n "$logPath" && -f "$logPath" ]] || { printf 'FAIL  bootstrap did not create a log file\n'; ((failed += 1)); return; }
+    assertContains "$(<"$logPath")" 'linux-bootstrap profile starting' 'log file captures bootstrap output'
+    assertContains "$output" 'log file:' 'terminal output reports log location'
 }
 
 testHostInheritance() {
     local output
-    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" --profile laptop --dry-run)"
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" --profile laptop)"
     assertContains "$output" 'Profiles ........ common, development, laptop' 'host inherits role profiles'
     assertContains "$output" 'set hostname to laptop' 'host supplies hostname'
 }
 
+testTvPcHostname() {
+    local output
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" --profile tv-pc)"
+    assertContains "$output" 'set hostname to TV-PC' 'TV PC profile uses actual hostname'
+    assertContains "$output" 'Expected IP ..... 192.168.1.201 (DHCP reservation)' 'TV PC records expected reserved IP'
+}
+
 testMultipleProfiles() {
     local output
-    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" --profile common --profile media --dry-run)"
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" --profile common --profile media)"
     assertContains "$output" 'Profiles ........ common, media' 'multiple profiles compose'
+}
+
+testMasterHost() {
+    local output
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" --profile common)"
+    assertContains "$output" 'Config master ... main-pc (Andy-PC)' 'master host is declared explicitly'
+}
+
+testMasterExpectedIp() {
+    local output
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" --profile main-pc)"
+    assertContains "$output" 'Expected IP ..... 192.168.1.200 (DHCP reservation)' 'master records expected reserved IP'
+}
+
+testOfficeFlatpak() {
+    local output
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" --profile office)"
+    assertContains "$output" 'install system Flatpak: org.libreoffice.LibreOffice' 'office profile installs current LibreOffice Flatpak'
+}
+
+testProfileCommands() {
+    local output
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile list)"
+    assertContains "$output" 'main-pc (master: Andy-PC)' 'profile list identifies master'
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile show main-pc)"
+    assertContains "$output" 'flatpak: org.libreoffice.LibreOffice' 'profile show prints merged configuration'
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile validate)"
+    assertContains "$output" 'all profiles are valid' 'profile validate checks repository profiles'
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile add test-role)"
+    assertContains "$output" 'would create role profile: test-role' 'profile add previews creation by default'
+    [[ ! -e "$projectDir/profiles/test-role.yaml" ]] || { printf 'FAIL  profile add preview created a file\n'; ((failed += 1)); }
+}
+
+testUpdateClassification() {
+    local output
+    output="$({
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/packages.sh"
+        apt-get() {
+            if [[ "$1" == -s ]]; then printf 'Inst git [1] (2 repo)\nInst gimp [1] (2 repo)\nInst libc6 [1] (2 repo)\n'; fi
+        }
+        apt-mark() { printf 'git\ngimp\n'; }
+        flatpak() {
+            if [[ "$1" == remote-ls ]]; then printf 'org.libreoffice.LibreOffice\norg.blender.Blender\n'; fi
+        }
+        sudo() { return 0; }
+        dryRun=1
+        profileFlatpakPackages=(org.libreoffice.LibreOffice)
+        packagesUpdate git
+    })"
+    assertContains "$output" 'managed    git' 'update classifies managed apt package'
+    assertContains "$output" 'unmanaged  gimp' 'update classifies unmanaged manual apt package'
+    assertContains "$output" 'system     libc6' 'update classifies apt dependency'
+    assertContains "$output" 'managed    org.libreoffice.LibreOffice' 'update classifies managed Flatpak'
+    assertContains "$output" 'unmanaged  org.blender.Blender' 'update classifies unmanaged Flatpak'
+}
+
+testFlatpakConfirmApplies() {
+    local output
+    output="$({
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/packages.sh"
+        flatpak() {
+            case "$1" in
+                remote-list) printf 'flathub\n' ;;
+                info) return 1 ;;
+                install) printf 'FLATPAK_CALL %s\n' "$*" ;;
+            esac
+        }
+        dryRun=0
+        packagesFlatpakApply org.libreoffice.LibreOffice
+    })"
+    assertContains "$output" 'FLATPAK_CALL install --system --noninteractive -y flathub org.libreoffice.LibreOffice' 'confirm mode executes Flatpak installation'
 }
 
 testMissingProfile() {
@@ -60,8 +163,17 @@ testInvalidIpOctet() {
 }
 
 testHelp
+testInstallCommand
+testLogging
 testHostInheritance
+testTvPcHostname
 testMultipleProfiles
+testMasterHost
+testMasterExpectedIp
+testOfficeFlatpak
+testFlatpakConfirmApplies
+testProfileCommands
+testUpdateClassification
 testMissingProfile
 testInvalidIp
 testInvalidIpOctet

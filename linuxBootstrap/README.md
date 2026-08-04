@@ -9,31 +9,84 @@ again after an installation or upgrade.
 - [Design and architecture](docs/DESIGN.md)
 - [Roadmap](docs/ROADMAP.md)
 
-## Installation
+## Command line
 
 Clone this repository, enter the project, and preview a host profile:
 
 ```bash
 git clone <repository-url> ~/bin
-cd ~/bin/linux-bootstrap
-./bootstrap.sh --profile tv-pc
+cd ~/bin/linuxBootstrap
+./bootstrap.sh install --profile tv-pc
 ```
 
 Review the summary, then apply it:
 
 ```bash
-./bootstrap.sh --profile tv-pc --confirm
+./bootstrap.sh install --profile tv-pc --confirm
 ```
 
 Multiple role profiles can be composed explicitly:
 
 ```bash
-./bootstrap.sh --profile common --profile gaming
+./bootstrap.sh install --profile common --profile gaming
 ```
 
-Use `./bootstrap.sh --help` for hostname, networking, and diagnostic options.
-Static-IP input is validated, but applying it is deferred until connection
-selection can be made safely.
+The former `./bootstrap.sh --profile NAME` syntax remains an alias for
+`install`.
+
+### Install, update, and status
+
+`install` converges declared packages and configuration. `update` first
+converges the profile, then inspects and updates everything already installed:
+
+```bash
+./bootstrap.sh update --profile main-pc
+./bootstrap.sh update --profile main-pc --confirm
+```
+
+The preview uses currently cached apt and Flatpak metadata. A confirmed update
+refreshes metadata, runs a normal apt upgrade, and updates system Flatpaks. It
+does not perform a distribution release upgrade, autoremove packages, or remove
+software absent from a profile. Update candidates are classified as:
+
+- `managed`: declared by a loaded profile;
+- `unmanaged`: a manually installed apt package or system Flatpak;
+- `system`: an automatically installed apt dependency.
+
+Use `status` for a read-only compliance inspection:
+
+```bash
+./bootstrap.sh status --profile tv-pc
+```
+
+### Profiles
+
+Profiles have their own inspection and authoring commands:
+
+```bash
+./bootstrap.sh profile list
+./bootstrap.sh profile show main-pc
+./bootstrap.sh profile validate
+./bootstrap.sh profile add office-extra
+./bootstrap.sh profile add office-extra --confirm
+```
+
+`profile add` is also preview-only unless confirmed. `capture` is reserved for
+the planned master-host configuration capture workflow and currently exits
+without changing anything.
+
+### Logs
+
+Every invocation writes its complete terminal output to a timestamped log while
+continuing to display it interactively. Logs are stored with user-only
+permissions under:
+
+```text
+${XDG_STATE_HOME:-~/.local/state}/linuxBootstrap/
+```
+
+The log path is printed at startup. Configuration modules must not print
+credentials, tokens, private keys, or other secrets.
 
 ## Architecture
 
@@ -42,11 +95,11 @@ selection can be made safely.
 role profiles through their `profiles` list. Modules under `lib/` expose one
 public `<domain>Apply` function and do not depend on each other's internals.
 
-The initial release supports apt packages. Flatpak and Snap declarations are
-recognized and reported without being applied, preserving a stable profile
-schema while their backends are developed.
+The bootstrap supports apt packages and system-wide Flatpak applications from
+Flathub. Snap declarations are recognized and reported without being applied,
+preserving a stable profile schema while that backend is developed.
 
-## Creating a profile
+## Profile format
 
 Add `profiles/<name>.yaml` using the supported keys:
 
@@ -69,11 +122,23 @@ Host files belong in `profiles/hosts/` and may inherit profiles:
 
 ```yaml
 hostname: example-pc
+master: true
+expectedIp: 192.168.1.10
 
 profiles:
   - common
   - development
 ```
+
+Exactly one host profile must set `master: true`. This identifies the machine
+from which reviewed user configuration may be captured; it does not make
+ordinary bootstrap runs copy live files from that machine. Other hosts consume
+configuration committed to this repository.
+
+`expectedIp` records an address reserved by the router's DHCP service. Bootstrap
+validates and reports it but does not replace DHCP with local static addressing.
+The complete reservation inventory, including devices not managed by this Linux
+bootstrap, is kept in [`configs/network.yaml`](configs/network.yaml).
 
 Keep secrets and SSH private keys out of profiles and version control.
 
@@ -90,7 +155,9 @@ states.
 Add a profile list key and a backend in `lib/packages.sh`. The backend must
 provide presence detection and an idempotent install action, must honor
 `dryRun`, and must not update or install unrelated packages. Keep manager
-details outside `bootstrap.sh`.
+details outside `bootstrap.sh`. Update support must inventory installed packages
+separately from profile declarations: declarations require presence, while the
+update command maintains both managed and unmanaged installed software.
 
 ## Testing
 

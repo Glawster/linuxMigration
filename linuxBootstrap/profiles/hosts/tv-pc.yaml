@@ -1,4 +1,5 @@
-hostname: tv-pc
+hostname: TV-PC
+expectedIp: 192.168.1.201
 
 profiles:
   - common

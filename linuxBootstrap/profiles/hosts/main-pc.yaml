@@ -1,10 +1,13 @@
-hostname: main-pc
+hostname: Andy-PC
+master: true
+expectedIp: 192.168.1.200
 
 profiles:
   - common
   - development
   - gaming
   - media
+  - office
 
 repositories:
 

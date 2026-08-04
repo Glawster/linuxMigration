@@ -7,6 +7,19 @@ configuration. Its boundaries are designed for workstations, laptops, gaming
 machines, servers, and virtual machines without placing host-specific choices
 inside shell code.
 
+## Command model
+
+The entry point dispatches explicit operational commands:
+
+- `install` converges a requested profile;
+- `update` converges, refreshes metadata when confirmed, and updates installed
+  apt and system Flatpak software;
+- `status` performs the same inspections without permitting mutation;
+- `profile` lists, displays, validates, or creates profile definitions.
+
+Legacy option-only invocation dispatches to `install`. The reserved `capture`
+command fails clearly until reviewed master-host capture is implemented.
+
 ## Execution model
 
 The entry point performs these stages:
@@ -17,8 +30,19 @@ The entry point performs these stages:
 4. Inspect machine state and apply modules in dependency order.
 5. Print counts for proposed/applied, already-correct, and failed operations.
 
-The default is dry-run. `--confirm` enables changes. Each mutating module first
-queries current state and routes necessary work through `changeRun`.
+The default is a non-mutating preview. `--confirm` enables changes. Each
+mutating module first queries current state and routes necessary work through
+`changeRun`.
+
+Each invocation creates a mode-0600 timestamped log beneath the user's XDG
+state directory and mirrors stdout and stderr to it. Failure to create the log
+is reported but does not prevent bootstrap recovery work from continuing.
+
+Package declarations and updates have distinct meanings. A declaration means a
+package must be installed. Updates cover all installed software and classify
+candidates as managed, unmanaged manual applications, or automatic system
+dependencies. This allows update reports to identify candidates that may later
+be promoted into a role without maintaining a second package catalogue.
 
 ## Profile format
 
@@ -34,6 +58,12 @@ Profiles are merged as follows:
 - list values are appended and package presence checks make duplicates safe;
 - later scalar and Git map values override earlier values;
 - inheritance cycles are detected and reported before configuration begins.
+
+Exactly one file under `profiles/hosts/` must declare `master: true` and must
+also define its hostname. Bootstrap validates this repository-wide invariant
+before loading requested profiles and reports the master profile and hostname
+in its summary. The declaration authorizes a future explicit capture workflow;
+it does not cause clients to read configuration directly from a live host.
 
 ## Module contract
 
@@ -58,5 +88,6 @@ trap includes command and line context.
 Package-manager support stays behind `packagesApply`. Additional domains such
 as GNOME settings, Docker, mounts, fonts, and user services should each receive
 a profile schema, a focused module, status inspection, and isolated tests.
-Future `--status` and `--repair` modes will reuse module inspection rather than
-introduce separate configuration logic.
+The `status` command reuses module inspection rather than introducing separate
+configuration logic. Future richer health output should preserve that shared
+inspection path.
