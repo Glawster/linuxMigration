@@ -104,7 +104,7 @@ argumentsParse() {
 
 modulesLoad() {
     local module
-    for module in packages git ssh hostname networking repositories; do
+    for module in packages git ssh hostname networking nfs repositories installers steam userConfig; do
         # shellcheck source=/dev/null
         source "$projectDir/lib/$module.sh"
     done
@@ -112,15 +112,26 @@ modulesLoad() {
 
 configurationApply() {
     hostnameApply "${requestedHostname:-${profileHostname:-}}"
-    networkingApply "${requestedStaticIp:-${profileStaticIp:-}}"
+    networkingApply \
+        "${requestedStaticIp:-${profileNetwork[address]:-${profileStaticIp:-}}}" \
+        "${profileNetwork[connection]:-}" \
+        "${profileNetwork[gateway]:-}" \
+        "${profileNetwork[dns]:-}"
     networkingExpectedValidate "${profileExpectedIp:-}"
+    hostsApply "${profileHostEntries[@]}"
+    repositoriesApply "${profileRepositories[@]}"
     packagesApply apt "${profileAptPackages[@]}"
     packagesApply flatpak "${profileFlatpakPackages[@]}"
-    packagesUnsupportedReport
+    packagesApply snap "${profileSnapPackages[@]}"
     servicesApply "${profileServices[@]}"
+    nfsExportsApply "${profileNfsExports[@]}"
+    nfsMountsApply "${profileNfsMounts[@]}"
+    installersApply "${profileInstallers[@]}"
+    steamAppsApply "${profileSteamApps[@]}"
+    managedFilesApply "${profileManagedFiles[@]}"
+    vscodeExtensionsApply "${profileVscodeExtensions[@]}"
     gitApply
     sshApply
-    repositoriesApply "${profileRepositories[@]}"
 }
 
 installRun() {

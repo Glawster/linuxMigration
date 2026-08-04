@@ -7,6 +7,9 @@ again after an installation or upgrade.
 ## Documentation
 
 - [Design and architecture](docs/DESIGN.md)
+- [Network naming and static addresses](documentation/networking.md)
+- [NFS exports and mounts](documentation/nfs.md)
+- [User configuration and VS Code extensions](documentation/userConfiguration.md)
 - [Roadmap](docs/ROADMAP.md)
 
 ## Command line
@@ -109,6 +112,10 @@ name: example
 apt:
   - curl
 
+packages:
+  snap:
+    - example-package
+
 services:
   - ssh
 
@@ -116,6 +123,12 @@ git:
   name: Example User
   email: user@example.com
   defaultBranch: main
+
+managedFiles:
+  - shell/aliases|.bash_aliases
+
+vscodeExtensions:
+  - openai.chatgpt
 ```
 
 Host files belong in `profiles/hosts/` and may inherit profiles:
@@ -128,6 +141,15 @@ expectedIp: 192.168.1.10
 profiles:
   - common
   - development
+
+network:
+  connection: Wired connection 1
+  address: 192.0.2.20/24
+  gateway: 192.0.2.1
+  dns: 192.0.2.1, 1.1.1.1
+
+nfsMounts:
+  - server:/srv/media /mnt/media ro,_netdev,nofail,x-systemd.automount
 ```
 
 Exactly one host profile must set `master: true`. This identifies the machine
@@ -141,6 +163,9 @@ The complete reservation inventory, including devices not managed by this Linux
 bootstrap, is kept in [`configs/network.yaml`](configs/network.yaml).
 
 Keep secrets and SSH private keys out of profiles and version control.
+Managed-file sources are relative to `configs/`; destinations are relative to
+the invoking user's home directory. Review the networking and NFS guides before
+enabling settings that can affect connectivity or persistent mounts.
 
 ## Adding a module
 

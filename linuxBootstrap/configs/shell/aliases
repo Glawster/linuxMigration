@@ -1,0 +1,4 @@
+# Shared interactive-shell aliases managed by linux-bootstrap.
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'

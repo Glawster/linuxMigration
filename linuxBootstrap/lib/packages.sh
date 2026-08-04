@@ -19,6 +19,14 @@ packagesAptApply() {
             itemSkip "apt package already installed: $package"
         else
             changeRun "install apt package: $package" sudo apt-get install -y "$package"
+
+    packagesManagerRequire "$manager"
+    local package
+    for package in "$@"; do
+        if packagesPackageInstalled "$manager" "$package"; then
+            itemSkip "$manager package already installed: $package"
+        else
+            packagesPackageInstall "$manager" "$package"
         fi
     done
 }
@@ -118,4 +126,31 @@ packagesFlatpakUpdatesReport() {
         done
         printf '  %-10s %s\n' "$category" "$package"
     done
+packagesManagerRequire() {
+    case "$1" in
+        apt) commandRequire dpkg-query; commandRequire apt-get ;;
+        flatpak) commandRequire flatpak ;;
+        snap) commandRequire snap ;;
+        *) logError "unsupported package manager: $1"; return 2 ;;
+    esac
+}
+
+packagesPackageInstall() {
+    local manager="$1" package="$2"
+    case "$manager" in
+        apt) changeRun "install apt package: $package" sudo apt-get install -y "$package" ;;
+        flatpak) changeRun "install flatpak package: $package" flatpak install --user --noninteractive flathub "$package" ;;
+        snap) changeRun "install snap package: $package" sudo snap install "$package" ;;
+        *) logError "unsupported package manager: $manager"; return 2 ;;
+    esac
+}
+
+packagesPackageInstalled() {
+    local manager="$1" package="$2"
+    case "$manager" in
+        apt) dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q 'install ok installed' ;;
+        flatpak) flatpak info --user "$package" >/dev/null 2>&1 ;;
+        snap) snap list "$package" >/dev/null 2>&1 ;;
+        *) logError "unsupported package manager: $manager"; return 2 ;;
+    esac
 }

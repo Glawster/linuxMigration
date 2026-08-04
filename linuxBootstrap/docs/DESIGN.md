@@ -47,7 +47,8 @@ be promoted into a role without maintaining a second package catalogue.
 ## Profile format
 
 The parser intentionally supports a small YAML subset: top-level scalars,
-top-level string lists, and the `git` string map. This avoids requiring a YAML
+top-level string lists, nested package-manager lists, and the `git` and
+`network` string maps. This avoids requiring a YAML
 package before the package module can run. Extending the schema requires a
 parser test. If profiles later need anchors, nested objects, or typed values,
 the parser should move behind the same functions and use a packaged YAML tool.
@@ -80,8 +81,14 @@ trap includes command and line context.
 - Privileged operations invoke `sudo` only at the final mutation.
 - Static networking is not changed until a connection can be selected
   explicitly; choosing one implicitly could disconnect a remote bootstrap.
-- Repository definitions will use named records rather than arbitrary clone
-  commands when that module is implemented.
+- Repository definitions use named, reviewed implementations rather than
+  arbitrary commands from profiles.
+- Static addresses require an explicit NetworkManager connection and validated
+  IPv4 gateway and DNS values.
+- `/etc/hosts`, `/etc/fstab`, and NFS export changes affect only dedicated
+  managed files or marked blocks.
+- Managed user-file sources and destinations must be safe relative paths;
+  destinations cannot escape the invoking user's home directory.
 
 ## Extensibility
 

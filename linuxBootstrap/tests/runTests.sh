@@ -162,6 +162,36 @@ testInvalidIpOctet() {
     }
 }
 
+testNestedPackageProfile() {
+    local output
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" --profile andy-pc)"
+    assertContains "$output" 'install system Flatpak: com.rustdesk.RustDesk' 'nested package lists merge with current profiles'
+}
+
+testHostsFileRender() {
+    local output source target
+    source="$testStateDir/hosts"
+    target="$testStateDir/hosts-rendered"
+    printf '127.0.0.1 localhost\n# BEGIN linux-bootstrap hosts\n192.0.2.1 old\n# END linux-bootstrap hosts\n' > "$source"
+    source "$projectDir/lib/networking.sh"
+    hostsFileRender "$source" "$target" '192.0.2.10 host-a' '192.0.2.20 host-b'
+    output="$(<"$target")"
+    assertContains "$output" '127.0.0.1 localhost' 'hosts rendering preserves unmanaged entries'
+    assertContains "$output" '192.0.2.20 host-b' 'hosts rendering replaces managed entries'
+}
+
+testNfsMountRender() {
+    local output source target
+    source="$testStateDir/fstab"
+    target="$testStateDir/fstab-rendered"
+    printf 'UUID=root / ext4 defaults 0 1\n' > "$source"
+    source "$projectDir/lib/nfs.sh"
+    _nfsMountsFileRender "$source" "$target" 'server:/media /mnt/media ro,_netdev,nofail'
+    output="$(<"$target")"
+    assertContains "$output" 'UUID=root / ext4 defaults 0 1' 'NFS rendering preserves unmanaged fstab entries'
+    assertContains "$output" 'server:/media /mnt/media nfs4 ro,_netdev,nofail 0 0' 'NFS rendering adds managed mounts'
+}
+
 testHelp
 testInstallCommand
 testLogging
@@ -177,6 +207,9 @@ testUpdateClassification
 testMissingProfile
 testInvalidIp
 testInvalidIpOctet
+testNestedPackageProfile
+testHostsFileRender
+testNfsMountRender
 
 printf '\n%d passed, %d failed\n' "$passed" "$failed"
 ((failed == 0))

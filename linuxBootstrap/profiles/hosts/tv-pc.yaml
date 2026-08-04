@@ -8,5 +8,27 @@ profiles:
   - media
 
 repositories:
+  - warp
+
+apt:
+  - code
+  - gh
+  - warp-terminal
+
+flatpak:
+  - com.rustdesk.RustDesk
+
+vscodeExtensions:
+  - openai.chatgpt
+  - vscodevim.vim
+
+installers:
+  - miniconda
+
+steamApps:
+  - 250820 SteamVR
 
 git:
+  name: Andy Wilson
+  email: murky_oblong0s@icloud.com
+  defaultBranch: main

@@ -1,0 +1,27 @@
+hostname: andy-pc
+
+network:
+  connection: Wired connection 3
+  address: 192.168.1.215/24
+  gateway: 192.168.1.254
+  dns: 192.168.1.254
+
+profiles:
+  - common
+  - development
+  - gaming
+  - media
+
+packages:
+  apt:
+    - code
+  flatpak:
+    - com.rustdesk.RustDesk
+
+vscodeExtensions:
+  - openai.chatgpt
+  - vscodevim.vim
+
+repositories:
+
+git:

@@ -2,7 +2,10 @@
 
 declare -ag loadedProfiles=() profileAptPackages=() profileFlatpakPackages=()
 declare -ag profileSnapPackages=() profileServices=() profileRepositories=()
-declare -Ag profileGit=() loadingProfiles=()
+declare -ag profileHostEntries=() profileNfsExports=() profileNfsMounts=()
+declare -ag profileInstallers=() profileSteamApps=()
+declare -ag profileManagedFiles=() profileVscodeExtensions=()
+declare -Ag profileGit=() profileNetwork=() loadingProfiles=()
 profileHostname=""
 profileStaticIp=""
 profileExpectedIp=""
@@ -57,6 +60,24 @@ profileListRead() {
     ' "$file"
 }
 
+profileNestedListRead() {
+    local file="$1" parent="$2" key="$3"
+    awk -v wantedParent="$parent" -v wantedKey="$key" '
+        /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+        /^[^[:space:]][^:]*:/ {
+            parent=$1; sub(/:$/, "", parent); key=""; next
+        }
+        parent == wantedParent && /^[[:space:]][[:space:]][^[:space:]][^:]*:/ {
+            line=$0; sub(/^[[:space:]]+/, "", line)
+            key=line; sub(/:.*$/, "", key); next
+        }
+        parent == wantedParent && key == wantedKey && /^    -[[:space:]]+/ {
+            line=$0; sub(/^[[:space:]]+-[[:space:]]+/, "", line)
+            sub(/[[:space:]]+#.*$/, "", line); print line
+        }
+    ' "$file"
+}
+
 profileScalarRead() {
     local file="$1" key="$2"
     awk -F: -v wanted="$key" '$1 == wanted {sub(/^[[:space:]]+/, "", $2); print $2; exit}' "$file"
@@ -90,12 +111,23 @@ profileLoad() {
     mapfile -t items < <(profileListRead "$file" apt); profileAptPackages+=("${items[@]}")
     mapfile -t items < <(profileListRead "$file" flatpak); profileFlatpakPackages+=("${items[@]}")
     mapfile -t items < <(profileListRead "$file" snap); profileSnapPackages+=("${items[@]}")
+    mapfile -t items < <(profileNestedListRead "$file" packages apt); profileAptPackages+=("${items[@]}")
+    mapfile -t items < <(profileNestedListRead "$file" packages flatpak); profileFlatpakPackages+=("${items[@]}")
+    mapfile -t items < <(profileNestedListRead "$file" packages snap); profileSnapPackages+=("${items[@]}")
     mapfile -t items < <(profileListRead "$file" services); profileServices+=("${items[@]}")
     mapfile -t items < <(profileListRead "$file" repositories); profileRepositories+=("${items[@]}")
+    mapfile -t items < <(profileListRead "$file" hosts); profileHostEntries+=("${items[@]}")
+    mapfile -t items < <(profileListRead "$file" nfsExports); profileNfsExports+=("${items[@]}")
+    mapfile -t items < <(profileListRead "$file" nfsMounts); profileNfsMounts+=("${items[@]}")
+    mapfile -t items < <(profileListRead "$file" installers); profileInstallers+=("${items[@]}")
+    mapfile -t items < <(profileListRead "$file" steamApps); profileSteamApps+=("${items[@]}")
+    mapfile -t items < <(profileListRead "$file" managedFiles); profileManagedFiles+=("${items[@]}")
+    mapfile -t items < <(profileListRead "$file" vscodeExtensions); profileVscodeExtensions+=("${items[@]}")
     value="$(profileScalarRead "$file" hostname)"; [[ -z "$value" ]] || profileHostname="$value"
     value="$(profileScalarRead "$file" staticIp)"; [[ -z "$value" ]] || profileStaticIp="$value"
     value="$(profileScalarRead "$file" expectedIp)"; [[ -z "$value" ]] || profileExpectedIp="$value"
     while IFS='=' read -r key value; do [[ -n "$key" ]] && profileGit["$key"]="$value"; done < <(profileMapRead "$file" git)
+    while IFS='=' read -r key value; do [[ -n "$key" ]] && profileNetwork["$key"]="$value"; done < <(profileMapRead "$file" network)
 }
 
 profilesLoad() {
@@ -129,7 +161,15 @@ profileShow() {
     for item in "${profileFlatpakPackages[@]}"; do printf 'flatpak: %s\n' "$item"; done
     for item in "${profileSnapPackages[@]}"; do printf 'snap: %s\n' "$item"; done
     for item in "${profileServices[@]}"; do printf 'service: %s\n' "$item"; done
+    for item in "${profileHostEntries[@]}"; do printf 'host: %s\n' "$item"; done
+    for item in "${profileNfsExports[@]}"; do printf 'nfsExport: %s\n' "$item"; done
+    for item in "${profileNfsMounts[@]}"; do printf 'nfsMount: %s\n' "$item"; done
+    for item in "${profileInstallers[@]}"; do printf 'installer: %s\n' "$item"; done
+    for item in "${profileSteamApps[@]}"; do printf 'steamApp: %s\n' "$item"; done
+    for item in "${profileManagedFiles[@]}"; do printf 'managedFile: %s\n' "$item"; done
+    for item in "${profileVscodeExtensions[@]}"; do printf 'vscodeExtension: %s\n' "$item"; done
     for key in "${!profileGit[@]}"; do printf 'git.%s: %s\n' "$key" "${profileGit[$key]}"; done
+    for key in "${!profileNetwork[@]}"; do printf 'network.%s: %s\n' "$key" "${profileNetwork[$key]}"; done
 }
 
 profilesList() {
@@ -157,7 +197,7 @@ profileKeysValidate() {
     local file="$1" key
     while IFS= read -r key; do
         case "$key" in
-            name|hostname|master|expectedIp|staticIp|profiles|apt|flatpak|snap|services|repositories|git) ;;
+            name|hostname|master|expectedIp|staticIp|profiles|packages|apt|flatpak|snap|services|repositories|git|network|hosts|nfsExports|nfsMounts|installers|steamApps|managedFiles|vscodeExtensions) ;;
             *) logError "unsupported profile key in $file: $key"; return 2 ;;
         esac
     done < <(awk -F: '/^[A-Za-z][A-Za-z0-9_-]*:/ {print $1}' "$file")

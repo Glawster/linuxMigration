@@ -3,7 +3,7 @@
 ## Foundation
 
 - [x] Profile composition and host inheritance
-- [x] Apt package presence checks and installation
+- [x] YAML-driven Apt, Flatpak, and Snap package installer abstraction
 - [x] Git, SSH-directory, hostname, and service configuration
 - [x] Dry-run-by-default execution and summary
 - [x] Dependency-free tests
@@ -14,6 +14,7 @@
 
 - [x] Flatpak backend and Flathub remote management
 - [ ] Snap, Homebrew, Pip, Cargo, and npm backends
+- [ ] Homebrew, Pip, Cargo, and npm package backends
 - [ ] Repository definitions with destination and branch policy
 - [ ] VS Code extension management
 - [ ] Miniconda, Docker, and Podman modules
@@ -24,7 +25,8 @@
 - [ ] Gaming launchers, ProtonUp-Qt, and controller configuration
 - [ ] SteamVR and VR device rules
 - [ ] Media services and hardware acceleration
-- [ ] Samba and NFS configuration
+- [ ] Samba configuration
+- [x] NFS exports and persistent NFSv4 mounts
 
 ## Operations
 
