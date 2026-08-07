@@ -87,6 +87,8 @@ testProfileCommands() {
     assertContains "$output" 'main-pc (master: Andy-PC)' 'profile list identifies master'
     output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile show main-pc)"
     assertContains "$output" 'flatpak: org.libreoffice.LibreOffice' 'profile show prints merged configuration'
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile show gaming)"
+    assertContains "$output" 'dcs.installDir: /mnt/games/dcs' 'profile show prints DCS configuration'
     output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile validate)"
     assertContains "$output" 'all profiles are valid' 'profile validate checks repository profiles'
     output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile add test-role)"
@@ -250,6 +252,121 @@ testCaptureConfirmWritesProfile() {
     assertContains "$output" 'defaultBranch: main' 'confirmed capture writes the default branch'
 }
 
+testDcsDisabled() {
+    local output
+    output="$({
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/dcs.sh"
+        verbose=1
+        dcsApply false /mnt/games/dcs false
+    })"
+    assertContains "$output" 'DCS: disabled by profile' 'DCS does nothing unless explicitly enabled'
+}
+
+testDcsEnabledDryRun() {
+    local output
+    output="$({
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/dcs.sh"
+        umu-run() { return 0; }
+        dryRun=1
+        dcsApply true "$testStateDir/custom-dcs" false
+    })"
+    assertContains "$output" "would create DCS installation directory: $testStateDir/custom-dcs" 'DCS dry-run reports a custom installation path'
+    assertContains "$output" 'would run Eagle Dynamics installer' 'DCS dry-run previews the standalone installer'
+}
+
+testDcsRunnerChecksum() {
+    source "$projectDir/lib/dcs.sh"
+    if [[ "$dcsUmuArchiveSha256" =~ ^[0-9a-f]{64}$ ]]; then
+        printf 'PASS  %s\n' 'DCS UMU archive uses a valid SHA-256 digest'
+        ((passed += 1))
+    else
+        printf 'FAIL  %s\n' 'DCS UMU archive checksum is malformed'
+        ((failed += 1))
+    fi
+}
+
+testDcsInstallerUrlRead() {
+    local output
+    source "$projectDir/lib/dcs.sh"
+    output="$(printf '%s\n' '<a href="/upload/current/DCS_World_web.exe" class="btn">Download</a>' | _dcsInstallerUrlRead)"
+    [[ "$output" == '/upload/current/DCS_World_web.exe' ]] && {
+        printf 'PASS  %s\n' 'DCS discovers the current Eagle Dynamics installer link format'
+        ((passed += 1))
+        return
+    }
+    printf 'FAIL  %s\nExpected installer path, got: %s\n' 'DCS installer URL parser' "$output"
+    ((failed += 1))
+}
+
+testDcsMissingPrerequisite() {
+    local output status=0
+    output="$({
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/dcs.sh"
+        command() { [[ "$2" == curl ]] && return 1; builtin command "$@"; }
+        dryRun=1
+        dcsApply true "$testStateDir/missing-prerequisite-dcs" false
+    } 2>&1)" || status=$?
+    [[ "$status" -eq 127 ]] && assertContains "$output" 'required command not found: curl' 'DCS reports missing prerequisites' || {
+        printf 'FAIL  DCS missing prerequisite returned an unexpected status\n'; ((failed += 1));
+    }
+}
+
+testDcsExistingIdempotent() {
+    local dcsHome installDir output firstChanges secondChanges
+    dcsHome="$testStateDir/dcs-home"
+    installDir="$testStateDir/existing-dcs"
+    mkdir -p "$dcsHome/data/Steam/compatibilitytools.d/GE-Proton-test" "$installDir/bin"
+    : > "$installDir/bin/DCS.exe"
+    : > "$installDir/bin/DCS_updater.exe"
+    output="$({
+        HOME="$dcsHome"
+        XDG_DATA_HOME="$dcsHome/data"
+        XDG_CACHE_HOME="$dcsHome/cache"
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/dcs.sh"
+        umu-run() { return 0; }
+        dryRun=0
+        dcsApply true "$installDir" false
+        firstChanges="$summaryChanged"
+        dcsApply true "$installDir" false
+        secondChanges="$summaryChanged"
+        printf 'COUNTS %s %s\n' "$firstChanges" "$secondChanges"
+    })"
+    assertContains "$output" "DCS: installation found at $installDir" 'DCS detects an existing standalone installation'
+    assertContains "$output" 'COUNTS 5 5' 'repeated DCS execution leaves launchers unchanged'
+}
+
+testDcsStatus() {
+    local dcsHome installDir output
+    dcsHome="$testStateDir/dcs-status-home"
+    installDir="$testStateDir/status-dcs"
+    mkdir -p "$dcsHome/data/dcs/prefix" "$installDir/bin" "$dcsHome/.local/bin"
+    : > "$installDir/bin/DCS.exe"
+    : > "$installDir/bin/DCS_updater.exe"
+    : > "$dcsHome/.local/bin/dcs-world"
+    chmod 755 "$dcsHome/.local/bin/dcs-world"
+    output="$({
+        HOME="$dcsHome"
+        XDG_DATA_HOME="$dcsHome/data"
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/dcs.sh"
+        umu-run() { return 0; }
+        requestedCommand=status
+        dcsApply true "$installDir" true
+    })"
+    assertContains "$output" 'DCS: enabled by profile' 'DCS status reports profile enablement'
+    assertContains "$output" 'DCS: DCS_updater.exe exists' 'DCS status reports the Eagle Dynamics updater'
+    assertContains "$output" 'DCS: VR is enabled' 'DCS status reports separable VR configuration'
+}
+
 testHelp
 testInstallCommand
 testLogging
@@ -272,6 +389,13 @@ testCapturePreview
 testCaptureProfileRender
 testCaptureRequiresProfile
 testCaptureConfirmWritesProfile
+testDcsDisabled
+testDcsEnabledDryRun
+testDcsRunnerChecksum
+testDcsInstallerUrlRead
+testDcsMissingPrerequisite
+testDcsExistingIdempotent
+testDcsStatus
 
 printf '\n%d passed, %d failed\n' "$passed" "$failed"
 ((failed == 0))
