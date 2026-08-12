@@ -5,7 +5,7 @@ declare -ag profileSnapPackages=() profileServices=() profileRepositories=()
 declare -ag profileHostEntries=() profileNfsExports=() profileNfsMounts=()
 declare -ag profileInstallers=() profileSteamApps=()
 declare -ag profileManagedFiles=() profileVscodeExtensions=()
-declare -Ag profileGit=() profileNetwork=() loadingProfiles=()
+declare -Ag profileDcs=() profileGit=() profileNetwork=() loadingProfiles=()
 profileHostname=""
 profileStaticIp=""
 profileExpectedIp=""
@@ -130,6 +130,7 @@ profileLoad() {
     value="$(profileScalarRead "$file" expectedIp)"; [[ -z "$value" ]] || profileExpectedIp="$value"
     while IFS='=' read -r key value; do [[ -n "$key" ]] && profileGit["$key"]="$value"; done < <(profileMapRead "$file" git)
     while IFS='=' read -r key value; do [[ -n "$key" ]] && profileNetwork["$key"]="$value"; done < <(profileMapRead "$file" network)
+    while IFS='=' read -r key value; do [[ -n "$key" ]] && profileDcs["$key"]="$value"; done < <(profileMapRead "$file" dcs)
 }
 
 profilesLoad() {
@@ -172,6 +173,7 @@ profileShow() {
     for item in "${profileVscodeExtensions[@]}"; do printf 'vscodeExtension: %s\n' "$item"; done
     for key in "${!profileGit[@]}"; do printf 'git.%s: %s\n' "$key" "${profileGit[$key]}"; done
     for key in "${!profileNetwork[@]}"; do printf 'network.%s: %s\n' "$key" "${profileNetwork[$key]}"; done
+    for key in "${!profileDcs[@]}"; do printf 'dcs.%s: %s\n' "$key" "${profileDcs[$key]}"; done
 }
 
 profilesList() {
@@ -199,7 +201,7 @@ profileKeysValidate() {
     local file="$1" key
     while IFS= read -r key; do
         case "$key" in
-            name|hostname|master|expectedIp|staticIp|profiles|packages|apt|flatpak|snap|services|repositories|git|network|hosts|nfsExports|nfsMounts|installers|steamApps|managedFiles|vscodeExtensions) ;;
+            name|hostname|master|expectedIp|staticIp|profiles|packages|apt|flatpak|snap|services|repositories|git|network|dcs|hosts|nfsExports|nfsMounts|installers|steamApps|managedFiles|vscodeExtensions) ;;
             *) logError "unsupported profile key in $file: $key"; return 2 ;;
         esac
     done < <(awk -F: '/^[A-Za-z][A-Za-z0-9_-]*:/ {print $1}' "$file")

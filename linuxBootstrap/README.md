@@ -10,6 +10,7 @@ again after an installation or upgrade.
 - [Network naming and static addresses](documentation/networking.md)
 - [NFS exports and mounts](documentation/nfs.md)
 - [User configuration and VS Code extensions](documentation/userConfiguration.md)
+- [DCS World standalone on Linux](documentation/dcsWorld.md)
 - [Roadmap](docs/ROADMAP.md)
 
 ## Command line

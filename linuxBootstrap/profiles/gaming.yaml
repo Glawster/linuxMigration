@@ -9,3 +9,8 @@ flatpak:
   - net.davidotek.pupgui2
 
 services:
+
+dcs:
+  enabled: true
+  installDir: /mnt/games/dcs
+  vr: false
