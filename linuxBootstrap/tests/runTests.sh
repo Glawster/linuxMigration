@@ -253,6 +253,44 @@ testCaptureConfirmWritesProfile() {
     assertContains "$output" 'defaultBranch: main' 'confirmed capture writes the default branch'
 }
 
+
+testZenBrowserDryRun() {
+    local output zenHome
+    zenHome="$testStateDir/zen-dry-run-home"
+    mkdir -p "$zenHome"
+    output="$({
+        HOME="$zenHome"
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/installers.sh"
+        dryRun=1
+        _installerZenBrowserApply
+    })"
+    assertContains "$output" 'would install Zen Browser' 'Zen Browser installer previews the official installer'
+    [[ ! -e "$zenHome/.tarball-installations/zen/zen" ]] || {
+        printf 'FAIL  Zen Browser dry-run created an installation\n'
+        ((failed += 1))
+    }
+}
+
+testZenBrowserExisting() {
+    local executable output zenHome
+    zenHome="$testStateDir/zen-existing-home"
+    executable="$zenHome/.tarball-installations/zen/zen"
+    mkdir -p "$(dirname "$executable")"
+    : > "$executable"
+    chmod 755 "$executable"
+    output="$({
+        HOME="$zenHome"
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/installers.sh"
+        dryRun=1
+        _installerZenBrowserApply
+    })"
+    assertContains "$output" 'installer already complete: Zen Browser' 'Zen Browser installer detects an existing installation'
+}
+
 testDcsDisabled() {
     local output
     output="$({
@@ -451,6 +489,8 @@ testCapturePreview
 testCaptureProfileRender
 testCaptureRequiresProfile
 testCaptureConfirmWritesProfile
+testZenBrowserDryRun
+testZenBrowserExisting
 testDcsDisabled
 testDcsEnabledDryRun
 testDcsRunnerChecksum
