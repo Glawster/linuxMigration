@@ -49,13 +49,28 @@ _dcsInstallerUrlRead() {
 
 _dcsInstallerRun() {
     local installer="$1" prefix="$2" installDir="$3" protonPath="$4"
-    logWarning "DCS: the Eagle Dynamics installer is interactive; select $installDir as its destination"
+    logWarning "DCS: the Eagle Dynamics installer is interactive; select G:\\$(basename "$installDir") as its destination"
     WINEPREFIX="$prefix" GAMEID=umu-default STORE=none PROTONPATH="$protonPath" \
         STEAM_COMPAT_LIBRARY_PATHS="$(dirname "$installDir")" umu-run "$installer"
     [[ -f "$installDir/bin/DCS.exe" && -f "$installDir/bin/DCS_updater.exe" ]] || {
         logError "DCS: installer exited without creating the expected DCS installation at $installDir"
         return 1
     }
+}
+
+_dcsDriveApply() {
+    local prefix="$1" gamesDir="$2" drive="$prefix/dosdevices/g:"
+    mkdir -p "$prefix/dosdevices"
+    if [[ -e "$drive" && ! -L "$drive" ]]; then
+        logError "DCS: cannot manage Wine drive G: because $drive is not a symbolic link"
+        return 1
+    fi
+    ln -sfn "$gamesDir" "$drive"
+}
+
+_dcsDriveMatches() {
+    local prefix="$1" gamesDir="$2" drive="$prefix/dosdevices/g:"
+    [[ -L "$drive" && "$(readlink "$drive")" == "$gamesDir" ]]
 }
 
 _dcsLauncherRender() {
@@ -144,12 +159,14 @@ _dcsRunnerInstall() {
 }
 
 _dcsStatus() {
-    local installDir="$1" prefix="$2" launcher="$3" vr="$4" compatibilityDir="$5" protonPath
+    local installDir="$1" prefix="$2" launcher="$3" vr="$4" compatibilityDir="$5" protonPath gamesDir
+    gamesDir="$(dirname "$installDir")"
     logInfo "DCS: enabled by profile"
     command -v umu-run >/dev/null 2>&1 && logInfo "DCS: compatibility runner available" || logWarning "DCS: compatibility runner missing (umu-run)"
     protonPath="$(_dcsProtonFind "$compatibilityDir")"
     [[ -n "$protonPath" ]] && logInfo "DCS: GE-Proton runner available at $protonPath" || logWarning "DCS: GE-Proton runner missing"
     [[ -d "$prefix" ]] && logInfo "DCS: prefix exists at $prefix" || logWarning "DCS: prefix missing at $prefix"
+    _dcsDriveMatches "$prefix" "$gamesDir" && logInfo "DCS: Wine drive G: maps to $gamesDir" || logWarning "DCS: Wine drive G: is not mapped to $gamesDir"
     [[ -f "$installDir/bin/DCS.exe" ]] && logInfo "DCS: installation found at $installDir" || logWarning "DCS: installation missing at $installDir"
     [[ -f "$installDir/bin/DCS_updater.exe" ]] && logInfo "DCS: DCS_updater.exe exists" || logWarning "DCS: DCS_updater.exe missing"
     [[ -x "$launcher" ]] && logInfo "DCS: launcher exists at $launcher" || logWarning "DCS: launcher missing at $launcher"
@@ -222,6 +239,8 @@ dcsApply() {
 
     [[ -d "$installDir" ]] || changeRun "create DCS installation directory: $installDir" mkdir -p "$installDir"
     [[ -d "$prefix" ]] || changeRun "create DCS prefix directory: $prefix" mkdir -p "$prefix"
+    _dcsDriveMatches "$prefix" "$(dirname "$installDir")" || \
+        changeRun "map DCS Wine drive G: to $(dirname "$installDir")" _dcsDriveApply "$prefix" "$(dirname "$installDir")"
 
     if [[ -f "$installDir/bin/DCS.exe" && -f "$installDir/bin/DCS_updater.exe" ]]; then
         _dcsSkip "DCS: installation found at $installDir"

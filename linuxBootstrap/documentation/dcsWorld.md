@@ -55,7 +55,9 @@ Apply it:
 
 Bootstrap installs UMU when needed, creates a separate prefix, downloads the
 official `DCS_World_Web.exe`, and starts it through GE-Proton. The Eagle
-Dynamics installer is interactive: choose the profile's `installDir`, then
+Dynamics installer is interactive. Bootstrap maps Wine drive `G:` to the
+parent of the profile's `installDir`; for the gaming profile choose
+`G:\\dcs`, which corresponds to `/mnt/games/dcs`. Then
 authenticate with the existing Eagle Dynamics account when prompted. Large
 game and module downloads, authentication, licence acceptance, and any dialogs
 remain manual.

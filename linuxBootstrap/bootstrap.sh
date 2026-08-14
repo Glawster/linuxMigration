@@ -106,7 +106,7 @@ argumentsParse() {
 
 modulesLoad() {
     local module
-    for module in capture packages git ssh hostname networking nfs repositories installers steam dcs userConfig; do
+    for module in capture packages git ssh hostname networking nfs repositories installers steam dcs wow userConfig; do
         # shellcheck source=/dev/null
         source "$projectDir/lib/$module.sh"
     done
@@ -134,6 +134,9 @@ configurationApply() {
         "${profileDcs[enabled]:-false}" \
         "${profileDcs[installDir]:-/mnt/games/dcs}" \
         "${profileDcs[vr]:-false}"
+    wowApply \
+        "${profileWow[enabled]:-false}" \
+        "${profileWow[installDir]:-/mnt/games/wow}"
     managedFilesApply "${profileManagedFiles[@]}"
     vscodeExtensionsApply "${profileVscodeExtensions[@]}"
     gitApply
