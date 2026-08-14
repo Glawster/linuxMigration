@@ -6,6 +6,7 @@ installersApply() {
         case "$installer" in
             libreoffice-26.2.4.2) _installerLibreOfficeApply ;;
             miniconda) _installerMinicondaApply ;;
+            zen-browser) _installerZenBrowserApply ;;
             *) logError "unsupported installer: $installer"; return 2 ;;
         esac
     done
@@ -103,5 +104,32 @@ _installerMinicondaInstall() {
     fi
     rm -f "$installer"
     rmdir "$temporary"
+    return "$status"
+}
+
+
+_installerZenBrowserApply() {
+    local executable="${zenBrowserExecutable:-$HOME/.tarball-installations/zen/zen}"
+    if [[ -x "$executable" ]]; then
+        itemSkip "installer already complete: Zen Browser"
+    else
+        commandRequire curl
+        changeRun "install Zen Browser" _installerZenBrowserInstall
+    fi
+}
+
+_installerZenBrowserInstall() {
+    local installer temporary status=0
+    temporary="$(mktemp -d)"
+    installer="$temporary/install.sh"
+
+    curl -fsSL \
+        https://github.com/zen-browser/updates-server/raw/refs/heads/main/install.sh \
+        -o "$installer" || status=$?
+    if ((status == 0)); then
+        bash "$installer" || status=$?
+    fi
+
+    rm -rf "$temporary"
     return "$status"
 }

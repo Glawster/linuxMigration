@@ -93,6 +93,22 @@ profile section and never reads credentials, signing keys, credential helpers,
 repository-local settings, or private key material. Commit and review the
 result before applying that profile on another host.
 
+### Zen Browser
+
+The `common` profile installs the stable Zen Browser by downloading and
+running Zen's official Linux tarball installer. Preview or apply it through the
+normal profile workflow:
+
+```bash
+./bootstrap.sh install --profile common
+./bootstrap.sh install --profile common --confirm
+```
+
+Zen is installed for the invoking user under
+`~/.tarball-installations/zen`, with its launcher under `~/.local/bin` and
+desktop entry under `~/.local/share/applications`. An existing executable is
+left unchanged, so repeated bootstrap runs do not reinstall the browser.
+
 ### Logs
 
 Every invocation writes its complete terminal output to a timestamped log while
