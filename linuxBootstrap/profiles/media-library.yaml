@@ -5,6 +5,7 @@ profiles:
 
 apt:
   - qbittorrent
+  - filebot
   - mediainfo
   - sqlite3
 
