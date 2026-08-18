@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 
+# shellcheck source=lib/mediaInstallers.sh
+source "$projectDir/lib/mediaInstallers.sh"
+
 installersApply() {
     local installer
     for installer in "$@"; do
         case "$installer" in
+            jellyfin) _installerJellyfinApply ;;
             libreoffice-26.2.4.2) _installerLibreOfficeApply ;;
             miniconda) _installerMinicondaApply ;;
+            private-internet-access) _installerPrivateInternetAccessApply ;;
+            radarr) _installerRadarrApply ;;
+            sonarr) _installerSonarrApply ;;
+            tinymediamanager) _installerTinyMediaManagerApply ;;
             zen-browser) _installerZenBrowserApply ;;
             *) logError "unsupported installer: $installer"; return 2 ;;
         esac
@@ -106,7 +114,6 @@ _installerMinicondaInstall() {
     rmdir "$temporary"
     return "$status"
 }
-
 
 _installerZenBrowserApply() {
     local executable="${zenBrowserExecutable:-$HOME/.tarball-installations/zen/zen}"
