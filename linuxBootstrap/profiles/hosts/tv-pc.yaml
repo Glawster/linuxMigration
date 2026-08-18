@@ -5,7 +5,7 @@ profiles:
   - common
   - gaming
   - vr
-  - media
+  - media-library
 
 repositories:
   - warp
@@ -14,9 +14,14 @@ apt:
   - code
   - gh
   - warp-terminal
+  - openssh-server
+  - nfs-common
 
-flatpak:
-  - com.rustdesk.RustDesk
+services:
+  - ssh
+
+nfsMounts:
+  - 192.168.1.215:/mnt/video2 /mnt/video2 rw,_netdev,nofail,x-systemd.automount,nolock
 
 vscodeExtensions:
   - openai.chatgpt

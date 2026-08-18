@@ -4,10 +4,29 @@ repositoriesApply() {
     local repository
     for repository in "$@"; do
         case "$repository" in
+            filebot) repositoryFileBotApply ;;
             warp) repositoryWarpApply ;;
             *) logError "repository has no definition: $repository"; return 2 ;;
         esac
     done
+}
+
+repositoryFileBotApply() {
+    local sourceFile="/etc/apt/sources.list.d/filebot.sources"
+    if [[ -f "$sourceFile" ]]; then
+        itemSkip "apt repository already configured: filebot"
+    else
+        changeRun "configure apt repository: filebot" repositoryFileBotInstall "$sourceFile"
+    fi
+}
+
+repositoryFileBotInstall() {
+    local sourceFile="$1" temporary
+    temporary="$(mktemp)"
+    curl -fsSL https://raw.githubusercontent.com/filebot/plugins/master/apt/filebot.sources -o "$temporary"
+    sudo install -D -o root -g root -m 644 "$temporary" "$sourceFile"
+    rm -f "$temporary"
+    sudo apt-get update
 }
 
 repositoryWarpApply() {

@@ -2,8 +2,7 @@
 set -Eeuo pipefail
 
 projectDir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-testStateDir="${TMPDIR:-/tmp}/linux-bootstrap-tests-$$"
-mkdir -p "$testStateDir"
+testStateDir="$(mktemp -d "${TMPDIR:-/tmp}/linux-bootstrap-tests.XXXXXX")"
 export XDG_STATE_HOME="$testStateDir"
 trap 'rm -rf -- "$testStateDir"' EXIT
 passed=0
@@ -89,6 +88,8 @@ testProfileCommands() {
     assertContains "$output" 'flatpak: org.libreoffice.LibreOffice' 'profile show prints merged configuration'
     output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile show gaming)"
     assertContains "$output" 'dcs.installDir: /mnt/games/dcs' 'profile show prints DCS configuration'
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile show wow)"
+    assertContains "$output" 'wow.installDir: /mnt/games/wow' 'profile show prints WoW configuration'
     output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile validate)"
     assertContains "$output" 'all profiles are valid' 'profile validate checks repository profiles'
     output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile add test-role)"
@@ -252,6 +253,44 @@ testCaptureConfirmWritesProfile() {
     assertContains "$output" 'defaultBranch: main' 'confirmed capture writes the default branch'
 }
 
+
+testZenBrowserDryRun() {
+    local output zenHome
+    zenHome="$testStateDir/zen-dry-run-home"
+    mkdir -p "$zenHome"
+    output="$({
+        HOME="$zenHome"
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/installers.sh"
+        dryRun=1
+        _installerZenBrowserApply
+    })"
+    assertContains "$output" 'would install Zen Browser' 'Zen Browser installer previews the official installer'
+    [[ ! -e "$zenHome/.tarball-installations/zen/zen" ]] || {
+        printf 'FAIL  Zen Browser dry-run created an installation\n'
+        ((failed += 1))
+    }
+}
+
+testZenBrowserExisting() {
+    local executable output zenHome
+    zenHome="$testStateDir/zen-existing-home"
+    executable="$zenHome/.tarball-installations/zen/zen"
+    mkdir -p "$(dirname "$executable")"
+    : > "$executable"
+    chmod 755 "$executable"
+    output="$({
+        HOME="$zenHome"
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/installers.sh"
+        dryRun=1
+        _installerZenBrowserApply
+    })"
+    assertContains "$output" 'installer already complete: Zen Browser' 'Zen Browser installer detects an existing installation'
+}
+
 testDcsDisabled() {
     local output
     output="$({
@@ -340,7 +379,14 @@ testDcsExistingIdempotent() {
         printf 'COUNTS %s %s\n' "$firstChanges" "$secondChanges"
     })"
     assertContains "$output" "DCS: installation found at $installDir" 'DCS detects an existing standalone installation'
-    assertContains "$output" 'COUNTS 5 5' 'repeated DCS execution leaves launchers unchanged'
+    assertContains "$output" 'COUNTS 6 6' 'repeated DCS execution leaves launchers and drive mapping unchanged'
+    [[ "$(readlink "$dcsHome/data/dcs/prefix/dosdevices/g:")" == "$(dirname "$installDir")" ]] && {
+        printf 'PASS  %s\n' 'DCS maps Wine drive G: to the configured games directory'
+        ((passed += 1))
+    } || {
+        printf 'FAIL  %s\n' 'DCS did not create the expected Wine drive mapping'
+        ((failed += 1))
+    }
 }
 
 testDcsStatus() {
@@ -367,6 +413,60 @@ testDcsStatus() {
     assertContains "$output" 'DCS: VR is enabled' 'DCS status reports separable VR configuration'
 }
 
+testWowDisabled() {
+    local output
+    output="$({
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/dcs.sh"
+        source "$projectDir/lib/wow.sh"
+        verbose=1
+        wowApply false /mnt/games/wow
+    })"
+    assertContains "$output" 'WoW: disabled by profile' 'WoW does nothing unless explicitly enabled'
+}
+
+testWowDryRun() {
+    local wowHome output
+    wowHome="$testStateDir/wow-home"
+    mkdir -p "$wowHome/data/Steam/compatibilitytools.d/GE-Proton-test"
+    output="$({
+        HOME="$wowHome"
+        XDG_DATA_HOME="$wowHome/data"
+        XDG_CACHE_HOME="$wowHome/cache"
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/dcs.sh"
+        source "$projectDir/lib/wow.sh"
+        umu-run() { return 0; }
+        dryRun=1
+        wowApply true "$testStateDir/games/wow"
+    })"
+    assertContains "$output" 'would map WoW Wine drive G:' 'WoW dry-run previews the G: drive mapping'
+    assertContains "$output" 'would download official Battle.net installer' 'WoW dry-run previews the official installer'
+    assertContains "$output" 'choose G:\wow' 'WoW reports the configured Battle.net game path'
+}
+
+testWowStatus() {
+    local wowHome output
+    wowHome="$testStateDir/wow-status-home"
+    mkdir -p "$wowHome/data/Steam/compatibilitytools.d/GE-Proton-test"
+    output="$({
+        HOME="$wowHome"
+        XDG_DATA_HOME="$wowHome/data"
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/dcs.sh"
+        source "$projectDir/lib/wow.sh"
+        umu-run() { return 0; }
+        requestedCommand=status
+        wowApply true "$testStateDir/games/wow"
+    })"
+    assertContains "$output" 'WoW: enabled by profile' 'WoW status reports profile enablement'
+    assertContains "$output" 'WoW: GE-Proton runner available' 'WoW status reports the compatibility runner'
+    assertContains "$output" 'WoW: installation missing' 'WoW status reports a missing game installation'
+}
+
 testHelp
 testInstallCommand
 testLogging
@@ -389,6 +489,8 @@ testCapturePreview
 testCaptureProfileRender
 testCaptureRequiresProfile
 testCaptureConfirmWritesProfile
+testZenBrowserDryRun
+testZenBrowserExisting
 testDcsDisabled
 testDcsEnabledDryRun
 testDcsRunnerChecksum
@@ -396,6 +498,9 @@ testDcsInstallerUrlRead
 testDcsMissingPrerequisite
 testDcsExistingIdempotent
 testDcsStatus
+testWowDisabled
+testWowDryRun
+testWowStatus
 
 printf '\n%d passed, %d failed\n' "$passed" "$failed"
 ((failed == 0))
