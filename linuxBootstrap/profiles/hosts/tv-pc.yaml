@@ -21,7 +21,7 @@ services:
   - ssh
 
 nfsMounts:
-  - andy-pc:/mnt/video2 /mnt/video2 rw,_netdev,nofail,x-systemd.automount,nolock
+  - 192.168.1.215:/mnt/video2 /mnt/video2 rw,_netdev,nofail,x-systemd.automount,nolock
 
 vscodeExtensions:
   - openai.chatgpt
