@@ -15,8 +15,20 @@ profiles:
 packages:
   apt:
     - code
+    - openssh-server
+    - nfs-kernel-server
   flatpak:
     - com.rustdesk.RustDesk
+
+services:
+  - ssh
+  - nfs-kernel-server
+
+nfsExports:
+  - /mnt/video2 192.168.1.201(rw,sync,no_subtree_check)
+
+managedFiles:
+  - ssh/media-hosts.conf|.ssh/config.d/media-hosts.conf
 
 vscodeExtensions:
   - openai.chatgpt
