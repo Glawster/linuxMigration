@@ -1,0 +1,23 @@
+name: media-library
+
+profiles:
+  - media
+
+apt:
+  - qbittorrent
+  - mediainfo
+  - sqlite3
+
+repositories:
+  - filebot
+
+installers:
+  - tinymediamanager
+  - jellyfin
+  - sonarr
+  - radarr
+  - private-internet-access
+
+managedFiles:
+  - qbittorrent/qBittorrent.conf|.config/qBittorrent/qBittorrent.conf
+  - ssh/media-hosts.conf|.ssh/config.d/media-hosts.conf
