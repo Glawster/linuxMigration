@@ -9,7 +9,6 @@ network:
 profiles:
   - common
   - development
-  - gaming
   - media
 
 packages:
