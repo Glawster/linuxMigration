@@ -502,5 +502,16 @@ testWowDisabled
 testWowDryRun
 testWowStatus
 
+# shellcheck source=/dev/null
+source "$projectDir/tests/pullTvPcVideosTests.sh"
+testPullTvPcVideosHelp
+testPullTvPcVideosRejectsDryRunFlag
+testPullTvPcVideosMissingDest
+testPullTvPcVideosDryRunDefault
+testPullTvPcVideosExtReplacesDefaults
+testPullTvPcVideosAllCopiesCompleteFiles
+testPullRemoteRequiresExtOrAll
+testPullTvPcVideosConfirmRemovesSource
+
 printf '\n%d passed, %d failed\n' "$passed" "$failed"
 ((failed == 0))
