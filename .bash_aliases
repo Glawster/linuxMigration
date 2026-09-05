@@ -38,6 +38,6 @@ export WINE="/home/andy/.local/share/lutris/runners/wine/wine-10.20-staging-tkg-
 alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history | tail -n1 | sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'' )"'
 
 # useful commands
-alias deleteb='git branch -vv | awk "/: gone]/{print \$1}" | xargs -r git branch -D'
+alias deleteb='git for-each-ref --format="%(refname:short) %(upstream:track)" refs/heads | awk "$2==\"[gone]\"{print \$1}" | xargs -r git branch -D'
 alias deletep='git branch -vv | awk "/: gone]/{print \$1}"'
 alias updateall='sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y && flatpak update -y'
