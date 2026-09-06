@@ -36,7 +36,7 @@ After installation, run:
 media-center-master
 ```
 
-Bootstrap creates that launcher under `~/.local/bin`. The repository's legacy
+Bootstrap creates that launcher under `~/bin`. The repository's legacy
 `runMCM.sh` launcher remains available for the default prefix.
 
 ## Media drives

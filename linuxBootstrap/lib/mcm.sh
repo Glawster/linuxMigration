@@ -76,7 +76,7 @@ _mcmExecutableFind() {
 }
 
 _mcmLauncherApply() {
-    local prefix="$1" target="$HOME/.local/bin/media-center-master"
+    local prefix="$1" target="$HOME/bin/media-center-master"
     if [[ -x "$target" ]] && grep -Fq "WINEPREFIX=\"$prefix\"" "$target"; then
         itemSkip "Media Center Master: launcher installed"
     else

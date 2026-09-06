@@ -331,7 +331,7 @@ testMcmExisting() {
     mcmHome="$testStateDir/mcm-existing-home"
     prefix="$mcmHome/.wine-mcm"
     executable="$prefix/drive_c/Program Files (x86)/Media Center Master/MCMStubLauncher.exe"
-    mkdir -p "$(dirname "$executable")" "$prefix/dosdevices" "$mcmHome/.local/bin"
+    mkdir -p "$(dirname "$executable")" "$prefix/dosdevices" "$mcmHome/bin"
     : > "$executable"
     ln -s /mnt/video2 "$prefix/dosdevices/x:"
     output="$({
@@ -343,7 +343,7 @@ testMcmExisting() {
         winetricks() { :; }
         unzip() { :; }
         dryRun=0
-        _mcmLauncherInstall "$prefix" "$mcmHome/.local/bin/media-center-master"
+        _mcmLauncherInstall "$prefix" "$mcmHome/bin/media-center-master"
         summaryChanged=0
         mcmApply true "$prefix" 'x|/mnt/video2'
         printf 'CHANGES %s\n' "$summaryChanged"
