@@ -12,6 +12,7 @@ again after an installation or upgrade.
 - [User configuration and VS Code extensions](documentation/userConfiguration.md)
 - [DCS World standalone on Linux](documentation/dcsWorld.md)
 - [World of Warcraft through Battle.net](documentation/worldOfWarcraft.md)
+- [Media Center Master through Wine](documentation/mediaCenterMaster.md)
 - [Roadmap](docs/ROADMAP.md)
 
 ## Command line
@@ -109,6 +110,13 @@ Zen is installed for the invoking user under
 `~/.tarball-installations/zen`, with its launcher under `~/.local/bin` and
 desktop entry under `~/.local/share/applications`. An existing executable is
 left unchanged, so repeated bootstrap runs do not reinstall the browser.
+
+### Media Center Master
+
+The `media` profile prepares a dedicated Wine prefix, .NET Framework 4.8,
+media-drive mappings and a launcher before running the official Media Center
+Master installer. See the [Media Center Master guide](documentation/mediaCenterMaster.md)
+for the interactive installation and mapped-drive details.
 
 ### Logs
 

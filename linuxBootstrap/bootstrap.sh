@@ -106,7 +106,7 @@ argumentsParse() {
 
 modulesLoad() {
     local module
-    for module in capture packages git ssh hostname networking nfs repositories installers steam dcs wow userConfig; do
+    for module in capture packages git ssh hostname networking nfs repositories installers steam dcs mcm wow userConfig; do
         # shellcheck source=/dev/null
         source "$projectDir/lib/$module.sh"
     done
@@ -134,6 +134,10 @@ configurationApply() {
         "${profileDcs[enabled]:-false}" \
         "${profileDcs[installDir]:-/mnt/games/dcs}" \
         "${profileDcs[vr]:-false}"
+    mcmApply \
+        "${profileMcm[enabled]:-false}" \
+        "${profileMcm[prefix]:-$HOME/.wine-mcm}" \
+        "${profileMcmDrives[@]}"
     wowApply \
         "${profileWow[enabled]:-false}" \
         "${profileWow[installDir]:-/mnt/games/wow}"

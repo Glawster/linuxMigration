@@ -3,9 +3,9 @@
 declare -ag loadedProfiles=() profileAptPackages=() profileFlatpakPackages=()
 declare -ag profileSnapPackages=() profileServices=() profileRepositories=()
 declare -ag profileHostEntries=() profileNfsExports=() profileNfsMounts=()
-declare -ag profileInstallers=() profileSteamApps=()
+declare -ag profileInstallers=() profileSteamApps=() profileMcmDrives=()
 declare -ag profileManagedFiles=() profileVscodeExtensions=()
-declare -Ag profileDcs=() profileGit=() profileNetwork=() profileWow=() loadingProfiles=()
+declare -Ag profileDcs=() profileGit=() profileMcm=() profileNetwork=() profileWow=() loadingProfiles=()
 profileHostname=""
 profileStaticIp=""
 profileExpectedIp=""
@@ -123,6 +123,7 @@ profileLoad() {
     mapfile -t items < <(profileListRead "$file" nfsMounts); profileNfsMounts+=("${items[@]}")
     mapfile -t items < <(profileListRead "$file" installers); profileInstallers+=("${items[@]}")
     mapfile -t items < <(profileListRead "$file" steamApps); profileSteamApps+=("${items[@]}")
+    mapfile -t items < <(profileListRead "$file" mcmDrives); profileMcmDrives+=("${items[@]}")
     mapfile -t items < <(profileListRead "$file" managedFiles); profileManagedFiles+=("${items[@]}")
     mapfile -t items < <(profileListRead "$file" vscodeExtensions); profileVscodeExtensions+=("${items[@]}")
     value="$(profileScalarRead "$file" hostname)"; [[ -z "$value" ]] || profileHostname="$value"
@@ -131,6 +132,7 @@ profileLoad() {
     while IFS='=' read -r key value; do [[ -n "$key" ]] && profileGit["$key"]="$value"; done < <(profileMapRead "$file" git)
     while IFS='=' read -r key value; do [[ -n "$key" ]] && profileNetwork["$key"]="$value"; done < <(profileMapRead "$file" network)
     while IFS='=' read -r key value; do [[ -n "$key" ]] && profileDcs["$key"]="$value"; done < <(profileMapRead "$file" dcs)
+    while IFS='=' read -r key value; do [[ -n "$key" ]] && profileMcm["$key"]="$value"; done < <(profileMapRead "$file" mcm)
     while IFS='=' read -r key value; do [[ -n "$key" ]] && profileWow["$key"]="$value"; done < <(profileMapRead "$file" wow)
 }
 
@@ -170,11 +172,13 @@ profileShow() {
     for item in "${profileNfsMounts[@]}"; do printf 'nfsMount: %s\n' "$item"; done
     for item in "${profileInstallers[@]}"; do printf 'installer: %s\n' "$item"; done
     for item in "${profileSteamApps[@]}"; do printf 'steamApp: %s\n' "$item"; done
+    for item in "${profileMcmDrives[@]}"; do printf 'mcmDrive: %s\n' "$item"; done
     for item in "${profileManagedFiles[@]}"; do printf 'managedFile: %s\n' "$item"; done
     for item in "${profileVscodeExtensions[@]}"; do printf 'vscodeExtension: %s\n' "$item"; done
     for key in "${!profileGit[@]}"; do printf 'git.%s: %s\n' "$key" "${profileGit[$key]}"; done
     for key in "${!profileNetwork[@]}"; do printf 'network.%s: %s\n' "$key" "${profileNetwork[$key]}"; done
     for key in "${!profileDcs[@]}"; do printf 'dcs.%s: %s\n' "$key" "${profileDcs[$key]}"; done
+    for key in "${!profileMcm[@]}"; do printf 'mcm.%s: %s\n' "$key" "${profileMcm[$key]}"; done
     for key in "${!profileWow[@]}"; do printf 'wow.%s: %s\n' "$key" "${profileWow[$key]}"; done
 }
 
@@ -203,7 +207,7 @@ profileKeysValidate() {
     local file="$1" key
     while IFS= read -r key; do
         case "$key" in
-            name|hostname|master|expectedIp|staticIp|profiles|packages|apt|flatpak|snap|services|repositories|git|network|dcs|wow|hosts|nfsExports|nfsMounts|installers|steamApps|managedFiles|vscodeExtensions) ;;
+            name|hostname|master|expectedIp|staticIp|profiles|packages|apt|flatpak|snap|services|repositories|git|network|dcs|mcm|mcmDrives|wow|hosts|nfsExports|nfsMounts|installers|steamApps|managedFiles|vscodeExtensions) ;;
             *) logError "unsupported profile key in $file: $key"; return 2 ;;
         esac
     done < <(awk -F: '/^[A-Za-z][A-Za-z0-9_-]*:/ {print $1}' "$file")

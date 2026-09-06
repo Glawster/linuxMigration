@@ -264,6 +264,7 @@ testZenBrowserDryRun() {
         source "$projectDir/lib/common.sh"
         source "$projectDir/lib/installers.sh"
         dryRun=1
+        verbose=1
         _installerZenBrowserApply
     })"
     assertContains "$output" 'would install Zen Browser' 'Zen Browser installer previews the official installer'
@@ -286,9 +287,68 @@ testZenBrowserExisting() {
         source "$projectDir/lib/common.sh"
         source "$projectDir/lib/installers.sh"
         dryRun=1
+        verbose=1
         _installerZenBrowserApply
     })"
     assertContains "$output" 'installer already complete: Zen Browser' 'Zen Browser installer detects an existing installation'
+}
+
+testMcmDisabled() {
+    local output
+    output="$({
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/mcm.sh"
+        verbose=1
+        mcmApply false "$testStateDir/mcm-disabled"
+    })"
+    assertContains "$output" 'Media Center Master: disabled by profile' 'MCM does nothing unless explicitly enabled'
+}
+
+testMcmDryRun() {
+    local mcmHome output prefix
+    mcmHome="$testStateDir/mcm-dry-run-home"
+    prefix="$mcmHome/.wine-mcm"
+    mkdir -p "$mcmHome"
+    output="$({
+        HOME="$mcmHome"
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/mcm.sh"
+        dryRun=1
+        mcmApply true '~/.wine-mcm' 'x|/mnt/video2'
+    })"
+    assertContains "$output" "would create Media Center Master Wine prefix at $prefix" 'MCM dry-run previews its dedicated Wine prefix'
+    assertContains "$output" 'would install .NET Framework 4.8 and core fonts' 'MCM dry-run previews its Windows runtime'
+    assertContains "$output" 'would map Media Center Master drive X: to /mnt/video2' 'MCM dry-run previews media drive mappings'
+    assertContains "$output" 'would download and run the official Media Center Master installer' 'MCM dry-run previews application setup'
+    assertContains "$output" 'would install Media Center Master launcher' 'MCM dry-run previews its launcher'
+    [[ ! -e "$prefix" ]] || { printf 'FAIL  MCM dry-run created a prefix\n'; ((failed += 1)); }
+}
+
+testMcmExisting() {
+    local mcmHome output prefix executable
+    mcmHome="$testStateDir/mcm-existing-home"
+    prefix="$mcmHome/.wine-mcm"
+    executable="$prefix/drive_c/Program Files (x86)/Media Center Master/MCMStubLauncher.exe"
+    mkdir -p "$(dirname "$executable")" "$prefix/dosdevices" "$mcmHome/.local/bin"
+    : > "$executable"
+    ln -s /mnt/video2 "$prefix/dosdevices/x:"
+    output="$({
+        HOME="$mcmHome"
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/mcm.sh"
+        wine() { printf 'Release    REG_DWORD    0x80eb0\n'; }
+        winetricks() { :; }
+        unzip() { :; }
+        dryRun=0
+        _mcmLauncherInstall "$prefix" "$mcmHome/.local/bin/media-center-master"
+        summaryChanged=0
+        mcmApply true "$prefix" 'x|/mnt/video2'
+        printf 'CHANGES %s\n' "$summaryChanged"
+    })"
+    assertContains "$output" 'CHANGES 0' 'MCM preserves an existing complete installation'
 }
 
 testDcsDisabled() {
@@ -491,6 +551,9 @@ testCaptureRequiresProfile
 testCaptureConfirmWritesProfile
 testZenBrowserDryRun
 testZenBrowserExisting
+testMcmDisabled
+testMcmDryRun
+testMcmExisting
 testDcsDisabled
 testDcsEnabledDryRun
 testDcsRunnerChecksum
