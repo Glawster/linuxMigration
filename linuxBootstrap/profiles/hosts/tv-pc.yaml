@@ -13,6 +13,14 @@ repositories:
 apt:
   - code
   - gh
+  - libapr1
+  - libaprutil1
+  - libasound2
+  - libglib2.0-0
+  - libxcb-cursor0
+  - libxcb-xinerama0
+  - libxkbcommon-x11-0
+  - ocl-icd-libopencl1
   - warp-terminal
   - openssh-server
   - nfs-common
@@ -29,6 +37,11 @@ vscodeExtensions:
 
 installers:
   - miniconda
+
+davinci:
+  enabled: true
+  remove: false
+  installerDir: ~/Downloads
 
 steamApps:
   - 250820 SteamVR

@@ -106,7 +106,7 @@ argumentsParse() {
 
 modulesLoad() {
     local module
-    for module in capture packages git ssh hostname networking nfs repositories installers steam dcs mcm wow userConfig; do
+    for module in capture packages git ssh hostname networking nfs repositories installers steam davinci dcs mcm wow userConfig; do
         # shellcheck source=/dev/null
         source "$projectDir/lib/$module.sh"
     done
@@ -130,6 +130,10 @@ configurationApply() {
     nfsMountsApply "${profileNfsMounts[@]}"
     installersApply "${profileInstallers[@]}"
     steamAppsApply "${profileSteamApps[@]}"
+    davinciApply \
+        "${profileDaVinci[enabled]:-false}" \
+        "${profileDaVinci[remove]:-false}" \
+        "${profileDaVinci[installerDir]:-$HOME/Downloads}"
     dcsApply \
         "${profileDcs[enabled]:-false}" \
         "${profileDcs[installDir]:-/mnt/games/dcs}" \
