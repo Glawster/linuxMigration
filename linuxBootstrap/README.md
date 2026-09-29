@@ -13,6 +13,7 @@ again after an installation or upgrade.
 - [DCS World standalone on Linux](documentation/dcsWorld.md)
 - [World of Warcraft through Battle.net](documentation/worldOfWarcraft.md)
 - [Media Center Master through Wine](documentation/mediaCenterMaster.md)
+- [DaVinci Resolve host-specific setup](documentation/davinciResolve.md)
 - [Roadmap](docs/ROADMAP.md)
 
 ## Command line
@@ -117,6 +118,12 @@ The `media` profile prepares a dedicated Wine prefix, .NET Framework 4.8,
 media-drive mappings and a launcher before running the official Media Center
 Master installer. See the [Media Center Master guide](documentation/mediaCenterMaster.md)
 for the interactive installation and mapped-drive details.
+
+### DaVinci Resolve
+
+Resolve is deliberately host-specific: `tv-pc` installs it from a manually
+downloaded official Linux installer, while `main-pc` removes it through the
+official Blackmagic uninstaller. See the [DaVinci Resolve guide](documentation/davinciResolve.md).
 
 ### Logs
 

@@ -36,7 +36,7 @@ testInstallCommand() {
 testLogging() {
     local logPath output
     output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile list)"
-    logPath="$(find "$testStateDir/linuxBootstrap" -type f -name 'bootstrap-*.log' | sort | tail -n 1)"
+    logPath="$(sed -n 's/^INFO[[:space:]]*log file: //p' <<< "$output" | head -n 1)"
     [[ -n "$logPath" && -f "$logPath" ]] || { printf 'FAIL  bootstrap did not create a log file\n'; ((failed += 1)); return; }
     assertContains "$(<"$logPath")" 'linux-bootstrap profile starting' 'log file captures bootstrap output'
     assertContains "$output" 'log file:' 'terminal output reports log location'
@@ -305,6 +305,68 @@ testMcmDisabled() {
     assertContains "$output" 'Media Center Master: disabled by profile' 'MCM does nothing unless explicitly enabled'
 }
 
+testDaVinciHostProfiles() {
+    local output
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile show tv-pc)"
+    assertContains "$output" 'davinci.enabled: true' 'TV PC enables DaVinci Resolve'
+    output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" profile show main-pc)"
+    assertContains "$output" 'davinci.remove: true' 'Andy PC removes DaVinci Resolve'
+}
+
+testDaVinciDryRun() {
+    local installerDir output resolveHome
+    installerDir="$testStateDir/davinci-downloads"
+    resolveHome="$testStateDir/davinci-home"
+    mkdir -p "$installerDir" "$resolveHome"
+    : > "$installerDir/DaVinci_Resolve_20.0_Linux.zip"
+    output="$({
+        HOME="$resolveHome"
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/davinci.sh"
+        nvidia-smi() { :; }
+        dryRun=1
+        davinciApply true false "$installerDir"
+    })"
+    assertContains "$output" "would install DaVinci Resolve from $installerDir/DaVinci_Resolve_20.0_Linux.zip" 'Resolve dry-run selects the downloaded Linux installer'
+    assertContains "$output" 'would install DaVinci Resolve launcher in ~/bin' 'Resolve dry-run previews its ~/bin launcher'
+    [[ ! -e "$resolveHome/bin/davinci-resolve" ]] || { printf 'FAIL  Resolve dry-run created a launcher\n'; ((failed += 1)); }
+}
+
+testDaVinciMissingInstaller() {
+    local installerDir output status=0
+    installerDir="$testStateDir/davinci-empty"
+    mkdir -p "$installerDir"
+    output="$({
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/davinci.sh"
+        nvidia-smi() { :; }
+        dryRun=1
+        davinciApply true false "$installerDir"
+    } 2>&1)" || status=$?
+    [[ "$status" -ne 0 ]] && assertContains "$output" 'place the Linux .zip or .run installer' 'Resolve reports a missing manual download' || {
+        printf 'FAIL  Resolve missing-installer check unexpectedly succeeded\n'; ((failed += 1));
+    }
+}
+
+testDaVinciRemoveLauncherDryRun() {
+    local output resolveHome
+    resolveHome="$testStateDir/davinci-remove-home"
+    mkdir -p "$resolveHome/bin"
+    : > "$resolveHome/bin/davinci-resolve"
+    output="$({
+        HOME="$resolveHome"
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/davinci.sh"
+        dryRun=1
+        davinciApply false true "$resolveHome/Downloads"
+    })"
+    assertContains "$output" 'would remove DaVinci Resolve launcher from ~/bin' 'Andy PC removal previews deleting the bootstrap launcher'
+    [[ -e "$resolveHome/bin/davinci-resolve" ]] || { printf 'FAIL  Resolve dry-run removed the launcher\n'; ((failed += 1)); }
+}
+
 testMcmDryRun() {
     local mcmHome output prefix
     mcmHome="$testStateDir/mcm-dry-run-home"
@@ -551,6 +613,10 @@ testCaptureRequiresProfile
 testCaptureConfirmWritesProfile
 testZenBrowserDryRun
 testZenBrowserExisting
+testDaVinciHostProfiles
+testDaVinciDryRun
+testDaVinciMissingInstaller
+testDaVinciRemoveLauncherDryRun
 testMcmDisabled
 testMcmDryRun
 testMcmExisting

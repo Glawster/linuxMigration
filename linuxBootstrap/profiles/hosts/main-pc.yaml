@@ -11,6 +11,10 @@ profiles:
 
 repositories:
 
+davinci:
+  enabled: false
+  remove: true
+
 git:
   name: Andy Wilson
   email: murky_oblong0s@icloud.com
