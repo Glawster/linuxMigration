@@ -77,3 +77,18 @@ python -m pytest
 black --check src tests
 runLinter
 ```
+
+
+## REQ-004 refinement
+
+- Aggregate system-folder review items by mailbox/folder, with message counts.
+- Exclude Trash/Junk/Drafts from header scans and normal archive mapping;
+  require one explicit future retention decision per folder. Legacy
+  `INBOX.Trash` follows this policy initially.
+- Retain individual review exceptions for meaningful message-specific issues.
+- Sent requires an explicit canonical folder mapping; once mapped, apply the
+  normal year split and legacy target policy. Otherwise review once per folder.
+- Include migrationPlan summary counts for messages scanned, proposals, review
+  items, system-folder messages excluded, and messages with invalid dates.
+  Report unknown system-folder counts separately.
+- Keep all execution disabled.

@@ -214,9 +214,17 @@ Planning uses the year in the message's single parsed Date header, as expressed
 in that header's timezone, rather than server arrival year. Date headers are
 fetched in UID batches through read-only EXAMINE and BODY.PEEK, without message
 bodies or flag changes. UID and UIDVALIDITY identify source messages. Missing,
-duplicate or invalid dates, future years, unmatched canonical folders and
-special-use Trash/Junk/Drafts folders enter the Review Queue. A failed or
-incomplete inventory yields no message proposals for that source mailbox.
+duplicate or invalid dates, future years and unmatched canonical folders enter the Review Queue individually. Trash/Junk/Drafts are
+excluded before header inventory and normal archive mapping. Special-use
+attributes or conventional leaf names identify these folders. Each produces
+one review item per mailbox/folder with its observed STATUS message count and
+one explicit future retention decision. Unknown counts remain null and are
+reported separately; they are never assumed to be zero. In particular, legacy
+`INBOX.Trash` is excluded from archive migration until that future decision.
+
+Sent mail requires an explicit `folderMappings` entry into the canonical
+archive. Without it, one folder-level review item requests that mapping. With
+it, Sent follows the same live-year/older-year split and legacy target rules. A failed or incomplete inventory yields no message proposals for that source mailbox.
 
 A personal live-year message remains in its existing mapped IMAP folder. Older
 mail proposes the matching local message store. Legacy live-year mail proposes
@@ -229,3 +237,12 @@ The TUI presents Mapping, Proposed Moves, Review Queue and Role Boundaries
 as read-only tables alongside the audit. Shared/support mailboxes remain visible
 and audited, but `--plan` does not inventory their message headers or generate
 personal folder mirrors, archive destinations or migration proposals.
+
+
+`migrationPlan.summary` reports `messagesScanned` (headers actually inventoried,
+including partial inventories), `proposals`, `reviewItems`,
+`systemFolderMessagesExcluded` (known folder counts), `messagesWithInvalidDates`
+(missing, ambiguous, out-of-range or future years among inventoried messages),
+and `systemFoldersWithUnknownCounts`. Excluded system-folder dates are not
+inspected. Existing snapshots with system-folder headers still aggregate their
+review items. All migration execution remains disabled, including with `--confirm`.

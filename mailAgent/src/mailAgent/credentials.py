@@ -14,19 +14,24 @@ class CredentialError(ValueError):
 ## credentials
 
 
-def credentialGet(account: dict, store: Path | None = None) -> str:
+def credentialGet(
+    account: dict, store: Path | None = None, credentials: dict | None = None
+) -> str:
     """Resolve an encrypted credential, or the legacy environment source."""
     if "credentialId" in account:
         identity = account["credentialId"]
         if not isinstance(identity, str) or not identity.strip():
             raise CredentialError("Invalid credentialId")
-        credentials = credentialsLoad(store)
+        ownsCredentials = credentials is None
+        if ownsCredentials:
+            credentials = credentialsLoad(store)
         try:
             if identity not in credentials:
                 raise CredentialError("Credential ID not found in encrypted store")
             return credentials[identity]["password"]
         finally:
-            credentials.clear()
+            if ownsCredentials:
+                credentials.clear()
     name = account.get("passwordEnv")
     if not isinstance(name, str) or not name.strip():
         raise CredentialError("Configure credentialId or passwordEnv")

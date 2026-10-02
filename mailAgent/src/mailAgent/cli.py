@@ -21,7 +21,11 @@ def main() -> None:
         from mailAgent.configuration import configValidate
 
         path = args.config.expanduser().absolute()
-        config = configValidate(tomllib.loads(path.read_text()), path.parent)
+        rawConfig = tomllib.loads(path.read_text())
+        try:
+            config = configValidate(rawConfig, path.parent)
+        except ValueError as error:
+            parser.exit(1, f"Audit failed: configuration: {error}\n")
         if not args.json:
             from mailAgent.auditUi import auditShow
         snapshot = _snapshotBuild(args, config, logger)

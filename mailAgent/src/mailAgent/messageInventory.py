@@ -16,6 +16,8 @@ def messagesDiscover(client: Any, folders: list[dict], batchSize: int = 200) -> 
     for folder in folders:
         if "\\noselect" in [attribute.lower() for attribute in folder["attributes"]]:
             continue
+        if folderSystemKind(folder) in ("trash", "junk", "drafts"):
+            continue
         try:
             _folderInspect(client, folder, batchSize, result)
         except Exception:
@@ -30,6 +32,25 @@ def messagesDiscover(client: Any, folders: list[dict], batchSize: int = 200) -> 
 
 
 ## parsing
+
+
+def folderSystemKind(folder: dict) -> str | None:
+    """Identify special-use folders or conventional folder leaf names."""
+    attributes = {a.lower() for a in folder["attributes"]}
+    for kind in ("trash", "junk", "drafts", "sent"):
+        if "\\" + kind in attributes:
+            return kind
+    delimiter = folder.get("delimiter")
+    leaf = folder["path"].rsplit(delimiter, 1)[-1] if delimiter else folder["path"]
+    return {
+        "trash": "trash",
+        "junk": "junk",
+        "spam": "junk",
+        "drafts": "drafts",
+        "sent": "sent",
+        "sent items": "sent",
+        "sent mail": "sent",
+    }.get(leaf.lower())
 
 
 def messageParse(metadata: bytes, header: bytes, folder: str, uidValidity: str) -> dict:

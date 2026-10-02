@@ -64,6 +64,26 @@ def clientBuild():
     return client
 
 
+def testCliReportsConfigurationValidation(tmp_path, monkeypatch, capsys):
+    from mailAgent import cli
+
+    config = tmp_path / "config.toml"
+    config.write_text(
+        '[[mailboxes]]\nid="andy"\nname="Andy"\nhost="imap.example"\n'
+        'username="andy"\ncredentialId="andy"\n'
+    )
+    monkeypatch.setattr(
+        "sys.argv", ["mailAgent", "--config", str(config), "--plan", "--json"]
+    )
+    with pytest.raises(SystemExit) as caught:
+        cli.main()
+    assert caught.value.code == 1
+    assert (
+        "configuration: Missing or invalid mailbox field: role"
+        in capsys.readouterr().err
+    )
+
+
 def testSuccessfulDecryption(store, gpg):
     before = store.read_bytes()
     assert credentialsDecrypt(store) == gpg.return_value.stdout
@@ -236,6 +256,59 @@ def testFiveAccountsNoSecretOutput(store, gpg, tmp_path, caplog):
     assert SECRET not in (tmp_path / "state/latest.json").read_text()
     assert SECRET not in caplog.text
     assert accounts == original
+    gpg.assert_called_once()
+
+
+@pytest.mark.parametrize("interrupted", [False, True])
+def testRunCredentialDictionaryReleased(tmp_path, monkeypatch, interrupted):
+    setApplication("mailAgent")
+    payload = {"andy": {"password": SECRET}}
+    loader = Mock(return_value=payload)
+    monkeypatch.setattr("mailAgent.discovery.credentialsLoad", loader)
+    client = clientBuild()
+    if interrupted:
+        client.login.side_effect = KeyboardInterrupt
+        with pytest.raises(KeyboardInterrupt):
+            discoveryRun(
+                [accountBuild()], tmp_path, clientFactory=lambda *a, **k: client
+            )
+    else:
+        discoveryRun([accountBuild()], tmp_path, clientFactory=lambda *a, **k: client)
+    loader.assert_called_once_with(None)
+    assert payload == {}
+
+
+def testFailedStoreLoadedOnceWithEnvironmentAccount(store, gpg, tmp_path, monkeypatch):
+    setApplication("mailAgent")
+    gpg.return_value.returncode = 2
+    monkeypatch.setenv("OLD_ENV", SECRET)
+    environment = accountBuild("environment")
+    del environment["credentialId"]
+    environment["passwordEnv"] = "OLD_ENV"
+    client = clientBuild()
+    factory = Mock(return_value=client)
+    snapshot = discoveryRun(
+        [accountBuild("andy"), environment, accountBuild("kathy")],
+        tmp_path,
+        clientFactory=factory,
+        credentialsFile=store,
+    )
+    gpg.assert_called_once()
+    factory.assert_called_once()
+    assert snapshot["mailboxes"][0]["failed"]
+    assert not snapshot["mailboxes"][1].get("failed")
+    assert snapshot["mailboxes"][2]["failed"]
+    client.login.assert_called_once_with("environment", SECRET)
+
+
+def testEnvironmentOnlyRunDoesNotDecrypt(gpg, tmp_path, monkeypatch):
+    setApplication("mailAgent")
+    monkeypatch.setenv("OLD_ENV", SECRET)
+    account = accountBuild()
+    del account["credentialId"]
+    account["passwordEnv"] = "OLD_ENV"
+    discoveryRun([account], tmp_path, clientFactory=lambda *a, **k: clientBuild())
+    gpg.assert_not_called()
 
 
 def testFailedLoginAndGpgNoSecretOutput(store, gpg, tmp_path, caplog):

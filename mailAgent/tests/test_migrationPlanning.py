@@ -683,3 +683,56 @@ def testCliPlanningPersistenceBoundary(config, tmp_path, monkeypatch, capsys, co
             ]
             is False
         )
+
+
+@pytest.mark.parametrize("kind", ["Trash", "Junk", "Drafts"])
+def testSystemInventorySkipsHeaders(kind):
+    client = Mock()
+    inventory = messagesDiscover(
+        client, [dict(path="INBOX." + kind, delimiter=".", attributes=[], messages=100)]
+    )
+    assert inventory["complete"] and not inventory["messages"]
+    assert not client.mock_calls
+
+
+def testAggregatedLegacyTrashAndSummary(config):
+    snapshot = snapshotBuild(config)
+    mailbox = snapshot["mailboxes"][2]
+    mailbox["folders"].append(
+        dict(path="INBOX.Trash", delimiter=".", attributes=[], messages=500)
+    )
+    mailbox["inventory"]["messages"].extend(
+        dict(folder="INBOX.Trash", uid=str(i), uidValidity="42", year=None)
+        for i in range(20)
+    )
+    plan = migrationPlan(config, snapshot)
+    reviews = [r for r in plan["reviewQueue"] if r.get("folder") == "INBOX.Trash"]
+    assert len(reviews) == 1
+    assert reviews[0]["messageCount"] == 500
+    assert reviews[0]["requiresRetentionDecision"]
+    assert not any(p["source"]["folder"] == "INBOX.Trash" for p in plan["proposals"])
+    assert plan["summary"] == dict(
+        messagesScanned=26,
+        proposals=6,
+        reviewItems=1,
+        systemFolderMessagesExcluded=500,
+        messagesWithInvalidDates=20,
+        systemFoldersWithUnknownCounts=0,
+    )
+    assert plan["executionEnabled"] is False
+
+
+def testSentRequiresExplicitMapping(config):
+    snapshot = snapshotBuild(config)
+    mailbox = snapshot["mailboxes"][2]
+    mailbox["folders"][1].update(
+        path="INBOX.Sent", delimiter=".", attributes=["\\Sent"], messages=2
+    )
+    for message in mailbox["inventory"]["messages"]:
+        message["folder"] = "INBOX.Sent"
+    plan = migrationPlan(config, snapshot)
+    assert len([r for r in plan["reviewQueue"] if r.get("systemFolder") == "sent"]) == 1
+    assert not any(p["source"]["mailbox"] == "old" for p in plan["proposals"])
+    config["mailboxes"][2]["folderMappings"] = {"INBOX.Sent": "Orders/Shop"}
+    plan = migrationPlan(config, snapshot)
+    assert len([p for p in plan["proposals"] if p["source"]["mailbox"] == "old"]) == 2

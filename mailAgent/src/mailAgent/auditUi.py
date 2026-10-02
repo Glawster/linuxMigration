@@ -107,6 +107,8 @@ def _planningPanes(plan: dict) -> ComposeResult:
     for title, key, label, columns in specifications:
         with TabPane(title, id=key):
             yield Static(label, markup=False)
+            if key == "proposals" and "summary" in plan:
+                yield Static(json.dumps(plan["summary"], indent=2), markup=False)
             table = DataTable()
             table.add_columns(*columns)
             for entry in plan[key]:
@@ -147,6 +149,9 @@ def _planningRow(key: str, entry: dict) -> tuple:
     if key == "reviewQueue":
         source = entry.get("source", {})
         folder = source.get("folder", entry.get("folder", ""))
+        if "messageCount" in entry:
+            count = entry["messageCount"]
+            folder += f" ({count if count is not None else 'unknown'} messages)"
         if source.get("uid"):
             folder += " (UID " + source["uid"] + ")"
         return entry["mailbox"], folder, entry["reason"]

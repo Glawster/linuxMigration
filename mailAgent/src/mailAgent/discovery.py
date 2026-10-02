@@ -10,7 +10,7 @@ from urllib.parse import unquote, urlsplit
 
 from organiseMyProjects.logUtils import getLogger
 
-from mailAgent.credentials import CredentialError, credentialGet
+from mailAgent.credentials import CredentialError, credentialGet, credentialsLoad
 from mailAgent.imapDiscovery import mailboxDiscover
 from mailAgent.thunderbird import sourcesDiscover
 
@@ -34,12 +34,27 @@ def discoveryRun(
         sources=sourcesDiscover(thunderbirdRoot),
         issues=[],
     )
-    for account in accounts:
-        snapshot["mailboxes"].append(
-            _accountDiscover(
-                account, clientFactory, includeMessages, credentialsFile, logger
+    credentials = {}
+    credentialIssue = None
+    try:
+        if any("credentialId" in account for account in accounts):
+            try:
+                credentials = credentialsLoad(credentialsFile)
+            except CredentialError as error:
+                credentialIssue = str(error)
+        for account in accounts:
+            snapshot["mailboxes"].append(
+                _accountDiscover(
+                    account,
+                    clientFactory,
+                    includeMessages,
+                    credentials,
+                    credentialIssue,
+                    logger,
+                )
             )
-        )
+    finally:
+        credentials.clear()
     snapshot["relationships"], snapshot["conflicts"] = filtersReconcile(snapshot)
     logger.done("mailbox discovery")
     return snapshot
@@ -52,12 +67,15 @@ def _accountDiscover(
     account: dict,
     clientFactory,
     includeMessages: bool,
-    credentialsFile: Path | None,
+    credentials: dict,
+    credentialIssue: str | None,
     logger,
 ) -> dict:
     client = None
     try:
-        password = credentialGet(account, credentialsFile)
+        if "credentialId" in account and credentialIssue is not None:
+            raise CredentialError(credentialIssue)
+        password = credentialGet(account, credentials=credentials)
         try:
             client = clientFactory(
                 account["host"], account.get("port", 993), timeout=30

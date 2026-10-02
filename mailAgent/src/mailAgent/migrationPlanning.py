@@ -7,6 +7,7 @@ from organiseMyProjects.logUtils import getLogger
 
 from mailAgent.archiveDiscovery import archiveDiscover
 from mailAgent.configuration import configValidate
+from mailAgent.messageInventory import folderSystemKind
 
 ## workflow
 
@@ -47,6 +48,29 @@ def migrationPlan(config: dict, snapshot: dict) -> dict:
             )
             continue
         _accountPlan(account, accounts, observed, archives, mappings, plan)
+    messages = [
+        m
+        for identity, mailbox in observed.items()
+        if identity in accounts and accounts[identity]["role"] in ("personal", "legacy")
+        for m in mailbox.get("inventory", {}).get("messages", [])
+    ]
+    plan["summary"] = dict(
+        messagesScanned=len(messages),
+        proposals=len(plan["proposals"]),
+        reviewItems=len(plan["reviewQueue"]),
+        systemFolderMessagesExcluded=sum(
+            r["messageCount"] or 0
+            for r in plan["reviewQueue"]
+            if r.get("policy") == "exclude"
+        ),
+        messagesWithInvalidDates=sum(
+            not _messageYearValid(m, plan["liveYear"]) for m in messages
+        ),
+        systemFoldersWithUnknownCounts=sum(
+            r.get("policy") == "exclude" and r["messageCount"] is None
+            for r in plan["reviewQueue"]
+        ),
+    )
     logger.done("migration planning")
     return plan
 
@@ -137,6 +161,7 @@ def _accountPlan(
             plan, account["id"], "Message inventory not collected; run with --plan"
         )
         return
+    blocked = _systemFoldersReview(account, mailbox, inventory, plan)
     for issue in inventory["issues"]:
         _reviewAppend(plan, account["id"], issue["message"], folder=issue["folder"])
     if not inventory["complete"]:
@@ -150,6 +175,8 @@ def _accountPlan(
     archive = archives[target["id"]]
     sourceFolders = {folder["path"]: folder for folder in mailbox["folders"]}
     for message in inventory["messages"]:
+        if message["folder"] in blocked:
+            continue
         _messagePlan(
             account,
             target,
@@ -205,17 +232,11 @@ def _messageMapping(
     mappings: list,
     liveYear: int,
 ) -> dict:
-    year = message.get("year")
-    if type(year) is not int or year > liveYear or year < 1900:
+    if not _messageYearValid(message, liveYear):
         raise ValueError(message.get("issue", "Unknown or future message year"))
     folder = sourceFolders.get(message["folder"])
     if not folder:
         raise ValueError("Message folder not observed")
-    if any(
-        attribute.lower() in ("\\trash", "\\junk", "\\drafts")
-        for attribute in folder["attributes"]
-    ):
-        raise ValueError("System folder requires a separate retention decision")
     canonical = _canonicalResolve(account, folder)
     candidates = [mapping for mapping in mappings if mapping["canonical"] == canonical]
     if (
@@ -266,6 +287,40 @@ def _messagePlan(
             sourceRemovalAllowed=False,
         )
     )
+
+
+def _systemFoldersReview(
+    account: dict, mailbox: dict, inventory: dict, plan: dict
+) -> set:
+    """Group retention and unmapped Sent decisions by mailbox and folder."""
+    blocked = set()
+    for folder in mailbox["folders"]:
+        kind = folderSystemKind(folder)
+        excluded = kind in ("trash", "junk", "drafts")
+        if not excluded and not (
+            kind == "sent" and folder["path"] not in account.get("folderMappings", {})
+        ):
+            continue
+        blocked.add(folder["path"])
+        count = folder.get("messages")
+        if count is None and inventory["complete"]:
+            observed = sum(m["folder"] == folder["path"] for m in inventory["messages"])
+            count = observed if observed or not excluded else None
+        _reviewAppend(
+            plan,
+            account["id"],
+            (
+                "System folder excluded from archive migration; requires one explicit future retention decision"
+                if excluded
+                else "Sent mail requires an explicit canonical folder mapping before year-based planning"
+            ),
+            folder=folder["path"],
+            systemFolder=kind,
+            messageCount=count,
+            policy="exclude" if excluded else "explicitSentMapping",
+            requiresRetentionDecision=excluded,
+        )
+    return blocked
 
 
 def _personalDiscover(
@@ -347,6 +402,10 @@ def _imapNameEncode(value: str) -> str:
         else:
             pending.append(char)
     return "".join(result)
+
+
+def _messageYearValid(message: dict, liveYear: int) -> bool:
+    return type(message.get("year")) is int and 1900 <= message["year"] <= liveYear
 
 
 def _reviewAppend(plan: dict, mailbox: str, reason: str, **details) -> None:

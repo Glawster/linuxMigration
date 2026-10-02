@@ -156,14 +156,18 @@ an argument sequence with `--batch --decrypt`, captured stdout/stderr and a
 120-second timeout. GPG agent/pinentry handles unlocking according to the user's
 setup. No passphrase is placed on the command line or supplied by the TUI.
 
-The store is decrypted for each encrypted credential lookup. JSON is parsed and
+The store is decrypted once per discovery run when an account uses a credential
+ID. JSON is parsed and
 validated in memory, including rejecting duplicate keys and missing, empty or
-non-string passwords. The credential dictionary is released after extracting
-the requested password, and the connection workflow releases its password
+non-string passwords. Accounts share the in-memory credential dictionary, which
+is cleared after account processing, including when the run is interrupted.
+The connection workflow releases its password
 reference after authentication. No secret is added to the mailbox configuration,
 plan or audit model.
 
 Missing stores, unsafe permissions, missing GPG, failed decryption, invalid JSON
 and missing IDs appear as secret-free per-mailbox audit issues. Other accounts
 can still be audited. A run with failed accounts exits nonzero, including JSON
-mode. Raw GPG streams and authentication exception details are never displayed.
+mode. A failed store load is reported for every credential-based account without
+retrying GPG; environment-based accounts continue normally. Raw GPG streams and
+authentication exception details are never displayed.
