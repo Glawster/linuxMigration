@@ -17,7 +17,10 @@ from mailAgent.thunderbird import sourcesDiscover
 
 
 def discoveryRun(
-    accounts: list[dict], thunderbirdRoot: Path, clientFactory=imaplib.IMAP4_SSL
+    accounts: list[dict],
+    thunderbirdRoot: Path,
+    clientFactory=imaplib.IMAP4_SSL,
+    includeMessages: bool = False,
 ) -> dict:
     """Audit configured accounts independently with TLS authentication."""
     logger = getLogger()
@@ -37,7 +40,13 @@ def discoveryRun(
                 account["host"], account.get("port", 993), timeout=30
             )
             client.login(account["username"], password)
-            snapshot["mailboxes"].append(mailboxDiscover(client, account))
+            mailbox = mailboxDiscover(client, account)
+            mailbox["role"] = account.get("role", "unspecified")
+            if includeMessages and account.get("role") in ("personal", "legacy"):
+                from mailAgent.messageInventory import messagesDiscover
+
+                mailbox["inventory"] = messagesDiscover(client, mailbox["folders"])
+            snapshot["mailboxes"].append(mailbox)
         except Exception:
             snapshot["mailboxes"].append(
                 {
@@ -48,6 +57,7 @@ def discoveryRun(
                         "Mailbox discovery failed; verify connection and credentials"
                     ],
                     "failed": True,
+                    "role": account.get("role", "unspecified"),
                 }
             )
         finally:

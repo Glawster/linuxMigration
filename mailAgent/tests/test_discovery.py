@@ -58,7 +58,7 @@ def clientCreate(quota=False):
         (b'() "/" "say\\"hi"', 'say"hi', "/", []),
     ],
 )
-def test_folderParse(row, path, delimiter, attributes):
+def testFolderParse(row, path, delimiter, attributes):
     folder = folderParse(row)
     assert (folder["path"], folder["delimiter"], folder["attributes"]) == (
         path,
@@ -68,13 +68,13 @@ def test_folderParse(row, path, delimiter, attributes):
     assert folder["rawPath"]
 
 
-def test_invalidList():
+def testInvalidList():
     with pytest.raises(ValueError):
         folderParse(b"invalid")
 
 
 @pytest.mark.parametrize("quota", [True, False])
-def test_imapReadOnly(quota):
+def testImapReadOnly(quota):
     client = clientCreate(quota)
     result = mailboxDiscover(client, ACCOUNT)
     assert result["folders"][0]["messages"] == 10
@@ -86,7 +86,7 @@ def test_imapReadOnly(quota):
         assert result["issues"] == ["Quota unsupported"]
 
 
-def test_quotaParse():
+def testQuotaParse():
     assert quotaParse([[b'INBOX ""'], [b'"" (STORAGE 50 100)']]) == [
         dict(root="", resource="STORAGE", used=50, limit=100, unit="KiB")
     ]
@@ -102,14 +102,14 @@ def profileCreate(tmp_path):
     return tmp_path
 
 
-def test_profilesMetadata(tmp_path):
+def testProfilesMetadata(tmp_path):
     root = profileCreate(tmp_path)
     profiles = profilesDiscover(root)
     assert [p["default"] for p in profiles] == [False, True]
     assert profilesDiscover(tmp_path / "missing") == []
 
 
-def test_sourcesImapAndPop(tmp_path):
+def testSourcesImapAndPop(tmp_path):
     root = profileCreate(tmp_path)
     for kind in ("Mail", "ImapMail"):
         directory = root / "two" / kind / "mail.example"
@@ -128,7 +128,7 @@ def test_sourcesImapAndPop(tmp_path):
     assert prefs.read_bytes() == before
 
 
-def test_filtersParsing():
+def testFiltersParsing():
     rule = filtersParse(RULE)[0]
     assert rule["enabled"] is False
     assert rule["conditions"] == ["AND (subject,contains,order)"]
@@ -139,7 +139,7 @@ def test_filtersParsing():
     assert copyRule["destinations"] == rule["destinations"]
 
 
-def test_unsupportedRetained():
+def testUnsupportedRetained():
     rule = filtersParse(
         RULE + '\ncustom="something"\ninvalid syntax\naction="Custom action"'
     )[0]
@@ -161,7 +161,7 @@ def snapshotCreate():
     )
 
 
-def test_reconciliation():
+def testReconciliation():
     snapshot = snapshotCreate()
     links, conflicts = filtersReconcile(snapshot)
     assert links[0]["resolved"]
@@ -178,7 +178,7 @@ def test_reconciliation():
     assert any(c["message"] == "Unresolved or ambiguous destination" for c in conflicts)
 
 
-def test_snapshotCompare(tmp_path):
+def testSnapshotCompare(tmp_path):
     old = snapshotCreate()
     snapshotSave(old, tmp_path)
     new = copy.deepcopy(old)
@@ -201,7 +201,7 @@ def test_snapshotCompare(tmp_path):
     assert len(list((tmp_path / "history").glob("*.json"))) == 2
 
 
-def test_secretsAndCleanup(tmp_path, monkeypatch):
+def testSecretsAndCleanup(tmp_path, monkeypatch):
     setApplication("mailAgent")
     monkeypatch.setenv("TEST_MAIL_PASSWORD", "secret-never-persist")
     client = clientCreate()
@@ -219,7 +219,7 @@ def test_secretsAndCleanup(tmp_path, monkeypatch):
     )
 
 
-def test_coreNoTextual():
+def testCoreNoTextual():
     core = Path(__file__).parents[1] / "src/mailAgent"
     for name in ("discovery.py", "imapDiscovery.py", "thunderbird.py"):
         assert "textual" not in (core / name).read_text().lower()

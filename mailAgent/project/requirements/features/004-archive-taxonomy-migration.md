@@ -87,3 +87,14 @@ The application supports:
 - `old` targets Andy current for live-year mail and `myMail` for older mail.
 - shared/support roles remain readable in the TUI.
 - no mailbox mutation occurs in planning mode.
+
+## Delivery status
+
+The planning-only increment is implemented: explicit role validation,
+read-only archive/message discovery, canonical mappings, legacy migration
+proposals, review queue, persistent plan snapshots and TUI review panels.
+Shared/support accounts are excluded from personal planning.
+
+Execution remains disabled as permitted by the implementation prompt. Actual
+copy/verification/removal and completed-operation persistence belong to a future
+execution increment. See [implementation and limitations](../../../documentation/mailboxModel.md#implemented-planning-workflow).

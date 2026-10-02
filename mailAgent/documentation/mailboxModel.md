@@ -149,3 +149,81 @@ role = "support"
 
 Server host, port, and password environment variable remain independently
 configured for each mailbox.
+
+## Implemented planning workflow
+
+Use the Conda `mailAgent` environment and run:
+
+```bash
+mailAgent --plan
+mailAgent --plan --json
+mailAgent --plan --confirm --json
+```
+
+The first two commands preview; the third persists the audit and its migration
+plan using REQ-003 snapshot history. `--confirm` permits snapshot persistence
+only. Migration execution and folder creation are disabled in this increment.
+No completed operations exist to record yet. A future executor must require
+confirmation, copy and verify destinations before permitting source removal,
+and persist completed operations separately from proposals.
+
+Each mailbox requires `id`, `name`, `host`, `username`, `passwordEnv` and `role`.
+Hosts and optional ports are independent. Personal mailboxes require
+`localArchive`; legacy mailboxes require a `migrationTarget` naming a personal
+mailbox and inherit its archive. If an explicit legacy archive is supplied, it
+must match the target archive. Shared/support accounts reject personal archive,
+mapping and migration settings. Existing REQ-003 configurations must add roles.
+[The complete example](../config.example.toml) includes all five accounts.
+
+`localArchive` points to an existing directory; `~` expands to the user's home
+and relative paths resolve against the configuration file's directory. Missing
+roots produce review issues and are never created. The default `archiveFormat`
+is `thunderbird`: mbox files define selectable folders and sibling `.sbd`
+directories define their descendants. For example, `Orders.sbd/Shop` becomes
+canonical `Orders/Shop`, backed by that exact file. Empty mbox files are valid;
+nonempty candidates must begin with an mbox `From ` separator. Metadata files
+such as `.msf` indexes are excluded. Point at a `.sbd` directory if the archive
+is a Thunderbird top-level folder with child folders. The top-level mbox itself
+is not scanned when only its `.sbd` directory is configured.
+
+`archiveFormat = "maildir"` supports nested directory layouts with `cur`, `new`
+and `tmp` under each message store. It does not support flat Maildir++ dot-folder
+layouts. Hidden files and symbolic links are excluded. Discovery does not open
+Maildir message contents, and reads at most five bytes from each candidate mbox.
+Unrecognized files and unreadable directories appear as review issues; incomplete
+archive scans cannot supply message destinations.
+
+Automatic mapping requires an exact canonical folder path, translated using
+the server delimiter and IMAP modified UTF-7 encoding. A single observed server
+delimiter permits missing-folder mirror proposals; ambiguous delimiters or
+colliding destinations require review. Configure aliases explicitly per account:
+
+```toml
+folderMappings = { "INBOX.Orders" = "Orders" }
+```
+
+Keys are exact IMAP server paths; values are canonical paths present in that
+personal archive. The legacy account may declare its own aliases, while the
+personal target's aliases determine the live IMAP destination. Folder name
+similarity and message subjects do not select a destination. Parent folders
+without a message store cannot receive local archive proposals.
+
+Planning uses the year in the message's single parsed Date header, as expressed
+in that header's timezone, rather than server arrival year. Date headers are
+fetched in UID batches through read-only EXAMINE and BODY.PEEK, without message
+bodies or flag changes. UID and UIDVALIDITY identify source messages. Missing,
+duplicate or invalid dates, future years, unmatched canonical folders and
+special-use Trash/Junk/Drafts folders enter the Review Queue. A failed or
+incomplete inventory yields no message proposals for that source mailbox.
+
+A personal live-year message remains in its existing mapped IMAP folder. Older
+mail proposes the matching local message store. Legacy live-year mail proposes
+the personal target's matching IMAP folder, with folder creation explicitly
+listed as a prerequisite if absent. Older legacy mail proposes that target's
+local archive. All proposals are labelled Inferred and include confirmation
+and verification prerequisites; they cannot authorize removing source copies.
+
+The TUI presents Mapping, Proposed Moves, Review Queue and Role Boundaries
+as read-only tables alongside the audit. Shared/support mailboxes remain visible
+and audited, but `--plan` does not inventory their message headers or generate
+personal folder mirrors, archive destinations or migration proposals.

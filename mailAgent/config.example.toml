@@ -1,20 +1,51 @@
+[general]
+liveYear = 2026
+
+# Replace each independent host and local archive path before running.
+# Relative archive paths are relative to this configuration file.
 [[mailboxes]]
 id = "andy"
 name = "Andy"
-host = "imap.example.com"
-username = "andy@example.com"
+host = "imap.andy.example"
+username = "andyw@glawster.com"
 passwordEnv = "MAILAGENT_ANDY_PASSWORD"
+role = "personal"
+localArchive = "~/Mail/myMail"
+archiveFormat = "thunderbird"
+# Optional exact server folder -> canonical archive folder mappings:
+# folderMappings = { "INBOX.Orders" = "Orders" }
 
 [[mailboxes]]
 id = "kathy"
 name = "Kathy"
-host = "imap.example.com"
-username = "kathy@example.com"
+host = "imap.kathy.example"
+username = "kathyw@glawster.com"
 passwordEnv = "MAILAGENT_KATHY_PASSWORD"
+role = "personal"
+localArchive = "~/Mail/kathyMail"
+archiveFormat = "thunderbird"
 
 [[mailboxes]]
 id = "old"
 name = "Old mailbox"
-host = "imap.example.com"
-username = "old@example.com"
+host = "imap.legacy.example"
+username = "andy@glawster.com"
 passwordEnv = "MAILAGENT_OLD_PASSWORD"
+role = "legacy"
+migrationTarget = "andy"
+
+[[mailboxes]]
+id = "hwfc"
+name = "HWFC"
+host = "imap.hwfc.example"
+username = "info@hillsboroughwalkingfootball.com"
+passwordEnv = "MAILAGENT_HWFC_PASSWORD"
+role = "shared"
+
+[[mailboxes]]
+id = "clannEolas"
+name = "Clann Eolas"
+host = "imap.clanneolas.example"
+username = "info@clanneolas.com"
+passwordEnv = "MAILAGENT_CLANNEOLAS_PASSWORD"
+role = "support"

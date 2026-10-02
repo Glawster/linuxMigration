@@ -2,7 +2,8 @@
 
 A local TUI-first IMAP mail organiser designed to work alongside Thunderbird.
 
-This increment audits IMAP folders and Thunderbird filters in read-only mode.
+The application audits IMAP folders and Thunderbird filters and builds
+role-aware archive/migration proposals in read-only mode.
 Future classification categories are:
 
 - For Me
@@ -11,11 +12,8 @@ Future classification categories are:
 - Completed Order
 - General
 
-The supplied example configuration is designed for three mailboxes:
-
-- Andy
-- Kathy
-- Old mailbox
+The example configuration declares five independent mailboxes: Andy and Kathy
+(personal), Old (legacy), HWFC (shared), and Clann Eolas (support).
 
 ## Intended location
 
@@ -24,7 +22,9 @@ The supplied example configuration is designed for three mailboxes:
 ## Documentation
 
 - [Discovery phase and usage](documentation/discoveryPhase.md)
+- [Mailbox roles and migration planning](documentation/mailboxModel.md)
 - [REQ-003](project/requirements/features/003-mailbox-discovery.md)
+- [REQ-004](project/requirements/features/004-archive-taxonomy-migration.md)
 
 ## Install
 
@@ -47,26 +47,29 @@ Passwords are supplied via environment variables, not stored in the config:
 
 Run with:
 
-    mail-agent
+    mailAgent
 
-Use `mail-agent --confirm` to persist the audit snapshot, or `--json` for
+Use `mailAgent --confirm` to persist the audit snapshot, or `--json` for
 noninteractive output. Mailbox operations remain read-only.
 
 The first version never deletes, moves, flags, or sends mail.
 
-## Proposed order folders
+## Archive and migration planning
 
-    Orders/
-    ├── Active
-    └── Completed/
-        ├── 2026
-        ├── 2025
-        └── ...
+Set each mailbox host and password environment variable in
+`config.toml`. Personal mailboxes also need `localArchive` pointing at an
+existing archive directory. The existing archive hierarchy defines the taxonomy.
+Use [config.example.toml](config.example.toml) for the required role settings.
 
-Delivery notifications remain active only while the order is still current.
-Later versions can move completed order and delivery mail into the appropriate
-year folder after review.
+    mailAgent --plan
+    mailAgent --plan --json
+    mailAgent --plan --confirm --json
 
+`--plan` reads Date headers for personal/legacy messages and shows Mapping,
+Proposed Moves, Review Queue and Role Boundaries panels. `--confirm` only saves
+the audit and plan under `~/.local/state/mailAgent/discovery/`.
+Migration execution remains disabled. Shared and support accounts remain
+visible in the audit and produce no personal archive proposals.
 
 ## Discovery before organisation
 

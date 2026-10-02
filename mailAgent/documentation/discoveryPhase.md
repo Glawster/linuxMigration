@@ -211,14 +211,15 @@ and answer:
 The discovery package requires Python 3.11 or later (Conda Python 3.12 is
 recommended), `organiseMyProjects`, and Textual. Configuration is TOML with
 `[[mailboxes]]` entries containing `id`, `name`, `host`, `username`, and
-`passwordEnv`; `port` defaults to 993. Authentication uses IMAP over TLS and
+`passwordEnv`; `port` defaults to 993. Every mailbox must now declare an
+explicit `role`; see [Mailbox model](mailboxModel.md). Authentication uses IMAP over TLS and
 an environment-variable password. No predecessor application code was present
 when this increment was implemented.
 
-Run `mail-agent` for an audit preview. Run `mail-agent --confirm` to persist
+Run `mailAgent` for an audit preview. Run `mailAgent --confirm` to persist
 `latest.json` and a unique historical snapshot. The shared safe-by-default CLI
 convention applies to snapshot writes; neither command changes mail or
-Thunderbird. `mail-agent --json` provides noninteractive output. Overrides are
+Thunderbird. `mailAgent --json` provides noninteractive output. Overrides are
 available through `--config`, `--thunderbird`, and `--state`.
 
 The version-1 snapshot records mailbox identities, folders, quota resources,
