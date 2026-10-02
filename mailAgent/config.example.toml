@@ -1,0 +1,20 @@
+[[mailboxes]]
+id = "andy"
+name = "Andy"
+host = "imap.example.com"
+username = "andy@example.com"
+passwordEnv = "MAILAGENT_ANDY_PASSWORD"
+
+[[mailboxes]]
+id = "kathy"
+name = "Kathy"
+host = "imap.example.com"
+username = "kathy@example.com"
+passwordEnv = "MAILAGENT_KATHY_PASSWORD"
+
+[[mailboxes]]
+id = "old"
+name = "Old mailbox"
+host = "imap.example.com"
+username = "old@example.com"
+passwordEnv = "MAILAGENT_OLD_PASSWORD"

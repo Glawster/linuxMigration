@@ -2,8 +2,8 @@
 
 A local TUI-first IMAP mail organiser designed to work alongside Thunderbird.
 
-Initial release is read-only. It connects to multiple IMAP mailboxes and
-classifies recent messages as:
+This increment audits IMAP folders and Thunderbird filters in read-only mode.
+Future classification categories are:
 
 - For Me
 - Active Order
@@ -23,8 +23,8 @@ The supplied example configuration is designed for three mailboxes:
 
 ## Documentation
 
-- [Storage and retention](documentation/storageRetention.md)
-- [Storage requirement](project/requirements/features/002-storage-retention.md)
+- [Discovery phase and usage](documentation/discoveryPhase.md)
+- [REQ-003](project/requirements/features/003-mailbox-discovery.md)
 
 ## Install
 
@@ -49,6 +49,9 @@ Run with:
 
     mail-agent
 
+Use `mail-agent --confirm` to persist the audit snapshot, or `--json` for
+noninteractive output. Mailbox operations remain read-only.
+
 The first version never deletes, moves, flags, or sends mail.
 
 ## Proposed order folders
@@ -63,17 +66,6 @@ The first version never deletes, moves, flags, or sends mail.
 Delivery notifications remain active only while the order is still current.
 Later versions can move completed order and delivery mail into the appropriate
 year folder after review.
-
-
-## Storage policy
-
-The IMAP server is the authoritative store for live/current mail so that
-Thunderbird and mailAgent see the same organisation. Older completed mail may
-be archived locally in a standard mail format to control server quota usage.
-
-Retention is configured per mailbox, allowing the Andy, Kathy, and old
-mailboxes to use different policies. See
-[`documentation/storageRetention.md`](documentation/storageRetention.md).
 
 
 ## Discovery before organisation

@@ -205,3 +205,45 @@ and answer:
 - Which existing rules already handle orders or delivery notifications?
 - How much server space is in use, where available?
 - What changed since the last audit?
+
+## Running the implemented audit
+
+The discovery package requires Python 3.11 or later (Conda Python 3.12 is
+recommended), `organiseMyProjects`, and Textual. Configuration is TOML with
+`[[mailboxes]]` entries containing `id`, `name`, `host`, `username`, and
+`passwordEnv`; `port` defaults to 993. Authentication uses IMAP over TLS and
+an environment-variable password. No predecessor application code was present
+when this increment was implemented.
+
+Run `mail-agent` for an audit preview. Run `mail-agent --confirm` to persist
+`latest.json` and a unique historical snapshot. The shared safe-by-default CLI
+convention applies to snapshot writes; neither command changes mail or
+Thunderbird. `mail-agent --json` provides noninteractive output. Overrides are
+available through `--config`, `--thunderbird`, and `--state`.
+
+The version-1 snapshot records mailbox identities, folders, quota resources,
+Thunderbird sources and raw rules, destination relationships, conflicts and
+changes. Passwords and configuration authentication fields are excluded.
+Raw rules may contain private subjects or addresses, so snapshots remain local.
+Folder paths preserve IMAP wire spelling (including modified UTF-7), delimiter,
+and attributes. Counts use STATUS; no message bodies are fetched. Quota STORAGE
+units are KiB; other resources retain counts. Subscriptions are not queried.
+
+Thunderbird `profiles.ini` and `installs.ini` identify default profiles. All
+metadata-listed profiles are audited and default profiles are labelled; the
+metadata cannot prove which running instance is active. Account identity is
+read from `prefs.js` directory, hostname and username preferences. IMAP and POP
+filter files are inspected. Only exact IMAP URI account and folder matches are
+resolved; local POP targets, aliases and encoding mismatches remain warnings.
+
+Filter conditions retain their original expression rather than executing it.
+Unknown fields, malformed lines, custom actions and unsupported condition
+syntax retain their raw source and produce issues. Duplicate rule names are
+compared by occurrence within their source. Failed mailbox scans do not report
+folders as removed. Missing Thunderbird sources currently appear as removed
+filters; review profile availability before interpreting those changes.
+
+The TUI provides mailbox tabs and scrollable Folders, Filters, Conflicts, Quota
+and Changes panels. Facts are labelled Observed, category heuristics Inferred,
+and unresolved or shared destinations Warning/Conflict. Heuristics use names
+and conditions and do not modify classification rules.
