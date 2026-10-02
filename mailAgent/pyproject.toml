@@ -9,7 +9,7 @@ requires-python = ">=3.11"
 dependencies = ["organiseMyProjects", "textual>=0.50"]
 
 [project.scripts]
-mail-agent = "mailAgent.cli:main"
+mailAgent = "mailAgent.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

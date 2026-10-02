@@ -7,7 +7,6 @@ import tomllib
 
 from organiseMyProjects.logUtils import getLogger, setApplication
 
-
 ## workflow
 
 

@@ -6,7 +6,6 @@ from textual.app import App, ComposeResult
 from textual.containers import VerticalScroll
 from textual.widgets import Footer, Header, Static, TabbedContent, TabPane
 
-
 ## presentation
 
 

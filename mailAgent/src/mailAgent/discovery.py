@@ -13,7 +13,6 @@ from organiseMyProjects.logUtils import getLogger
 from mailAgent.imapDiscovery import mailboxDiscover
 from mailAgent.thunderbird import sourcesDiscover
 
-
 ## workflow
 
 
