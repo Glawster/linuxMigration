@@ -23,8 +23,10 @@ The example configuration declares five independent mailboxes: Andy and Kathy
 
 - [Discovery phase and usage](documentation/discoveryPhase.md)
 - [Mailbox roles and migration planning](documentation/mailboxModel.md)
+- [Encrypted credentials setup](documentation/credentials.md)
 - [REQ-003](project/requirements/features/003-mailbox-discovery.md)
 - [REQ-004](project/requirements/features/004-archive-taxonomy-migration.md)
+- [REQ-005](project/requirements/features/005-encrypted-credentials-store.md)
 
 ## Install
 
@@ -39,11 +41,11 @@ The example configuration declares five independent mailboxes: Andy and Kathy
     mkdir -p ~/.config/mailAgent
     cp config.example.toml ~/.config/mailAgent/config.toml
 
-Passwords are supplied via environment variables, not stored in the config:
-
-    export MAILAGENT_ANDY_PASSWORD='...'
-    export MAILAGENT_KATHY_PASSWORD='...'
-    export MAILAGENT_OLD_PASSWORD='...'
+Create the GPG-encrypted store at `~/.config/mailAgent/credentials.json.gpg`
+using the [credentials setup guide](documentation/credentials.md). Each mailbox
+selects an entry with `credentialId`; passwords stay out of `config.toml`.
+GPG must be installed separately and able to unlock the store through its agent
+or pinentry. Existing `passwordEnv` configurations remain supported temporarily.
 
 Run with:
 
@@ -56,7 +58,7 @@ The first version never deletes, moves, flags, or sends mail.
 
 ## Archive and migration planning
 
-Set each mailbox host and password environment variable in
+Set each mailbox host and credential ID in
 `config.toml`. Personal mailboxes also need `localArchive` pointing at an
 existing archive directory. The existing archive hierarchy defines the taxonomy.
 Use [config.example.toml](config.example.toml) for the required role settings.

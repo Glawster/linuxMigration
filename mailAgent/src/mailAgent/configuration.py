@@ -19,6 +19,18 @@ def configValidate(config: dict, base: Path) -> dict:
     year = general.setdefault("liveYear", 2026)
     if type(year) is not int or not 1900 <= year <= 9999:
         raise ValueError("liveYear must be a year between 1900 and 9999")
+    if "credentialsFile" in general:
+        value = general["credentialsFile"]
+        if (
+            not isinstance(value, str)
+            or not value.strip()
+            or any(ord(char) < 32 for char in value)
+        ):
+            raise ValueError("Invalid credentialsFile")
+        path = Path(value).expanduser()
+        general["credentialsFile"] = str(
+            (base / path).absolute() if not path.is_absolute() else path.absolute()
+        )
     accounts = result.get("mailboxes")
     if not isinstance(accounts, list) or not accounts:
         raise ValueError("Configure at least one mailbox")
@@ -38,21 +50,20 @@ def configValidate(config: dict, base: Path) -> dict:
 def _accountValidate(account: dict, identifiers: set, base: Path) -> None:
     if not isinstance(account, dict):
         raise ValueError("Mailbox must be an object")
-    for key in ("id", "name", "host", "username", "passwordEnv", "role"):
+    for key in ("id", "name", "host", "username", "role"):
         if (
             not isinstance(account.get(key), str)
             or not account[key].strip()
             or any(ord(char) < 32 for char in account[key])
         ):
             raise ValueError("Missing or invalid mailbox field: " + key)
+    _authenticationValidate(account)
     if account["role"] not in ROLES:
         raise ValueError("Unknown mailbox role")
     if account["id"] in identifiers:
         raise ValueError("Duplicate mailbox ID")
     identifiers.add(account["id"])
-    port = account.setdefault("port", 993)
-    if type(port) is not int or not 1 <= port <= 65535:
-        raise ValueError("Invalid IMAP port")
+    _portValidate(account.setdefault("port", 993))
     role = account["role"]
     if role in ("shared", "support") and any(
         key in account
@@ -91,6 +102,22 @@ def _archiveValidate(account: dict, base: Path) -> None:
     )
 
 
+def _authenticationValidate(account: dict) -> None:
+    if not any(key in account for key in ("credentialId", "passwordEnv")):
+        raise ValueError("Configure credentialId or passwordEnv")
+    for key in ("credentialId", "passwordEnv"):
+        if key in account and (
+            not isinstance(account[key], str)
+            or not account[key].strip()
+            or any(ord(char) < 32 for char in account[key])
+        ):
+            raise ValueError("Invalid authentication reference")
+    if "password" in account:
+        raise ValueError(
+            "Plaintext passwords are not accepted in mailbox configuration"
+        )
+
+
 def _legacyValidate(account: dict, indexed: dict) -> None:
     identity = account.get("migrationTarget")
     if not isinstance(identity, str):
@@ -123,3 +150,8 @@ def _mappingsValidate(mappings: dict) -> None:
             ord(char) < 32 for char in key + value
         ):
             raise ValueError("folderMappings must use safe canonical folder paths")
+
+
+def _portValidate(port: int) -> None:
+    if type(port) is not int or not 1 <= port <= 65535:
+        raise ValueError("Invalid IMAP port")

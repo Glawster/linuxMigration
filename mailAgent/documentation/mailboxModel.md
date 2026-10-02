@@ -147,7 +147,7 @@ username = "info@clanneolas.com"
 role = "support"
 ```
 
-Server host, port, and password environment variable remain independently
+Server host, port, and credential reference remain independently
 configured for each mailbox.
 
 ## Implemented planning workflow
@@ -167,7 +167,9 @@ No completed operations exist to record yet. A future executor must require
 confirmation, copy and verify destinations before permitting source removal,
 and persist completed operations separately from proposals.
 
-Each mailbox requires `id`, `name`, `host`, `username`, `passwordEnv` and `role`.
+Each mailbox requires `id`, `name`, `host`, `username`, `role` and either
+`credentialId` or the compatibility `passwordEnv` reference. See
+[encrypted credential setup](credentials.md).
 Hosts and optional ports are independent. Personal mailboxes require
 `localArchive`; legacy mailboxes require a `migrationTarget` naming a personal
 mailbox and inherit its archive. If an explicit legacy archive is supplied, it

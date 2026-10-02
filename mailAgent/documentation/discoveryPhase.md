@@ -211,9 +211,10 @@ and answer:
 The discovery package requires Python 3.11 or later (Conda Python 3.12 is
 recommended), `organiseMyProjects`, and Textual. Configuration is TOML with
 `[[mailboxes]]` entries containing `id`, `name`, `host`, `username`, and
-`passwordEnv`; `port` defaults to 993. Every mailbox must now declare an
-explicit `role`; see [Mailbox model](mailboxModel.md). Authentication uses IMAP over TLS and
-an environment-variable password. No predecessor application code was present
+`credentialId` (or compatibility `passwordEnv`); `port` defaults to 993. Every mailbox must now declare an
+explicit `role`; see [Mailbox model](mailboxModel.md). Authentication uses IMAP over TLS with
+the [encrypted credential store](credentials.md), or an environment-variable
+password when no credential ID is configured. No predecessor application code was present
 when this increment was implemented.
 
 Run `mailAgent` for an audit preview. Run `mailAgent --confirm` to persist

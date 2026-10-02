@@ -50,3 +50,12 @@ without storing passwords in plaintext configuration or application state.
 - missing credential IDs are reported without exposing secrets;
 - compatibility fallback using `passwordEnv` still functions;
 - core credential tests do not depend on Textual.
+
+
+## Delivery status
+
+Implemented with a core GPG-backed credential resolver, explicit credential-ID
+precedence, environment compatibility, restrictive file checks and secret-free
+per-account failures. Configuration supports an optional `general.credentialsFile`
+override. Tests use mocked GPG and IMAP calls; no real keys or credential stores
+are needed. See [setup and runtime behaviour](../../../documentation/credentials.md).

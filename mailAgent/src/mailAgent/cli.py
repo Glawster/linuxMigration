@@ -85,8 +85,11 @@ def parserBuild() -> argparse.ArgumentParser:
 def _snapshotBuild(args: argparse.Namespace, config: dict, logger: Any) -> dict:
     from mailAgent.discovery import discoveryRun, snapshotCompare, snapshotSave
 
+    options = {"includeMessages": args.plan}
+    if config["general"].get("credentialsFile"):
+        options["credentialsFile"] = Path(config["general"]["credentialsFile"])
     snapshot = discoveryRun(
-        config["mailboxes"], args.thunderbird.expanduser(), includeMessages=args.plan
+        config["mailboxes"], args.thunderbird.expanduser(), **options
     )
     if args.plan:
         from mailAgent.migrationPlanning import migrationPlan

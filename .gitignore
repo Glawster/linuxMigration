@@ -44,3 +44,8 @@ runpodTools/startLlavaApi.sh
 aw
 adapterStart.sh
 uploadModels.sh
+
+# Local mailbox credential stores
+credentials.json
+credentials.json.gpg
+*.credentials.json

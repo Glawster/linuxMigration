@@ -1,5 +1,7 @@
 [general]
 liveYear = 2026
+# Optional override; default is ~/.config/mailAgent/credentials.json.gpg
+# credentialsFile = "~/.config/mailAgent/credentials.json.gpg"
 
 # Replace each independent host and local archive path before running.
 # Relative archive paths are relative to this configuration file.
@@ -8,7 +10,7 @@ id = "andy"
 name = "Andy"
 host = "imap.andy.example"
 username = "andyw@glawster.com"
-passwordEnv = "MAILAGENT_ANDY_PASSWORD"
+credentialId = "andy"
 role = "personal"
 localArchive = "~/Mail/myMail"
 archiveFormat = "thunderbird"
@@ -20,7 +22,7 @@ id = "kathy"
 name = "Kathy"
 host = "imap.kathy.example"
 username = "kathyw@glawster.com"
-passwordEnv = "MAILAGENT_KATHY_PASSWORD"
+credentialId = "kathy"
 role = "personal"
 localArchive = "~/Mail/kathyMail"
 archiveFormat = "thunderbird"
@@ -30,7 +32,7 @@ id = "old"
 name = "Old mailbox"
 host = "imap.legacy.example"
 username = "andy@glawster.com"
-passwordEnv = "MAILAGENT_OLD_PASSWORD"
+credentialId = "old"
 role = "legacy"
 migrationTarget = "andy"
 
@@ -39,7 +41,7 @@ id = "hwfc"
 name = "HWFC"
 host = "imap.hwfc.example"
 username = "info@hillsboroughwalkingfootball.com"
-passwordEnv = "MAILAGENT_HWFC_PASSWORD"
+credentialId = "hwfc"
 role = "shared"
 
 [[mailboxes]]
@@ -47,5 +49,5 @@ id = "clannEolas"
 name = "Clann Eolas"
 host = "imap.clanneolas.example"
 username = "info@clanneolas.com"
-passwordEnv = "MAILAGENT_CLANNEOLAS_PASSWORD"
+credentialId = "clannEolas"
 role = "support"

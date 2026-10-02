@@ -10,6 +10,7 @@ from urllib.parse import unquote, urlsplit
 
 from organiseMyProjects.logUtils import getLogger
 
+from mailAgent.credentials import CredentialError, credentialGet
 from mailAgent.imapDiscovery import mailboxDiscover
 from mailAgent.thunderbird import sourcesDiscover
 
@@ -21,6 +22,7 @@ def discoveryRun(
     thunderbirdRoot: Path,
     clientFactory=imaplib.IMAP4_SSL,
     includeMessages: bool = False,
+    credentialsFile: Path | None = None,
 ) -> dict:
     """Audit configured accounts independently with TLS authentication."""
     logger = getLogger()
@@ -33,42 +35,66 @@ def discoveryRun(
         issues=[],
     )
     for account in accounts:
-        client = None
+        snapshot["mailboxes"].append(
+            _accountDiscover(
+                account, clientFactory, includeMessages, credentialsFile, logger
+            )
+        )
+    snapshot["relationships"], snapshot["conflicts"] = filtersReconcile(snapshot)
+    logger.done("mailbox discovery")
+    return snapshot
+
+
+## failures
+
+
+def _accountDiscover(
+    account: dict,
+    clientFactory,
+    includeMessages: bool,
+    credentialsFile: Path | None,
+    logger,
+) -> dict:
+    client = None
+    try:
+        password = credentialGet(account, credentialsFile)
         try:
-            password = os.environ[account["passwordEnv"]]
             client = clientFactory(
                 account["host"], account.get("port", 993), timeout=30
             )
             client.login(account["username"], password)
-            mailbox = mailboxDiscover(client, account)
-            mailbox["role"] = account.get("role", "unspecified")
-            if includeMessages and account.get("role") in ("personal", "legacy"):
-                from mailAgent.messageInventory import messagesDiscover
-
-                mailbox["inventory"] = messagesDiscover(client, mailbox["folders"])
-            snapshot["mailboxes"].append(mailbox)
-        except Exception:
-            snapshot["mailboxes"].append(
-                {
-                    **{key: account[key] for key in ("id", "name", "host", "username")},
-                    "folders": [],
-                    "quota": [],
-                    "issues": [
-                        "Mailbox discovery failed; verify connection and credentials"
-                    ],
-                    "failed": True,
-                    "role": account.get("role", "unspecified"),
-                }
-            )
         finally:
-            if client is not None:
-                try:
-                    client.logout()
-                except Exception:
-                    logger.warning("imap logout failed")
-    snapshot["relationships"], snapshot["conflicts"] = filtersReconcile(snapshot)
-    logger.done("mailbox discovery")
-    return snapshot
+            del password
+        mailbox = mailboxDiscover(client, account)
+        mailbox["role"] = account.get("role", "unspecified")
+        if includeMessages and account.get("role") in ("personal", "legacy"):
+            from mailAgent.messageInventory import messagesDiscover
+
+            mailbox["inventory"] = messagesDiscover(client, mailbox["folders"])
+        return mailbox
+    except CredentialError as error:
+        return _mailboxFailed(account, str(error))
+    except Exception:
+        return _mailboxFailed(
+            account, "Mailbox discovery failed; verify connection and credentials"
+        )
+    finally:
+        if client is not None:
+            try:
+                client.logout()
+            except Exception:
+                logger.warning("imap logout failed")
+
+
+def _mailboxFailed(account: dict, issue: str) -> dict:
+    return {
+        **{key: account[key] for key in ("id", "name", "host", "username")},
+        "folders": [],
+        "quota": [],
+        "issues": [issue],
+        "failed": True,
+        "role": account.get("role", "unspecified"),
+    }
 
 
 ## reconciliation

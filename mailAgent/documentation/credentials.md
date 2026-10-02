@@ -38,7 +38,7 @@ Mailbox configuration references the entry by `credentialId`.
 
 ## Runtime behaviour
 
-mailAgent must:
+At runtime mailAgent:
 
 1. invoke GPG to decrypt the credential store;
 2. read decrypted JSON from GPG standard output;
@@ -60,7 +60,9 @@ mailAgent must never:
 - persist decrypted credentials;
 - silently fall back to plaintext storage.
 
-The encrypted file should also have restrictive filesystem permissions.
+Runtime rejects group/other permission bits, symlinks, non-regular files,
+unencrypted file extensions and stores located inside a Git repository.
+Owner-only permissions such as `0600` or `0400` are accepted.
 
 Recommended:
 
@@ -73,6 +75,7 @@ chmod 600 ~/.config/mailAgent/credentials.json.gpg
 Create a temporary local JSON file:
 
 ```bash
+umask 077
 mkdir -p ~/.config/mailAgent
 chmod 700 ~/.config/mailAgent
 nano ~/.config/mailAgent/credentials.json
@@ -88,9 +91,10 @@ gpg --symmetric \
     ~/.config/mailAgent/credentials.json
 ```
 
-Verify decryption:
+Set encrypted-file permissions, then verify decryption:
 
 ```bash
+chmod 600 ~/.config/mailAgent/credentials.json.gpg
 gpg --decrypt ~/.config/mailAgent/credentials.json.gpg
 ```
 
@@ -118,8 +122,9 @@ localArchive = "myMail"
 
 ## Compatibility
 
-Existing `passwordEnv` support may remain temporarily while accounts are
-migrated.
+Existing `passwordEnv` support remains temporarily while accounts are migrated.
+It is used only when the mailbox has no `credentialId`. A missing entry or failed
+decryption does not fall back to the environment.
 
 If both are present:
 
@@ -128,3 +133,37 @@ credentialId takes precedence
 ```
 
 Plaintext JSON is an import/setup format only, not a runtime credential store.
+
+
+## Advanced configuration and failure handling
+
+The optional path override is under the existing general section:
+
+```toml
+[general]
+liveYear = 2026
+credentialsFile = "~/.config/mailAgent/credentials.json.gpg"
+```
+
+Relative paths resolve against the TOML configuration file's directory. The
+store must still be an encrypted `.gpg` file outside any Git repository, with
+owner-only permissions. Plaintext `password` fields in mailbox configuration
+are rejected. The example configuration now uses five independent credential
+IDs and requires no routine password exports.
+
+GPG is an external prerequisite; mailAgent does not install it. Decryption uses
+an argument sequence with `--batch --decrypt`, captured stdout/stderr and a
+120-second timeout. GPG agent/pinentry handles unlocking according to the user's
+setup. No passphrase is placed on the command line or supplied by the TUI.
+
+The store is decrypted for each encrypted credential lookup. JSON is parsed and
+validated in memory, including rejecting duplicate keys and missing, empty or
+non-string passwords. The credential dictionary is released after extracting
+the requested password, and the connection workflow releases its password
+reference after authentication. No secret is added to the mailbox configuration,
+plan or audit model.
+
+Missing stores, unsafe permissions, missing GPG, failed decryption, invalid JSON
+and missing IDs appear as secret-free per-mailbox audit issues. Other accounts
+can still be audited. A run with failed accounts exits nonzero, including JSON
+mode. Raw GPG streams and authentication exception details are never displayed.
