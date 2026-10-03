@@ -27,6 +27,7 @@ The example configuration declares five independent mailboxes: Andy and Kathy
 - [REQ-003](project/requirements/features/003-mailbox-discovery.md)
 - [REQ-004](project/requirements/features/004-archive-taxonomy-migration.md)
 - [REQ-005](project/requirements/features/005-encrypted-credentials-store.md)
+- [REQ-006](project/requirements/features/006-inbox-interest-daily-digest.md)
 
 ## Install
 
@@ -90,3 +91,20 @@ new organisation.
 
 - [Discovery phase](documentation/discoveryPhase.md)
 - [REQ-003 - Existing mailbox and filter discovery](project/requirements/features/003-mailbox-discovery.md)
+
+## Inbox interest
+
+The normal Mailbox Audit TUI includes an **Inbox Interest** tab. It groups
+current Inbox messages by sender. Select a sender and press `Space` to toggle
+`✓ Interesting`.
+
+Interesting senders are stored in
+`~/.config/mailAgent/interesting.json` and are intended to drive a future
+daily digest. Toggling the check mark changes only mailAgent preferences; it
+does not alter email state.
+
+Migration planning also learns conservative filing evidence from the existing
+local archive. An exact sender historically filed in one canonical folder can
+be used to classify otherwise-unmapped mail. If a sender address contains a
+unique canonical folder name, such as `paypal` matching `Finance/PayPal`,
+mailAgent may propose that folder with an explicit classification reason.
