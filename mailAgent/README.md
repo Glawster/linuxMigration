@@ -28,6 +28,7 @@ The example configuration declares five independent mailboxes: Andy and Kathy
 - [REQ-004](project/requirements/features/004-archive-taxonomy-migration.md)
 - [REQ-005](project/requirements/features/005-encrypted-credentials-store.md)
 - [REQ-006](project/requirements/features/006-inbox-interest-daily-digest.md)
+- [REQ-007](project/requirements/features/007-unsubscribe-discovery-action.md)
 
 ## Install
 
@@ -127,3 +128,12 @@ local archive. An exact sender historically filed in one canonical folder can
 be used to classify otherwise-unmapped mail. If a sender address contains a
 unique canonical folder name, such as `paypal` matching `Finance/PayPal`,
 mailAgent may propose that folder with an explicit classification reason.
+
+
+## Folder view
+
+The **Folders** view combines the live IMAP folder hierarchy with configured
+personal local archives. IMAP rows are labelled `IMAP`; local archive rows are
+labelled by archive name, such as `myMail` or `kathyMail`. This gives one
+place to see both the live and long-term stores without exposing filesystem
+paths.
