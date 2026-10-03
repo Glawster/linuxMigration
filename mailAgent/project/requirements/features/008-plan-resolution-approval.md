@@ -131,3 +131,7 @@ terminal.
   folder`; use `create IMAP mirror`.
 - Prefer concise reason labels in the table while retaining full evidence in the
   structured plan.
+- Provide a case-insensitive free-text filter over source, sender, year,
+  destination and reason so the user can focus on a subset without altering the
+  underlying plan.
+- Show how many grouped moves match the current filter.
