@@ -22,6 +22,7 @@ def discoveryRun(
     thunderbirdRoot: Path,
     clientFactory=imaplib.IMAP4_SSL,
     includeMessages: bool = False,
+    includeInbox: bool = False,
     credentialsFile: Path | None = None,
 ) -> dict:
     """Audit configured accounts independently with TLS authentication."""
@@ -48,6 +49,7 @@ def discoveryRun(
                     account,
                     clientFactory,
                     includeMessages,
+                    includeInbox,
                     credentials,
                     credentialIssue,
                     logger,
@@ -67,6 +69,7 @@ def _accountDiscover(
     account: dict,
     clientFactory,
     includeMessages: bool,
+    includeInbox: bool,
     credentials: dict,
     credentialIssue: str | None,
     logger,
@@ -89,6 +92,12 @@ def _accountDiscover(
             from mailAgent.messageInventory import messagesDiscover
 
             mailbox["inventory"] = messagesDiscover(client, mailbox["folders"])
+        elif includeInbox:
+            from mailAgent.messageInventory import inboxMessagesDiscover
+
+            mailbox["inboxInventory"] = inboxMessagesDiscover(
+                client, mailbox["folders"]
+            )
         return mailbox
     except CredentialError as error:
         return _mailboxFailed(account, str(error))
