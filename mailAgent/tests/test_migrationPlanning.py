@@ -531,7 +531,7 @@ def testCoreNoTextualDependency():
 
 def testAuditPlanningViews(config):
     from mailAgent.auditUi import auditAppBuild
-    from textual.widgets import Button, Static, TabPane, TabbedContent
+    from textual.widgets import Button, DataTable, Static, TabPane, TabbedContent
 
     snapshot = snapshotBuild(config)
     snapshot["migrationPlan"] = migrationPlan(config, snapshot)
@@ -548,8 +548,10 @@ def testAuditPlanningViews(config):
                 "excluded",
             ):
                 assert app.query_one("#" + identity, TabPane)
-            assert len(app.query("#mailbox-3")) == 1
-            assert len(app.query("#mailbox-4")) == 1
+            assert app.query_one("#folders-table", DataTable)
+            assert app.query_one("#filters-table", DataTable)
+            assert app.query_one("#quota-table", DataTable)
+            assert app.query_one("#changes-table", DataTable)
             assert len(app.query("#run-planning")) == 0
             planMenu = app.query_one("#plan-menu", TabbedContent)
             planMenu.active = "proposals"
@@ -962,3 +964,38 @@ def testHideMyEmailRelayDecode():
     ) == "barclaycard@emails.barclaycard.co.uk"
     assert senderRelayDecode("normal@example.com") == "normal@example.com"
     assert senderRelayDecode("odd_at_value@icloud.com") == "odd_at_value@icloud.com"
+
+
+def testInteractivePlanningKeepsInboxInventory(config, tmp_path, monkeypatch):
+    from mailAgent import cli
+    import mailAgent.discovery as discovery
+
+    observed = []
+
+    def scan(accounts, root, includeMessages=False, includeInbox=False):
+        observed.append((includeMessages, includeInbox))
+        snapshot = snapshotBuild(config)
+        for mailbox in snapshot["mailboxes"]:
+            mailbox["inboxInventory"] = dict(
+                complete=True,
+                issues=[],
+                messages=[],
+            )
+        return snapshot
+
+    monkeypatch.setattr(discovery, "discoveryRun", scan)
+    args = cli.parserBuild().parse_args(["--plan"])
+    args.state = tmp_path / "state"
+    cli._snapshotBuild(args, config, Mock())
+    assert observed == [(True, True)]
+
+
+def testFlatpakThunderbirdFallback(tmp_path, monkeypatch):
+    from mailAgent import cli
+
+    home = tmp_path / "home"
+    flatpak = home / ".var/app/org.mozilla.thunderbird_esr/.thunderbird"
+    flatpak.mkdir(parents=True)
+    (flatpak / "profiles.ini").write_text("[Profile0]\\nPath=x\\n")
+    monkeypatch.setattr(Path, "home", lambda: home)
+    assert cli._thunderbirdRoot(home / ".thunderbird") == flatpak
