@@ -1,6 +1,7 @@
 """Packaged CLI entry point."""
 
 import argparse
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import tomllib
@@ -137,11 +138,17 @@ def _snapshotBuild(args: argparse.Namespace, config: dict, logger: Any) -> dict:
         config["mailboxes"], _thunderbirdRoot(args.thunderbird), **options
     )
     snapshot["localArchives"] = _localArchivesDiscover(config)
+    state = args.state.expanduser()
     if args.plan:
         from mailAgent.migrationPlanning import migrationPlan
 
         snapshot["migrationPlan"] = migrationPlan(config, snapshot)
-    state = args.state.expanduser()
+        snapshot["migrationPlan"]["generatedAt"] = datetime.now(timezone.utc).isoformat()
+        _planSave(snapshot["migrationPlan"], state)
+    elif args.json is None:
+        storedPlan = _planLoad(state)
+        if storedPlan is not None:
+            snapshot["migrationPlan"] = storedPlan
     if args.confirm:
         logger.action("persist discovery snapshot")
         snapshotSave(snapshot, state)
@@ -220,3 +227,30 @@ def _localArchivesDiscover(config: dict) -> list[dict]:
             )
         )
     return archives
+
+
+
+def _planPath(state: Path) -> Path:
+    """Return the durable latest-plan path."""
+    return state.expanduser() / "latest-plan.json"
+
+
+def _planSave(plan: dict, state: Path) -> Path:
+    """Persist the latest read-only plan atomically."""
+    path = _planPath(state)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(plan, indent=2) + "\n")
+    temporary.replace(path)
+    return path
+
+
+def _planLoad(state: Path) -> dict | None:
+    """Load the latest stored plan when available."""
+    path = _planPath(state)
+    if not path.is_file():
+        return None
+    plan = json.loads(path.read_text())
+    if not isinstance(plan, dict) or plan.get("schemaVersion") != 1:
+        raise ValueError("Unsupported stored migration plan schema")
+    return plan
