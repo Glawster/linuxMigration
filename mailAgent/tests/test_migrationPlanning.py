@@ -410,7 +410,7 @@ def testReadOnlyInventoryBatching():
     assert {c[0] for c in client.mock_calls} == {"select", "response", "uid"}
     assert all(c.args[0] in ("SEARCH", "FETCH") for c in client.uid.call_args_list)
     assert all(
-        "BODY.PEEK[HEADER.FIELDS (DATE FROM SUBJECT)]" in c.args[2]
+        "BODY.PEEK[HEADER.FIELDS (DATE FROM)]" in c.args[2]
         for c in client.uid.call_args_list
         if c.args[0] == "FETCH"
     )
