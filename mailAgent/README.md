@@ -29,6 +29,7 @@ The example configuration declares five independent mailboxes: Andy and Kathy
 - [REQ-005](project/requirements/features/005-encrypted-credentials-store.md)
 - [REQ-006](project/requirements/features/006-inbox-interest-daily-digest.md)
 - [REQ-007](project/requirements/features/007-unsubscribe-discovery-action.md)
+- [REQ-008](project/requirements/features/008-plan-resolution-approval.md)
 
 ## Install
 
@@ -116,11 +117,11 @@ new organisation.
 - [Discovery phase](documentation/discoveryPhase.md)
 - [REQ-003 - Existing mailbox and filter discovery](project/requirements/features/003-mailbox-discovery.md)
 
-## Inbox interest
+## Inbox Digest
 
-The normal Mailbox Audit TUI includes an **Inbox Interest** tab. It groups
+The normal Mailbox Audit TUI includes an **Inbox Digest** tab. It groups
 current Inbox messages by sender. Select a sender and press `Space` to toggle
-`✓ Interesting`.
+`✓ Sender of interest`.
 
 Interesting senders are stored in
 `~/.config/mailAgent/interesting.json` and are intended to drive a future
@@ -141,3 +142,23 @@ personal local archives. IMAP rows are labelled `IMAP`; local archive rows are
 labelled by archive name, such as `myMail` or `kathyMail`. This gives one
 place to see both the live and long-term stores without exposing filesystem
 paths.
+
+
+## Plan resolution
+
+The next planning phase is governed by
+[REQ-008](project/requirements/features/008-plan-resolution-approval.md).
+
+The first increment allows an unresolved sender in **Plan > Review Queue** to be
+assigned to an existing canonical archive folder. Select the review row, choose
+the canonical folder and use **Use folder for selected sender**. mailAgent stores
+the mailbox-specific decision in
+`~/.config/mailAgent/plan-resolution.json`, then refreshes the read-only plan.
+
+The decision applies to subsequent messages from that sender in the same source
+mailbox and is identified in proposals as an explicit user sender decision.
+Saving a resolution never moves or modifies mail.
+
+Sent/system-folder policy decisions and approval of demand-driven IMAP mirror
+folders remain the following increments of REQ-008. Migration execution remains
+disabled.
