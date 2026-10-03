@@ -266,19 +266,42 @@ def _folderDisplay(folder: str) -> str:
 
 
 def _foldersPane(snapshot: dict) -> ComposeResult:
-    """Show observed folders as a user-facing table."""
+    """Show IMAP and configured local archive folders in one user-facing table."""
     table = DataTable(id="folders-table")
-    table.add_columns("Mailbox", "Folder", "Messages", "Unseen", "Type")
+    table.add_columns("Mailbox", "Store", "Folder", "Messages", "Unseen", "Type")
     rows = 0
     for mailbox in snapshot["mailboxes"]:
         for folder in mailbox.get("folders", []):
             rows += 1
             table.add_row(
                 Text(mailbox["id"]),
+                Text("IMAP"),
                 Text(_folderDisplay(folder["path"])),
                 Text(str(folder.get("messages", ""))),
                 Text(str(folder.get("unseen", ""))),
                 Text(_folderKindDisplay(folder)),
+            )
+    for archive in snapshot.get("localArchives", []):
+        if not archive.get("available"):
+            rows += 1
+            table.add_row(
+                Text(archive["mailbox"]),
+                Text(archive["name"]),
+                Text("(archive unavailable)"),
+                Text(""),
+                Text(""),
+                Text("Local archive"),
+            )
+            continue
+        for folder in archive.get("folders", []):
+            rows += 1
+            table.add_row(
+                Text(archive["mailbox"]),
+                Text(archive["name"]),
+                Text(folder["path"]),
+                Text(""),
+                Text(""),
+                Text("Local archive"),
             )
     yield table
     if not rows:
