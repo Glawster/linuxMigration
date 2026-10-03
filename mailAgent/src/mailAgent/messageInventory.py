@@ -2,7 +2,7 @@
 
 import re
 from email.parser import BytesParser
-from email.utils import parsedate_to_datetime
+from email.utils import getaddresses, parsedate_to_datetime
 from typing import Any
 
 ## inventory
@@ -59,9 +59,21 @@ def messageParse(metadata: bytes, header: bytes, folder: str, uidValidity: str) 
     if not uid:
         raise ValueError("Missing UID in FETCH response")
     result = dict(
-        folder=folder, uid=uid[1].decode(), uidValidity=uidValidity, year=None
+        folder=folder,
+        uid=uid[1].decode(),
+        uidValidity=uidValidity,
+        year=None,
+        sender=None,
     )
-    dates = BytesParser().parsebytes(header).get_all("Date", [])
+    parsed = BytesParser().parsebytes(header)
+    dates = parsed.get_all("Date", [])
+    senders = [
+        address.lower()
+        for _, address in getaddresses(parsed.get_all("From", []))
+        if address
+    ]
+    if len(senders) == 1:
+        result["sender"] = senders[0]
     try:
         if len(dates) != 1:
             raise ValueError("Missing or duplicate Date header")
@@ -93,7 +105,7 @@ def _folderInspect(client: Any, folder: dict, batchSize: int, result: dict) -> N
     for start in range(0, len(identifiers), batchSize):
         batch = identifiers[start : start + batchSize]
         status, rows = client.uid(
-            "FETCH", b",".join(batch).decode(), "(UID BODY.PEEK[HEADER.FIELDS (DATE)])"
+            "FETCH", b",".join(batch).decode(), "(UID BODY.PEEK[HEADER.FIELDS (DATE FROM)])"
         )
         if status != "OK":
             raise ValueError("UID FETCH failed")
