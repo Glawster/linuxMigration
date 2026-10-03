@@ -343,14 +343,19 @@ def _planningRow(key: str, entry: dict) -> tuple:
         return (
             entry["mailbox"],
             entry["canonical"],
-            _folderDisplay(entry["imap"]) if entry["imap"] else "Unavailable",
+            _imapFolderDisplay(entry["imap"]) if entry["imap"] else "Unavailable",
             status,
         )
     if key == "proposals":
         return _proposalRow(entry, {})
     if key == "reviewQueue":
         source = entry.get("source", {})
-        folder = _folderDisplay(source.get("folder", entry.get("folder", "")))
+        rawFolder = source.get("folder", entry.get("folder", ""))
+        folder = (
+            _imapFolderDisplay(rawFolder)
+            if source or entry.get("systemFolder")
+            else str(rawFolder)
+        )
         if "messageCount" in entry:
             count = entry["messageCount"]
             folder += f" ({count if count is not None else 'unknown'} messages)"
@@ -398,8 +403,12 @@ def _proposalRowsFiltered(plan: dict, value: str) -> list[tuple]:
 def _proposalRow(entry: dict, stores: dict) -> tuple:
     source, destination = entry["source"], entry["destination"]
     sender = source.get("sender", "Unknown sender")
-    sourceText = f'{source["mailbox"]} IMAP/{_folderDisplay(source["folder"])}'
-    destinationFolder = _folderDisplay(destination.get("folder", ""))
+    sourceText = f'{source["mailbox"]} IMAP/{_imapFolderDisplay(source["folder"])}'
+    destinationFolder = (
+        str(destination.get("folder", ""))
+        if destination.get("kind") == "local"
+        else _imapFolderDisplay(destination.get("folder", ""))
+    )
     if destination.get("kind") == "local":
         store = stores.get(destination.get("mailbox"), destination.get("mailbox", "Archive"))
         target = f"{store}/{destinationFolder}"
@@ -435,8 +444,19 @@ def _proposalRow(entry: dict, stores: dict) -> tuple:
     )
 
 
+def _imapFolderDisplay(folder: str) -> str:
+    """Decode IMAP modified UTF-7 and render hierarchy with slashes."""
+    from mailAgent.migrationPlanning import _imapNameDecode
+
+    try:
+        decoded = _imapNameDecode(folder)
+    except (ValueError, UnicodeError):
+        decoded = folder
+    return decoded.replace(".", "/")
+
+
 def _folderDisplay(folder: str) -> str:
-    """Render IMAP hierarchy in the user-facing slash form."""
+    """Render a non-encoded hierarchy in the user-facing slash form."""
     return folder.replace(".", "/")
 
 
@@ -454,7 +474,7 @@ def _foldersPane(snapshot: dict) -> ComposeResult:
             table.add_row(
                 Text(mailbox["id"]),
                 Text("IMAP"),
-                Text(_folderDisplay(folder["path"])),
+                Text(_imapFolderDisplay(folder["path"])),
                 Text(str(folder.get("messages", ""))),
                 Text(str(folder.get("unseen", ""))),
                 Text(_folderKindDisplay(folder)),
@@ -653,13 +673,13 @@ def _destinationDisplay(value: str) -> str:
 
         try:
             parsed = urlsplit(value)
-            return _folderDisplay(unquote(parsed.path.lstrip("/")))
+            return _imapFolderDisplay(unquote(parsed.path.lstrip("/")))
         except ValueError:
             return value
-    return _folderDisplay(value)
+    return _imapFolderDisplay(value)
 
 
 def _identityDisplay(identity) -> tuple[str, str]:
     if isinstance(identity, (list, tuple)) and len(identity) >= 2:
-        return str(identity[0]), _folderDisplay(str(identity[1]))
+        return str(identity[0]), _imapFolderDisplay(str(identity[1]))
     return "", str(identity)
