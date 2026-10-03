@@ -5,7 +5,7 @@ from email.utils import getaddresses
 
 
 _RELAY_SUFFIX = re.compile(
-    r"_(?=[a-z0-9]*\\d)[a-z0-9]{6,}_(?=[a-z0-9]*\\d)[a-z0-9]{6,}$",
+    r"_(?=[a-z0-9]*\d)[a-z0-9]{6,}_(?=[a-z0-9]*\d)[a-z0-9]{6,}$",
     re.IGNORECASE,
 )
 
