@@ -5,6 +5,7 @@ from pathlib import Path
 
 from organiseMyProjects.logUtils import getLogger
 
+from mailAgent.archiveClassification import archiveSenderIndex, senderClassify
 from mailAgent.archiveDiscovery import archiveDiscover
 from mailAgent.configuration import configValidate
 from mailAgent.messageInventory import folderSystemKind
@@ -29,10 +30,13 @@ def migrationPlan(config: dict, snapshot: dict) -> dict:
     )
     accounts = {account["id"]: account for account in config["mailboxes"]}
     observed = {mailbox["id"]: mailbox for mailbox in snapshot["mailboxes"]}
-    archives, mappings = {}, {}
+    archives, mappings, senderIndexes = {}, {}, {}
     for account in accounts.values():
         if account["role"] == "personal":
             _personalDiscover(account, observed, archives, mappings, plan)
+            senderIndexes[account["id"]] = archiveSenderIndex(
+                archives[account["id"]]
+            )
     for account in accounts.values():
         if account["role"] in ("shared", "support"):
             plan["excluded"].append(
@@ -47,7 +51,15 @@ def migrationPlan(config: dict, snapshot: dict) -> dict:
                 )
             )
             continue
-        _accountPlan(account, accounts, observed, archives, mappings, plan)
+        _accountPlan(
+            account,
+            accounts,
+            observed,
+            archives,
+            mappings,
+            senderIndexes,
+            plan,
+        )
     messages = [
         m
         for identity, mailbox in observed.items()
@@ -149,6 +161,7 @@ def _accountPlan(
     observed: dict,
     archives: dict,
     mappings: dict,
+    senderIndexes: dict,
     plan: dict,
 ) -> None:
     mailbox = observed.get(account["id"])
@@ -184,6 +197,7 @@ def _accountPlan(
             sourceFolders,
             archive,
             mappings[target["id"]],
+            senderIndexes.get(target["id"], {}),
             plan,
         )
 
@@ -230,8 +244,9 @@ def _messageMapping(
     sourceFolders: dict,
     archive: dict,
     mappings: list,
+    senderIndex: dict,
     liveYear: int,
-) -> dict:
+) -> tuple[dict, dict | None]:
     if not _messageYearValid(message, liveYear):
         raise ValueError(message.get("issue", "Unknown or future message year"))
     folder = sourceFolders.get(message["folder"])
@@ -240,12 +255,17 @@ def _messageMapping(
     canonical = _canonicalResolve(account, folder)
     candidates = [mapping for mapping in mappings if mapping["canonical"] == canonical]
     if (
-        len(candidates) != 1
-        or not archive["available"]
-        or not archive.get("complete", True)
+        len(candidates) == 1
+        and archive["available"]
+        and archive.get("complete", True)
     ):
+        return candidates[0], None
+    if not archive["available"] or not archive.get("complete", True):
         raise ValueError("No unambiguous canonical archive folder")
-    return candidates[0]
+    classification = senderClassify(message.get("sender"), mappings, senderIndex)
+    if not classification:
+        raise ValueError("No unambiguous canonical archive folder")
+    return classification["mapping"], classification
 
 
 def _messagePlan(
@@ -255,6 +275,7 @@ def _messagePlan(
     sourceFolders: dict,
     archive: dict,
     mappings: list,
+    senderIndex: dict,
     plan: dict,
 ) -> None:
     source = {
@@ -262,8 +283,14 @@ def _messagePlan(
         **{key: message[key] for key in ("folder", "uid", "uidValidity")},
     }
     try:
-        mapping = _messageMapping(
-            account, message, sourceFolders, archive, mappings, plan["liveYear"]
+        mapping, classification = _messageMapping(
+            account,
+            message,
+            sourceFolders,
+            archive,
+            mappings,
+            senderIndex,
+            plan["liveYear"],
         )
         destination, action = _destinationBuild(
             source, target, message["year"], plan["liveYear"], mapping, archive
@@ -285,6 +312,14 @@ def _messagePlan(
             requiresConfirmation=action != "retain",
             verificationRequired=action != "retain",
             sourceRemovalAllowed=False,
+            classification=(
+                {
+                    key: classification[key]
+                    for key in ("method", "confidence", "reason", "evidenceCount")
+                }
+                if classification
+                else None
+            ),
         )
     )
 
