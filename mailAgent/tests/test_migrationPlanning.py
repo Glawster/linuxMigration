@@ -10,10 +10,12 @@ from unittest.mock import Mock
 import pytest
 from organiseMyProjects.logUtils import setApplication
 
+from mailAgent.archiveClassification import archiveSenderIndex, senderClassify
 from mailAgent.archiveDiscovery import archiveDiscover
 from mailAgent.configuration import configValidate
 from mailAgent.discovery import discoveryRun, snapshotSave
-from mailAgent.messageInventory import messageParse, messagesDiscover
+from mailAgent.interest import interestIs, interestLoad, interestSet
+from mailAgent.messageInventory import inboxMessagesDiscover, messageParse, messagesDiscover
 from mailAgent.migrationPlanning import folderMappingsBuild, migrationPlan
 from mailAgent.planSummary import planSummaryLines
 
@@ -408,7 +410,7 @@ def testReadOnlyInventoryBatching():
     assert {c[0] for c in client.mock_calls} == {"select", "response", "uid"}
     assert all(c.args[0] in ("SEARCH", "FETCH") for c in client.uid.call_args_list)
     assert all(
-        "BODY.PEEK[HEADER.FIELDS (DATE)]" in c.args[2]
+        "BODY.PEEK[HEADER.FIELDS (DATE FROM SUBJECT)]" in c.args[2]
         for c in client.uid.call_args_list
         if c.args[0] == "FETCH"
     )
@@ -505,10 +507,12 @@ def testDiscoverySkipsSharedSupportInventory(config, tmp_path, monkeypatch):
 def testCoreNoTextualDependency():
     root = Path(__file__).parents[1] / "src/mailAgent"
     for name in (
+        "archiveClassification",
         "archiveDiscovery",
         "configuration",
         "messageInventory",
         "migrationPlanning",
+        "interest",
         "planSummary",
     ):
         tree = ast.parse((root / (name + ".py")).read_text())
@@ -653,7 +657,7 @@ def testCliPlanningPersistenceBoundary(config, tmp_path, monkeypatch, confirm):
     snapshot = snapshotBuild(config)
     calls = []
 
-    def scan(accounts, root, includeMessages=False):
+    def scan(accounts, root, includeMessages=False, includeInbox=False):
         calls.append(includeMessages)
         return snapshot
 
@@ -701,7 +705,7 @@ def testCliExplicitJsonFile(config, tmp_path, monkeypatch):
     monkeypatch.setattr(
         discovery,
         "discoveryRun",
-        lambda accounts, root, includeMessages=False: snapshotBuild(config),
+        lambda accounts, root, includeMessages=False, includeInbox=False: snapshotBuild(config),
     )
     outputPath = tmp_path / "exports" / "plan.json"
     monkeypatch.setattr(
@@ -783,3 +787,54 @@ def testSentRequiresExplicitMapping(config):
     config["mailboxes"][2]["folderMappings"] = {"INBOX.Sent": "Orders/Shop"}
     plan = migrationPlan(config, snapshot)
     assert len([p for p in plan["proposals"] if p["source"]["mailbox"] == "old"]) == 2
+
+
+
+def testArchiveSenderClassificationAndPaypalContains(config):
+    root = Path(config["mailboxes"][0]["localArchive"])
+    finance = root / "Finance.sbd"
+    finance.mkdir()
+    paypal = finance / "PayPal"
+    paypal.write_bytes(
+        b"From sender@example Tue Jan 1 00:00:00 2025\n"
+        b"From: service@paypal.com\n"
+        b"Subject: receipt\n\n"
+        b"body\n"
+        b"From sender@example Tue Jan 2 00:00:00 2025\n"
+        b"From: service@paypal.com\n"
+        b"Subject: payment\n\n"
+        b"body\n"
+    )
+    archive = archiveDiscover(root)
+    mappings = folderMappingsBuild(
+        config["mailboxes"][0],
+        dict(folders=[dict(path="INBOX", delimiter=".", attributes=[])]),
+        archive,
+    )
+    index = archiveSenderIndex(archive)
+    exact = senderClassify("service@paypal.com", mappings, index)
+    assert exact["mapping"]["canonical"] == "Finance/PayPal"
+    assert exact["method"] == "archiveSenderExact"
+
+    contains = senderClassify("notice@paypal-status.example", mappings, {})
+    assert contains["mapping"]["canonical"] == "Finance/PayPal"
+    assert contains["method"] == "senderContainsFolderName"
+
+
+def testInboxInventoryCapturesSenderAndSubject():
+    client = inventoryClient()
+    inventory = inboxMessagesDiscover(
+        client, [dict(path="INBOX", delimiter=".", attributes=[])]
+    )
+    assert inventory["complete"]
+    assert len(inventory["messages"]) == 2
+
+
+def testInterestingSenderPreferences(tmp_path):
+    path = tmp_path / "interesting.json"
+    assert not interestIs(interestLoad(path), "andy", "news@example.com")
+    data = interestSet("andy", "News@Example.com", True, path)
+    assert interestIs(data, "andy", "news@example.com")
+    assert path.stat().st_mode & 0o077 == 0
+    data = interestSet("andy", "news@example.com", False, path)
+    assert not interestIs(data, "andy", "news@example.com")
