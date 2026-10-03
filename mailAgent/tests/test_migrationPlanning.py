@@ -999,3 +999,36 @@ def testFlatpakThunderbirdFallback(tmp_path, monkeypatch):
     (flatpak / "profiles.ini").write_text("[Profile0]\\nPath=x\\n")
     monkeypatch.setattr(Path, "home", lambda: home)
     assert cli._thunderbirdRoot(home / ".thunderbird") == flatpak
+
+
+def testStoredPlanPersistence(tmp_path):
+    from mailAgent import cli
+
+    plan = {"schemaVersion": 1, "generatedAt": "2026-10-03T12:00:00+00:00"}
+    path = cli._planSave(plan, tmp_path)
+    assert path == tmp_path / "latest-plan.json"
+    assert cli._planLoad(tmp_path) == plan
+
+
+def testPlanRefreshButton(config):
+    from mailAgent.auditUi import auditAppBuild
+    from textual.widgets import Button, TabbedContent
+
+    snapshot = snapshotBuild(config)
+    snapshot["migrationPlan"] = migrationPlan(config, snapshot)
+    snapshot["migrationPlan"]["generatedAt"] = "2026-10-03T12:00:00+00:00"
+
+    async def uiInspect():
+        app = auditAppBuild(snapshot)
+        async with app.run_test(size=(120, 40)) as pilot:
+            planMenu = app.query_one("#plan-menu", TabbedContent)
+            planMenu.active = "planSummary"
+            await pilot.pause()
+            button = app.query_one("#refresh-planning", Button)
+            assert button.label == "Refresh planning session"
+            button.focus()
+            await pilot.press("enter")
+            await pilot.pause()
+        return app.return_value
+
+    assert asyncio.run(uiInspect()) == "runPlanning"
