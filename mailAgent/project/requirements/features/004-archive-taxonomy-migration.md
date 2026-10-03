@@ -181,8 +181,8 @@ mailboxes merely to review the previous plan.
 - Store the latest migration plan in `latest-plan.json`.
 - Loading the normal TUI should reuse that stored plan when one exists.
 - Show when the stored plan was generated.
-- When no plan exists, show `Run planning session`.
-- When a stored/current plan exists, show `Refresh planning session` instead.
+- When no plan exists, show `Refresh Plan`.
+- When a stored/current plan exists, show `Refresh Plan`.
 - Refresh performs a fresh read-only discovery and replaces the stored plan.
 - Persisting or refreshing a plan must not enable migration execution and must
   not require `--confirm`.
