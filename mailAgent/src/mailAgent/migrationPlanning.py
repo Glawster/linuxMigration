@@ -282,6 +282,8 @@ def _messagePlan(
         "mailbox": account["id"],
         **{key: message[key] for key in ("folder", "uid", "uidValidity")},
     }
+    if message.get("sender"):
+        source["sender"] = message["sender"]
     try:
         mapping, classification = _messageMapping(
             account,
