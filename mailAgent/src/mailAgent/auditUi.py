@@ -63,7 +63,7 @@ def auditAppBuild(snapshot: dict) -> App:
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
             """Return a planning request to the CLI when the Plan button is used."""
-            if event.button.id == "run-planning":
+            if event.button.id in ("run-planning", "refresh-planning"):
                 self.exit("runPlanning")
 
     return MailboxAudit()
@@ -152,6 +152,18 @@ def _planPane(plan: dict | None) -> ComposeResult:
         with TabbedContent(id="plan-menu"):
             with TabPane("Summary", id="planSummary"):
                 with VerticalScroll():
+                    generated = plan.get("generatedAt")
+                    if generated:
+                        yield Static(
+                            "Stored plan from " + generated,
+                            id="plan-generated",
+                            markup=False,
+                        )
+                    yield Button(
+                        "Refresh planning session",
+                        id="refresh-planning",
+                        variant="primary",
+                    )
                     yield Static(
                         "\n".join(planSummaryLines(plan)),
                         id="plan-summary",
