@@ -100,7 +100,10 @@ def parserBuild() -> argparse.ArgumentParser:
 def _snapshotBuild(args: argparse.Namespace, config: dict, logger: Any) -> dict:
     from mailAgent.discovery import discoveryRun, snapshotCompare, snapshotSave
 
-    options = {"includeMessages": args.plan}
+    options = {
+        "includeMessages": args.plan,
+        "includeInbox": not args.plan and args.json is None,
+    }
     if config["general"].get("credentialsFile"):
         options["credentialsFile"] = Path(config["general"]["credentialsFile"])
     snapshot = discoveryRun(
