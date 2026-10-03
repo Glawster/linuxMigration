@@ -1,5 +1,6 @@
 """Presentation only for the core audit and planning models."""
 
+from pathlib import Path
 from rich.text import Text
 from textual.binding import Binding
 from textual.app import App, ComposeResult
@@ -241,8 +242,8 @@ def _planningPanes(plan: dict) -> ComposeResult:
         (
             "Proposed Moves",
             "proposals",
-            "Review what mailAgent proposes; execution is disabled",
-            ("Mailbox", "Sender", "Year", "Action", "Destination", "Reason"),
+            "Grouped for review; individual message proposals remain in the plan",
+            ("From", "Sender", "#", "Year", "To", "Why"),
         ),
         (
             "Review Queue",
@@ -265,8 +266,13 @@ def _planningPanes(plan: dict) -> ComposeResult:
                 cursor_type="row" if key == "reviewQueue" else "cell",
             )
             table.add_columns(*columns)
-            for entry in plan[key]:
-                table.add_row(*(Text(str(cell)) for cell in _planningRow(key, entry)))
+            entries = (
+                _proposalRows(plan)
+                if key == "proposals"
+                else [_planningRow(key, entry) for entry in plan[key]]
+            )
+            for row in entries:
+                table.add_row(*(Text(str(cell)) for cell in row))
             yield table
             if key == "reviewQueue":
                 options = [
@@ -310,39 +316,7 @@ def _planningRow(key: str, entry: dict) -> tuple:
             status,
         )
     if key == "proposals":
-        source, destination = entry["source"], entry["destination"]
-        sender = source.get("sender", "Unknown sender")
-        destinationFolder = _folderDisplay(destination.get("folder", ""))
-        target = (
-            f'{destination["mailbox"]}: {destinationFolder}'
-            if destination.get("mailbox")
-            else destinationFolder
-        )
-        action = {
-            "migrate": "Move",
-            "archive": "Archive",
-            "retain": "Keep",
-        }.get(entry["action"], entry["action"].title())
-        classification = entry.get("classification")
-        reason = (
-            classification.get("reason", "")
-            if classification
-            else (
-                "Already in the correct folder"
-                if entry["action"] == "retain"
-                else "Current folder matches archive taxonomy"
-            )
-        )
-        if entry["requiresFolderCreation"]:
-            reason = (reason + "; create destination folder").strip("; ")
-        return (
-            source["mailbox"],
-            sender,
-            entry["year"],
-            action,
-            target,
-            reason,
-        )
+        return _proposalRow(entry, {})
     if key == "reviewQueue":
         source = entry.get("source", {})
         folder = _folderDisplay(source.get("folder", entry.get("folder", "")))
@@ -354,6 +328,64 @@ def _planningRow(key: str, entry: dict) -> tuple:
             folder = f"{folder} · {sender}" if folder else sender
         return entry["mailbox"], folder, entry["reason"]
     return entry["mailbox"], entry["role"], entry["reason"]
+
+
+def _proposalRows(plan: dict) -> list[tuple]:
+    """Group identical message-level proposals into compact review rows."""
+    stores = {
+        archive["mailbox"]: _storeDisplay(Path(archive["root"]).name)
+        for archive in plan.get("archives", [])
+        if archive.get("mailbox") and archive.get("root")
+    }
+    grouped = {}
+    for entry in plan.get("proposals", []):
+        row = _proposalRow(entry, stores)
+        key = row[:2] + row[3:]
+        grouped[key] = grouped.get(key, 0) + 1
+    return [
+        (key[0], key[1], count, *key[2:])
+        for key, count in sorted(grouped.items())
+    ]
+
+
+def _proposalRow(entry: dict, stores: dict) -> tuple:
+    source, destination = entry["source"], entry["destination"]
+    sender = source.get("sender", "Unknown sender")
+    sourceText = f'{source["mailbox"]} IMAP/{_folderDisplay(source["folder"])}'
+    destinationFolder = _folderDisplay(destination.get("folder", ""))
+    if destination.get("kind") == "local":
+        store = stores.get(destination.get("mailbox"), destination.get("mailbox", "Archive"))
+        target = f"{store}/{destinationFolder}"
+    else:
+        target = f'{destination.get("mailbox", "")} IMAP/{destinationFolder}'.strip()
+
+    classification = entry.get("classification")
+    if classification:
+        method = classification.get("method")
+        evidence = classification.get("evidenceCount")
+        reason = {
+            "archiveSenderExact": "Archive history",
+            "senderContainsFolderName": "Folder-name match",
+            "userSenderDecision": "User decision",
+        }.get(method, classification.get("reason", "Inferred"))
+        if evidence and method == "archiveSenderExact":
+            reason += f" ({evidence})"
+    else:
+        reason = (
+            "Already correctly filed"
+            if entry["action"] == "retain"
+            else "Current folder matches archive"
+        )
+    if entry.get("requiresFolderCreation"):
+        reason += "; create IMAP mirror"
+    return (
+        sourceText,
+        sender,
+        1,
+        entry["year"],
+        target,
+        reason,
+    )
 
 
 def _folderDisplay(folder: str) -> str:
