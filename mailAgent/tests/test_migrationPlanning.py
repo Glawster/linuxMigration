@@ -951,5 +951,8 @@ def testHideMyEmailRelayDecode():
     assert senderRelayDecode(
         "community_at_warp_dev_x9b7aab5kmvyab_58rq7807@icloud.com"
     ) == "community@warp.dev"
+    assert senderRelayDecode(
+        "008a0a309fac5a49235_at_members_ebay_com_x9b7d412kmvyed_ddrq7807@icloud.com"
+    ) == "*@members.ebay.com"
     assert senderRelayDecode("normal@example.com") == "normal@example.com"
     assert senderRelayDecode("odd_at_value@icloud.com") == "odd_at_value@icloud.com"
