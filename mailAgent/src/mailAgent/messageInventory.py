@@ -20,7 +20,7 @@ def messagesDiscover(client: Any, folders: list[dict], batchSize: int = 200) -> 
         if folderSystemKind(folder) in ("trash", "junk", "drafts"):
             continue
         try:
-            _folderInspect(client, folder, batchSize, result)
+            _folderInspect(client, folder, batchSize, result, "DATE FROM")
         except Exception:
             result["complete"] = False
             result["issues"].append(
@@ -45,7 +45,7 @@ def inboxMessagesDiscover(
     result = dict(messages=[], issues=[], complete=True)
     for folder in inbox:
         try:
-            _folderInspect(client, folder, batchSize, result)
+            _folderInspect(client, folder, batchSize, result, "DATE FROM SUBJECT")
         except Exception:
             result["complete"] = False
             result["issues"].append(
@@ -120,7 +120,13 @@ def messageParse(metadata: bytes, header: bytes, folder: str, uidValidity: str) 
 ## utilities
 
 
-def _folderInspect(client: Any, folder: dict, batchSize: int, result: dict) -> None:
+def _folderInspect(
+    client: Any,
+    folder: dict,
+    batchSize: int,
+    result: dict,
+    headerFields: str = "DATE FROM",
+) -> None:
     path = folder["path"]
     quoted = '"' + path.replace("\\", "\\\\").replace('"', '\\"') + '"'
     status, _ = client.select(quoted, readonly=True)
@@ -140,7 +146,7 @@ def _folderInspect(client: Any, folder: dict, batchSize: int, result: dict) -> N
         status, rows = client.uid(
             "FETCH",
             b",".join(batch).decode(),
-            "(UID BODY.PEEK[HEADER.FIELDS (DATE FROM SUBJECT)])",
+            f"(UID BODY.PEEK[HEADER.FIELDS ({headerFields})])",
         )
         if status != "OK":
             raise ValueError("UID FETCH failed")
