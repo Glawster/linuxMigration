@@ -220,7 +220,9 @@ when this increment was implemented.
 Run `mailAgent` for an audit preview. Run `mailAgent --confirm` to persist
 `latest.json` and a unique historical snapshot. The shared safe-by-default CLI
 convention applies to snapshot writes; neither command changes mail or
-Thunderbird. `mailAgent --json` provides noninteractive output. Overrides are
+Thunderbird. `mailAgent --json` writes machine-readable output to a file rather
+than stdout; with no path it uses the configured state directory. `mailAgent
+--plan` presents its human-readable summary through `logUtils`. Overrides are
 available through `--config`, `--thunderbird`, and `--state`.
 
 The version-1 snapshot records mailbox identities, folders, quota resources,
