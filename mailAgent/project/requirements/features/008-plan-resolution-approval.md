@@ -112,3 +112,22 @@ increment is implemented.
 - explicit sender decisions are identifiable in the generated proposal;
 - no email or Thunderbird state changes when a decision is saved;
 - malformed resolution storage is reported safely rather than silently used.
+
+
+## Proposed Moves presentation
+
+The Proposed Moves view must remain compact enough to review comfortably in a
+terminal.
+
+- Group visually identical message-level proposals and show a message count.
+- Keep the individual proposals in the structured plan for later execution.
+- Show the source explicitly as an IMAP location, for example
+  `andy IMAP/INBOX`.
+- Show local archive destinations using the archive store name, for example
+  `myMail/Finance/Mark Bates`.
+- Show live destinations explicitly as IMAP, for example
+  `andy IMAP/Finance/Mark Bates`.
+- Do not describe a missing live folder generically as `create destination
+  folder`; use `create IMAP mirror`.
+- Prefer concise reason labels in the table while retaining full evidence in the
+  structured plan.
