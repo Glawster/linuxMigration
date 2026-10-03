@@ -1032,3 +1032,43 @@ def testPlanRefreshButton(config):
         return app.return_value
 
     assert asyncio.run(uiInspect()) == "runPlanning"
+
+
+
+def testConflictRowsAreUserFacing():
+    from mailAgent.auditUi import _conflictRows
+
+    snapshot = dict(
+        sources=[
+            dict(
+                path="/private/profile/msgFilterRules.dat",
+                mailboxIds=["andy"],
+                filters=[dict(name="Amazon Orders")],
+            )
+        ],
+        conflicts=[
+            dict(
+                label="Warning/Conflict",
+                filter="/private/profile/msgFilterRules.dat#0",
+                message="Unresolved or ambiguous destination",
+                target="imap://andy@example/Shopping%2FAmazon",
+            ),
+            dict(
+                label="Warning/Conflict",
+                filter="/private/profile/msgFilterRules.dat#0",
+                message="Unresolved or ambiguous destination",
+                target="imap://andy@example/Shopping%2FAmazon",
+            ),
+        ],
+    )
+    rows = _conflictRows(snapshot)
+    assert rows == [
+        (
+            "andy",
+            "Amazon Orders",
+            "Warning",
+            "Unresolved or ambiguous destination",
+            "Shopping/Amazon",
+        )
+    ]
+    assert "/private/profile" not in " ".join(rows[0])
