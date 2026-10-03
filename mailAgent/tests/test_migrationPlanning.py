@@ -530,7 +530,7 @@ def testCoreNoTextualDependency():
 
 def testAuditPlanningViews(config):
     from mailAgent.auditUi import auditAppBuild
-    from textual.widgets import Static, TabPane, TabbedContent
+    from textual.widgets import Button, Static, TabPane, TabbedContent
 
     snapshot = snapshotBuild(config)
     snapshot["migrationPlan"] = migrationPlan(config, snapshot)
@@ -540,6 +540,7 @@ def testAuditPlanningViews(config):
         async with app.run_test(size=(120, 40)) as pilot:
             for identity in (
                 "plan",
+                "planSummary",
                 "mappings",
                 "proposals",
                 "reviewQueue",
@@ -548,10 +549,16 @@ def testAuditPlanningViews(config):
                 assert app.query_one("#" + identity, TabPane)
             assert len(app.query("#mailbox-3")) == 1
             assert len(app.query("#mailbox-4")) == 1
-            app.query_one(TabbedContent).active = "plan"
+            assert len(app.query("#run-planning")) == 0
+            planMenu = app.query_one("#plan-menu", TabbedContent)
+            planMenu.active = "proposals"
             await pilot.pause()
-            assert app.query_one(TabbedContent).active == "plan"
-            assert "Messages scanned:" in str(app.query_one("#plan-summary", Static).render())
+            assert planMenu.active == "proposals"
+            planMenu.active = "planSummary"
+            await pilot.pause()
+            assert "Messages scanned:" in str(
+                app.query_one("#plan-summary", Static).render()
+            )
 
     asyncio.run(uiInspect())
 
@@ -884,3 +891,51 @@ def testPlanButtonReturnsPlanningRequest(config):
         return app.return_value
 
     assert asyncio.run(uiInspect()) == "runPlanning"
+
+
+def testPlanningRowsAreUserFacing():
+    from mailAgent.auditUi import _planningRow
+
+    mapping = dict(
+        mailbox="andy",
+        canonical="Finance/PayPal",
+        local="/private/local/store",
+        imap="Finance.PayPal",
+        imapExists=False,
+    )
+    assert _planningRow("mappings", mapping) == (
+        "andy",
+        "Finance/PayPal",
+        "Finance/PayPal",
+        "Folder proposed",
+    )
+
+    proposal = dict(
+        action="migrate",
+        source=dict(
+            mailbox="andy",
+            folder="INBOX",
+            uid="123",
+            uidValidity="42",
+            sender="service@paypal.com",
+        ),
+        year=2026,
+        destination=dict(
+            kind="imap",
+            mailbox="andy",
+            folder="Finance.PayPal",
+            exists=False,
+        ),
+        requiresFolderCreation=True,
+        classification=dict(reason="Archived PayPal sender history"),
+    )
+    row = _planningRow("proposals", proposal)
+    assert row[:5] == (
+        "andy",
+        "service@paypal.com",
+        2026,
+        "Move",
+        "andy: Finance/PayPal",
+    )
+    assert "UID" not in " ".join(str(value) for value in row)
+    assert "create destination folder" in row[5]
