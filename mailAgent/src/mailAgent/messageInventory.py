@@ -3,8 +3,10 @@
 import re
 from email.header import decode_header, make_header
 from email.parser import BytesParser
-from email.utils import getaddresses, parsedate_to_datetime
+from email.utils import parsedate_to_datetime
 from typing import Any
+
+from mailAgent.senderAddress import senderNormalize
 
 ## inventory
 
@@ -94,13 +96,9 @@ def messageParse(metadata: bytes, header: bytes, folder: str, uidValidity: str) 
     )
     parsed = BytesParser().parsebytes(header)
     dates = parsed.get_all("Date", [])
-    senders = [
-        address.lower()
-        for _, address in getaddresses(parsed.get_all("From", []))
-        if address
-    ]
-    if len(senders) == 1:
-        result["sender"] = senders[0]
+    sender = senderNormalize(", ".join(parsed.get_all("From", [])))
+    if sender:
+        result["sender"] = sender
     subject = parsed.get("Subject")
     if subject:
         try:
