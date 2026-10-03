@@ -129,12 +129,12 @@ def _snapshotBuild(args: argparse.Namespace, config: dict, logger: Any) -> dict:
 
     options = {
         "includeMessages": args.plan,
-        "includeInbox": not args.plan and args.json is None,
+        "includeInbox": args.json is None,
     }
     if config["general"].get("credentialsFile"):
         options["credentialsFile"] = Path(config["general"]["credentialsFile"])
     snapshot = discoveryRun(
-        config["mailboxes"], args.thunderbird.expanduser(), **options
+        config["mailboxes"], _thunderbirdRoot(args.thunderbird), **options
     )
     if args.plan:
         from mailAgent.migrationPlanning import migrationPlan
@@ -173,3 +173,21 @@ def _jsonWrite(snapshot: dict, path: Path) -> None:
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(json.dumps(snapshot, indent=2) + "\n")
     temporary.replace(path)
+
+
+
+def _thunderbirdRoot(configured: Path) -> Path:
+    """Resolve native or Flatpak Thunderbird metadata root."""
+    configured = configured.expanduser()
+    if (configured / "profiles.ini").is_file():
+        return configured
+    if configured == Path.home() / ".thunderbird":
+        for candidate in (
+            Path.home()
+            / ".var/app/org.mozilla.thunderbird_esr/.thunderbird",
+            Path.home()
+            / ".var/app/org.mozilla.Thunderbird/.thunderbird",
+        ):
+            if (candidate / "profiles.ini").is_file():
+                return candidate
+    return configured
