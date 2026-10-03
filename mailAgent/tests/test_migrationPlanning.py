@@ -18,6 +18,7 @@ from mailAgent.interest import interestIs, interestLoad, interestSet
 from mailAgent.messageInventory import inboxMessagesDiscover, messageParse, messagesDiscover
 from mailAgent.migrationPlanning import folderMappingsBuild, migrationPlan
 from mailAgent.planSummary import planSummaryLines
+from mailAgent.senderAddress import senderRelayDecode
 
 
 @pytest.fixture
@@ -939,3 +940,14 @@ def testPlanningRowsAreUserFacing():
     )
     assert "UID" not in " ".join(str(value) for value in row)
     assert "create destination folder" in row[5]
+
+
+def testHideMyEmailRelayDecode():
+    assert senderRelayDecode(
+        "bmwuk_at_service_bmw_com_x9b7cd6akmvy48_carg7807@icloud.com"
+    ) == "bmwuk@service.bmw.com"
+    assert senderRelayDecode(
+        "community_at_warp_dev_x9b7aab5kmvyab_58rq7807@icloud.com"
+    ) == "community@warp.dev"
+    assert senderRelayDecode("normal@example.com") == "normal@example.com"
+    assert senderRelayDecode("odd_at_value@icloud.com") == "odd_at_value@icloud.com"
