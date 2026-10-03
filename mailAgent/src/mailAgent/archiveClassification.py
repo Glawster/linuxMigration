@@ -2,9 +2,10 @@
 
 from collections import Counter, defaultdict
 from email.parser import BytesHeaderParser
-from email.utils import getaddresses
 from pathlib import Path
 import re
+
+from mailAgent.senderAddress import senderNormalize
 
 
 def archiveSenderIndex(archive: dict) -> dict:
@@ -30,7 +31,7 @@ def archiveSenderIndex(archive: dict) -> dict:
 
 def senderClassify(sender: str | None, mappings: list[dict], index: dict) -> dict | None:
     """Classify a sender using archive history, then a unique folder-name match."""
-    sender = _addressNormalize(sender)
+    sender = senderNormalize(sender)
     if not sender:
         return None
 
@@ -90,13 +91,6 @@ def _mappingFor(canonical: str, mappings: list[dict]) -> dict | None:
     return matches[0] if len(matches) == 1 else None
 
 
-def _addressNormalize(value: str | None) -> str | None:
-    if not isinstance(value, str):
-        return None
-    addresses = [address.lower() for _, address in getaddresses([value]) if address]
-    return addresses[0] if len(addresses) == 1 else None
-
-
 def _mboxSenders(path: Path):
     """Yield From addresses from an mbox while stopping at each header/body boundary."""
     if not path.is_file():
@@ -153,4 +147,4 @@ def _headerSender(header: bytes) -> str | None:
     values = message.get_all("From", [])
     if len(values) != 1:
         return None
-    return _addressNormalize(values[0])
+    return senderNormalize(values[0])
