@@ -22,8 +22,10 @@ decisions.
     classification/organisation behaviour.
 11. Persist a timestamped, secret-free discovery snapshot.
 12. Compare the current snapshot with the previous snapshot.
-13. Present folder, filter, conflict, quota and change information in the TUI.
-14. Perform no mailbox or Thunderbird configuration mutation.
+13. Present IMAP folders and configured local archive folders together in the TUI, clearly identifying the store for each row.
+14. Present filter, conflict and change information in the TUI.
+15. Keep quota discovery available internally; do not require a dedicated quota TUI view.
+16. Perform no mailbox or Thunderbird configuration mutation.
 
 ## Safety requirements
 
@@ -39,12 +41,12 @@ decisions.
 Given three configured mailboxes:
 
 - all three are displayed in the Mailbox Audit TUI;
-- the folder tree can be inspected independently for each mailbox;
+- the folder view shows IMAP folders for each mailbox and the configured personal local archives such as `myMail` and `kathyMail`;
+- each folder row identifies whether it belongs to IMAP or a local archive;
 - special folders are identified where the server reports them;
 - existing Thunderbird filters can be viewed by account;
 - filter target folders are linked to existing folders when resolvable;
 - missing filter targets are visibly reported;
-- quota is shown when supported and marked unavailable when unsupported;
 - a discovery snapshot is written beneath
   `~/.local/state/mailAgent/discovery/`;
 - a second discovery run can report structural/filter changes;
