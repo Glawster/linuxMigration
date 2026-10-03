@@ -136,6 +136,7 @@ def _snapshotBuild(args: argparse.Namespace, config: dict, logger: Any) -> dict:
     snapshot = discoveryRun(
         config["mailboxes"], _thunderbirdRoot(args.thunderbird), **options
     )
+    snapshot["localArchives"] = _localArchivesDiscover(config)
     if args.plan:
         from mailAgent.migrationPlanning import migrationPlan
 
@@ -191,3 +192,31 @@ def _thunderbirdRoot(configured: Path) -> Path:
             if (candidate / "profiles.ini").is_file():
                 return candidate
     return configured
+
+
+
+def _localArchivesDiscover(config: dict) -> list[dict]:
+    """Discover configured personal local archive folders for audit display."""
+    from mailAgent.archiveDiscovery import archiveDiscover
+
+    archives = []
+    for account in config["mailboxes"]:
+        if account.get("role") != "personal":
+            continue
+        root = account.get("localArchive")
+        if not root:
+            continue
+        archive = archiveDiscover(Path(root))
+        archives.append(
+            dict(
+                mailbox=account["id"],
+                name=Path(root).name,
+                root=root,
+                format=archive["format"],
+                available=archive["available"],
+                complete=archive.get("complete", True),
+                folders=archive.get("folders", []),
+                issues=archive.get("issues", []),
+            )
+        )
+    return archives
