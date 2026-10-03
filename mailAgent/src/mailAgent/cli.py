@@ -16,7 +16,7 @@ def main() -> None:
     parser = parserBuild()
     args = parser.parse_args()
     setApplication("mailAgent")
-    logger = getLogger(includeConsole=not args.json, dryRun=not args.confirm)
+    logger = getLogger(includeConsole=True, dryRun=not args.confirm)
     try:
         from mailAgent.configuration import configValidate
 
@@ -26,14 +26,20 @@ def main() -> None:
             config = configValidate(rawConfig, path.parent)
         except ValueError as error:
             parser.exit(1, f"Audit failed: configuration: {error}\n")
-        if not args.json:
+        if not args.plan and args.json is None:
             from mailAgent.auditUi import auditShow
         snapshot = _snapshotBuild(args, config, logger)
-        if args.json:
-            print(json.dumps(snapshot, indent=2))
-        else:
+        if args.plan:
+            from mailAgent.planSummary import planSummaryShow
+
+            planSummaryShow(snapshot["migrationPlan"], logger)
+        elif args.json is None:
             auditShow(snapshot)
-            print(f'Audit complete: {len(snapshot["mailboxes"])} mailboxes')
+            logger.info('Audit complete: %d mailboxes', len(snapshot["mailboxes"]))
+        if args.json is not None:
+            output = _jsonPath(args)
+            _jsonWrite(snapshot, output)
+            logger.info("JSON output: %s", output)
         if any(
             mailbox.get("failed")
             or not mailbox.get("inventory", {}).get("complete", True)
@@ -72,8 +78,13 @@ def parserBuild() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--json",
-        action="store_true",
-        help="print JSON instead of opening the audit TUI",
+        nargs="?",
+        const="",
+        metavar="FILE",
+        help=(
+            "write JSON to FILE instead of stdout; when FILE is omitted use "
+            "<state>/plan.json or <state>/audit.json"
+        ),
     )
     parser.add_argument(
         "--plan",
@@ -114,3 +125,22 @@ def _snapshotBuild(args: argparse.Namespace, config: dict, logger: Any) -> dict:
             raise ValueError("Unsupported previous snapshot schema")
         snapshot["changes"] = snapshotCompare(previous, snapshot)
     return snapshot
+
+
+
+def _jsonPath(args: argparse.Namespace) -> Path:
+    """Resolve explicit or default JSON output path."""
+    if args.json is None:
+        raise ValueError("JSON output was not requested")
+    if args.json == "":
+        name = "plan.json" if args.plan else "audit.json"
+        return args.state.expanduser() / name
+    return Path(args.json).expanduser()
+
+
+def _jsonWrite(snapshot: dict, path: Path) -> None:
+    """Write machine-readable output atomically without using stdout."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(snapshot, indent=2) + "\n")
+    temporary.replace(path)
