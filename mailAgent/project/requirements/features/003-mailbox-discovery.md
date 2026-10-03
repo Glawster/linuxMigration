@@ -65,3 +65,16 @@ internals.
 - Collapse exact duplicate conflict rows in the TUI.
 - Distinguish advisory inferred overlaps from actual warnings.
 - Do not mutate or disable Thunderbird filters from this view.
+
+
+## Changes presentation refinement
+
+The Changes view must describe user-visible mailbox/filter changes without
+exposing Thunderbird filesystem implementation details.
+
+- Local archive store labels omit Thunderbird's `.sbd` suffix.
+- Filter changes show mailbox and filter name rather than
+  `msgFilterRules.dat` paths.
+- Folder changes show the mailbox and friendly slash-separated folder path.
+- Filter destination changes show friendly destination folders.
+- Raw paths remain available only in diagnostic snapshot data.
