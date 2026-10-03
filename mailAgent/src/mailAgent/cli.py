@@ -39,12 +39,19 @@ def main() -> None:
         if args.json is not None:
             output = _jsonPath(args)
             _jsonWrite(snapshot, output)
-            logger.info("JSON output: %s", output)
-        if any(
-            mailbox.get("failed")
-            or not mailbox.get("inventory", {}).get("complete", True)
+            logger.value("JSON output", output)
+        failed = [
+            mailbox
             for mailbox in snapshot["mailboxes"]
-        ):
+            if mailbox.get("failed")
+            or not mailbox.get("inventory", {}).get("complete", True)
+        ]
+        if failed:
+            for mailbox in failed:
+                for issue in mailbox.get("issues", []):
+                    logger.error(issue)
+                for issue in mailbox.get("inventory", {}).get("issues", []):
+                    logger.error(issue.get("message", "Mailbox inventory incomplete"))
             raise SystemExit(1)
     except (OSError, ValueError, KeyError):
         parser.exit(
