@@ -92,7 +92,7 @@ def _accountDiscover(
             from mailAgent.messageInventory import messagesDiscover
 
             mailbox["inventory"] = messagesDiscover(client, mailbox["folders"])
-        elif includeInbox:
+        if includeInbox:
             from mailAgent.messageInventory import inboxMessagesDiscover
 
             mailbox["inboxInventory"] = inboxMessagesDiscover(
