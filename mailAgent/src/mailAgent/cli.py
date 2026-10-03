@@ -131,8 +131,13 @@ def _snapshotBuild(args: argparse.Namespace, config: dict, logger: Any) -> dict:
     state = args.state.expanduser()
     if args.plan:
         from mailAgent.migrationPlanning import migrationPlan
+        from mailAgent.planResolution import resolutionLoad
 
-        snapshot["migrationPlan"] = migrationPlan(config, snapshot)
+        snapshot["migrationPlan"] = migrationPlan(
+            config,
+            snapshot,
+            resolutionLoad(),
+        )
         snapshot["migrationPlan"]["generatedAt"] = datetime.now(timezone.utc).isoformat()
         _planSave(snapshot["migrationPlan"], state)
     elif args.json is None:
