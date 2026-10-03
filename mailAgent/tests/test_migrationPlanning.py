@@ -1072,3 +1072,45 @@ def testConflictRowsAreUserFacing():
         )
     ]
     assert "/private/profile" not in " ".join(rows[0])
+
+
+
+def testAuditIssueReportingIncludesMailboxAndFolder():
+    from mailAgent import cli
+
+    logger = Mock()
+    snapshot = dict(
+        mailboxes=[
+            dict(
+                id="andy",
+                issues=["Quota unsupported"],
+                inventory=dict(
+                    complete=False,
+                    issues=[
+                        dict(
+                            folder="INBOX.Sent",
+                            message="Message inventory unavailable or incomplete",
+                        )
+                    ],
+                ),
+            ),
+            dict(
+                id="hwfc",
+                failed=True,
+                issues=["Mailbox discovery failed; verify connection and credentials"],
+            ),
+        ]
+    )
+
+    assert cli._auditIssuesReport(snapshot, logger)
+    logger.warning.assert_called_once_with("andy: Quota unsupported")
+    assert any(
+        call.args[0]
+        == "andy/INBOX.Sent: Message inventory unavailable or incomplete"
+        for call in logger.error.call_args_list
+    )
+    assert any(
+        call.args[0]
+        == "hwfc: Mailbox discovery failed; verify connection and credentials"
+        for call in logger.error.call_args_list
+    )
