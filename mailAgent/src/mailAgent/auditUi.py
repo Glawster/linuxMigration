@@ -6,7 +6,7 @@ from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.coordinate import Coordinate
 from textual.containers import VerticalScroll
-from textual.widgets import DataTable, Footer, Header, Static, TabbedContent, TabPane
+from textual.widgets import Button, DataTable, Footer, Header, Static, TabbedContent, TabPane
 
 from mailAgent.interest import interestIs, interestLoad, interestSet
 from mailAgent.planSummary import planSummaryLines
@@ -50,8 +50,8 @@ def auditAppBuild(snapshot: dict) -> App:
                                     )
                 yield from _interestPane(senderRows, interestIssue)
                 yield from _auditPanes(snapshot)
+                yield from _planPane(snapshot.get("migrationPlan"))
                 if "migrationPlan" in snapshot:
-                    yield from _planPane(snapshot["migrationPlan"])
                     yield from _planningPanes(snapshot["migrationPlan"])
             yield Footer()
 
@@ -72,12 +72,17 @@ def auditAppBuild(snapshot: dict) -> App:
                 Text("✓" if interesting else ""),
             )
 
+        def on_button_pressed(self, event: Button.Pressed) -> None:
+            """Return a planning request to the CLI when the Plan button is used."""
+            if event.button.id == "run-planning":
+                self.exit("runPlanning")
+
     return MailboxAudit()
 
 
-def auditShow(snapshot: dict) -> None:
-    """Display audit facts, canonical mappings, proposals and review issues."""
-    auditAppBuild(snapshot).run()
+def auditShow(snapshot: dict) -> str | None:
+    """Display audit facts and return any requested follow-up workflow."""
+    return auditAppBuild(snapshot).run()
 
 
 def _interestPane(senderRows: list[dict], issue: str | None) -> ComposeResult:
@@ -138,15 +143,27 @@ def _interestRows(snapshot: dict, interestData: dict) -> list[dict]:
     )
 
 
-def _planPane(plan: dict) -> ComposeResult:
-    """Show the same readable plan summary produced by mailAgent --plan."""
+def _planPane(plan: dict | None) -> ComposeResult:
+    """Always show planning controls and the latest readable plan summary."""
     with TabPane("Plan", id="plan"):
         with VerticalScroll():
-            yield Static(
-                "\n".join(planSummaryLines(plan)),
-                id="plan-summary",
-                markup=False,
+            yield Button(
+                "Run planning session",
+                id="run-planning",
+                variant="primary",
             )
+            if plan is None:
+                yield Static(
+                    "No planning session has been run in this view.",
+                    id="plan-summary",
+                    markup=False,
+                )
+            else:
+                yield Static(
+                    "\n".join(planSummaryLines(plan)),
+                    id="plan-summary",
+                    markup=False,
+                )
 
 
 ## utilities
