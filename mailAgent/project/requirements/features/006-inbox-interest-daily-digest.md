@@ -2,27 +2,27 @@
 
 ## Purpose
 
-Allow the user to mark Inbox senders as interesting in the TUI so mailAgent can
+Allow the user to mark Inbox senders as senders of interest in the TUI so mailAgent can
 later include matching messages in a daily digest without changing mailbox
 content.
 
 ## Interaction
 
-The Mailbox Audit TUI includes an **Inbox Interest** view.
+The Mailbox Audit TUI includes an **Inbox Digest** view.
 
 Each row represents one sender observed in an Inbox and shows:
 
-- a check mark when the sender is marked interesting;
+- a check mark when the sender is marked as a sender of interest;
 - mailbox identity;
 - normalized sender email address;
 - number of current Inbox messages from that sender;
 - an example subject.
 
-The user moves to a sender row and presses `Space` to toggle the check mark.
+The user moves to a sender row and presses `Space` to toggle the check mark. The Inbox Digest view shows `Space to Toggle Sender of interest`; this hint must not appear on unrelated tabs.
 
 A checked sender means:
 
-> Messages from this exact sender are interesting to me and are candidates for
+> Messages from this exact sender are of interest to me and are candidates for
 > the daily digest.
 
 The interaction changes only mailAgent preferences. It must not move, flag,
