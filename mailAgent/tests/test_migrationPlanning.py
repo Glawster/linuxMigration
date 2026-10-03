@@ -516,6 +516,7 @@ def testCoreNoTextualDependency():
         "migrationPlanning",
         "interest",
         "planSummary",
+        "planResolution",
     ):
         tree = ast.parse((root / (name + ".py")).read_text())
         imports = [
@@ -1256,7 +1257,7 @@ def testSenderResolutionCannotCrossTargetMailbox(config):
     }
     plan = migrationPlan(config, snapshot, resolutions)
     assert not any(
-        proposal.get("classification", {}).get("method") == "userSenderDecision"
+        (proposal.get("classification") or {}).get("method") == "userSenderDecision"
         for proposal in plan["proposals"]
         if proposal["source"].get("sender") == "manual@example.com"
     )
