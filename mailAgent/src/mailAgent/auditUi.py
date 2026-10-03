@@ -40,14 +40,7 @@ def auditAppBuild(snapshot: dict) -> App:
             )
             with TabbedContent():
                 with TabPane("Folders", id="folders"):
-                    with TabbedContent():
-                        for index, mailbox in enumerate(snapshot["mailboxes"]):
-                            with TabPane(mailbox["name"], id=f"mailbox-{index}"):
-                                with VerticalScroll():
-                                    yield Static(
-                                        "Observed\n" + json.dumps(mailbox, indent=2),
-                                        markup=False,
-                                    )
+                    yield from _foldersPane(snapshot)
                 yield from _interestPane(senderRows, interestIssue)
                 yield from _auditPanes(snapshot)
                 yield from _planPane(snapshot.get("migrationPlan"))
@@ -274,29 +267,166 @@ def _folderDisplay(folder: str) -> str:
 ## utilities
 
 
-def _auditPanes(snapshot: dict) -> ComposeResult:
-    for title, key in (
-        ("Filters", "sources"),
-        ("Conflicts", "conflicts"),
-        ("Quota", "mailboxes"),
-        ("Changes", "changes"),
-    ):
-        with TabPane(title, id=title.lower()):
-            value = snapshot[key]
-            if title == "Quota":
-                value = [
-                    {"mailbox": m["name"], "quota": m["quota"], "issues": m["issues"]}
-                    for m in value
-                ]
-            with VerticalScroll():
-                yield Static(
-                    (
-                        "Warning/Conflict and Inferred"
-                        if title == "Conflicts"
-                        else "Observed"
-                    )
-                    + "\n"
-                    + json.dumps(value, indent=2),
-                    markup=False,
-                )
+def _foldersPane(snapshot: dict) -> ComposeResult:
+    """Show observed folders as a user-facing table."""
+    table = DataTable(id="folders-table")
+    table.add_columns("Mailbox", "Folder", "Messages", "Unseen", "Type")
+    rows = 0
+    for mailbox in snapshot["mailboxes"]:
+        for folder in mailbox.get("folders", []):
+            rows += 1
+            table.add_row(
+                Text(mailbox["id"]),
+                Text(_folderDisplay(folder["path"])),
+                Text(str(folder.get("messages", ""))),
+                Text(str(folder.get("unseen", ""))),
+                Text(_folderKindDisplay(folder)),
+            )
+    yield table
+    if not rows:
+        yield Static("No folders discovered", markup=False)
 
+
+def _auditPanes(snapshot: dict) -> ComposeResult:
+    """Render discovery results as user-facing tables rather than JSON."""
+    with TabPane("Filters", id="filters"):
+        yield from _filtersPane(snapshot)
+    with TabPane("Conflicts", id="conflicts"):
+        yield from _conflictsPane(snapshot)
+    with TabPane("Quota", id="quota"):
+        yield from _quotaPane(snapshot)
+    with TabPane("Changes", id="changes"):
+        yield from _changesPane(snapshot)
+
+
+def _filtersPane(snapshot: dict) -> ComposeResult:
+    table = DataTable(id="filters-table")
+    table.add_columns("Mailbox", "Filter", "Enabled", "Condition", "Action", "Destination")
+    rows = 0
+    for source in snapshot.get("sources", []):
+        mailboxes = ", ".join(source.get("mailboxIds", [])) or source.get("account", "Unknown")
+        for rule in source.get("filters", []):
+            rows += 1
+            actions = ", ".join(
+                action["type"]
+                + (f': {action["value"]}' if action.get("value") else "")
+                for action in rule.get("actions", [])
+            )
+            destinations = ", ".join(
+                _destinationDisplay(value) for value in rule.get("destinations", [])
+            )
+            table.add_row(
+                Text(mailboxes),
+                Text(rule.get("name", "")),
+                Text(_enabledDisplay(rule.get("enabled"))),
+                Text(" | ".join(rule.get("conditions", []))),
+                Text(actions),
+                Text(destinations),
+            )
+    yield table
+    if not rows:
+        yield Static(
+            "No Thunderbird message filters discovered. "
+            "Check the active Thunderbird profile if filters are expected.",
+            markup=False,
+        )
+
+
+def _conflictsPane(snapshot: dict) -> ComposeResult:
+    table = DataTable(id="conflicts-table")
+    table.add_columns("Type", "Filter", "Message", "Target")
+    for entry in snapshot.get("conflicts", []):
+        table.add_row(
+            Text(entry.get("label", "")),
+            Text(entry.get("filter", "")),
+            Text(entry.get("message", "")),
+            Text(_destinationDisplay(entry.get("target", ""))),
+        )
+    yield table
+    if not snapshot.get("conflicts"):
+        yield Static("No conflicts discovered", markup=False)
+
+
+def _quotaPane(snapshot: dict) -> ComposeResult:
+    table = DataTable(id="quota-table")
+    table.add_columns("Mailbox", "Resource", "Used", "Limit", "Unit", "Status")
+    rows = 0
+    for mailbox in snapshot["mailboxes"]:
+        quotas = mailbox.get("quota", [])
+        if quotas:
+            for quota in quotas:
+                rows += 1
+                table.add_row(
+                    Text(mailbox["id"]),
+                    Text(quota.get("resource", "")),
+                    Text(str(quota.get("used", ""))),
+                    Text(str(quota.get("limit", ""))),
+                    Text(quota.get("unit", "")),
+                    Text(""),
+                )
+        else:
+            rows += 1
+            table.add_row(
+                Text(mailbox["id"]),
+                Text(""),
+                Text(""),
+                Text(""),
+                Text(""),
+                Text("; ".join(mailbox.get("issues", [])) or "Unavailable"),
+            )
+    yield table
+    if not rows:
+        yield Static("No quota information discovered", markup=False)
+
+
+def _changesPane(snapshot: dict) -> ComposeResult:
+    table = DataTable(id="changes-table")
+    table.add_columns("Change", "Mailbox", "Item", "Before", "After")
+    for entry in snapshot.get("changes", []):
+        identity = entry.get("identity", "")
+        mailbox, item = _identityDisplay(identity)
+        table.add_row(
+            Text(entry.get("kind", "")),
+            Text(mailbox),
+            Text(item),
+            Text(str(entry.get("before", ""))),
+            Text(str(entry.get("after", ""))),
+        )
+    yield table
+    if not snapshot.get("changes"):
+        yield Static("No changes since the previous snapshot", markup=False)
+
+
+def _folderKindDisplay(folder: dict) -> str:
+    attributes = [attribute.lstrip("\\") for attribute in folder.get("attributes", [])]
+    if attributes:
+        return ", ".join(attributes)
+    return "Folder"
+
+
+def _enabledDisplay(value) -> str:
+    if value is True:
+        return "Yes"
+    if value is False:
+        return "No"
+    return "Unknown"
+
+
+def _destinationDisplay(value: str) -> str:
+    if not value:
+        return ""
+    if value.startswith("imap://"):
+        from urllib.parse import unquote, urlsplit
+
+        try:
+            parsed = urlsplit(value)
+            return _folderDisplay(unquote(parsed.path.lstrip("/")))
+        except ValueError:
+            return value
+    return _folderDisplay(value)
+
+
+def _identityDisplay(identity) -> tuple[str, str]:
+    if isinstance(identity, (list, tuple)) and len(identity) >= 2:
+        return str(identity[0]), _folderDisplay(str(identity[1]))
+    return "", str(identity)
