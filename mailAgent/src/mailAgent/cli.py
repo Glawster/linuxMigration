@@ -35,7 +35,7 @@ def main() -> None:
             planSummaryShow(snapshot["migrationPlan"], logger)
         elif args.json is None:
             auditShow(snapshot)
-            logger.info('Audit complete: %d mailboxes', len(snapshot["mailboxes"]))
+            logger.info("Audit complete: %d mailboxes", len(snapshot["mailboxes"]))
         if args.json is not None:
             output = _jsonPath(args)
             _jsonWrite(snapshot, output)
@@ -125,7 +125,6 @@ def _snapshotBuild(args: argparse.Namespace, config: dict, logger: Any) -> dict:
             raise ValueError("Unsupported previous snapshot schema")
         snapshot["changes"] = snapshotCompare(previous, snapshot)
     return snapshot
-
 
 
 def _jsonPath(args: argparse.Namespace) -> Path:
