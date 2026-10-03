@@ -530,7 +530,7 @@ def testCoreNoTextualDependency():
 
 def testAuditPlanningViews(config):
     from mailAgent.auditUi import auditAppBuild
-    from textual.widgets import TabPane, TabbedContent
+    from textual.widgets import Static, TabPane, TabbedContent
 
     snapshot = snapshotBuild(config)
     snapshot["migrationPlan"] = migrationPlan(config, snapshot)
@@ -538,13 +538,20 @@ def testAuditPlanningViews(config):
     async def uiInspect():
         app = auditAppBuild(snapshot)
         async with app.run_test(size=(120, 40)) as pilot:
-            for identity in ("mappings", "proposals", "reviewQueue", "excluded"):
+            for identity in (
+                "plan",
+                "mappings",
+                "proposals",
+                "reviewQueue",
+                "excluded",
+            ):
                 assert app.query_one("#" + identity, TabPane)
             assert len(app.query("#mailbox-3")) == 1
             assert len(app.query("#mailbox-4")) == 1
-            app.query_one(TabbedContent).active = "proposals"
+            app.query_one(TabbedContent).active = "plan"
             await pilot.pause()
-            assert app.query_one(TabbedContent).active == "proposals"
+            assert app.query_one(TabbedContent).active == "plan"
+            assert "Messages scanned:" in str(app.query_one("#plan-summary", Static).render())
 
     asyncio.run(uiInspect())
 
