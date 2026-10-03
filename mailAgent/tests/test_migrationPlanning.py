@@ -17,6 +17,7 @@ from mailAgent.discovery import discoveryRun, snapshotSave
 from mailAgent.interest import interestIs, interestLoad, interestSet
 from mailAgent.messageInventory import inboxMessagesDiscover, messageParse, messagesDiscover
 from mailAgent.migrationPlanning import folderMappingsBuild, migrationPlan
+from mailAgent.planResolution import resolutionLoad, senderResolutionSet
 from mailAgent.planSummary import planSummaryLines
 from mailAgent.senderAddress import senderRelayDecode
 
@@ -1186,5 +1187,117 @@ def testInboxDigestPresentation(config):
                 if getattr(binding, "key", None) == "space"
             )
             assert binding.show is False
+
+    asyncio.run(uiInspect())
+
+
+
+def testSenderResolutionPersistsAndRefinesPlan(config, tmp_path):
+    path = tmp_path / "plan-resolution.json"
+    data = senderResolutionSet(
+        "andy",
+        "Manual@Example.com",
+        "andy",
+        "Orders/Shop",
+        path,
+    )
+    assert path.stat().st_mode & 0o077 == 0
+    assert resolutionLoad(path) == data
+    assert data["senderMappings"]["andy"]["manual@example.com"] == {
+        "targetMailbox": "andy",
+        "canonical": "Orders/Shop",
+    }
+
+    snapshot = snapshotBuild(config)
+    mailbox = snapshot["mailboxes"][0]
+    mailbox["folders"].append(dict(path="INBOX", delimiter="/", attributes=[]))
+    mailbox["inventory"]["messages"][0].update(
+        folder="INBOX",
+        sender="manual@example.com",
+    )
+
+    unresolved = migrationPlan(config, snapshot)
+    assert any(
+        review.get("source", {}).get("sender") == "manual@example.com"
+        and review["reason"] == "No unambiguous canonical archive folder"
+        for review in unresolved["reviewQueue"]
+    )
+
+    resolved = migrationPlan(config, snapshot, data)
+    proposals = [
+        proposal
+        for proposal in resolved["proposals"]
+        if proposal["source"].get("sender") == "manual@example.com"
+    ]
+    assert len(proposals) == 1
+    assert proposals[0]["canonical"] == "Orders/Shop"
+    assert proposals[0]["classification"]["method"] == "userSenderDecision"
+    assert proposals[0]["classification"]["confidence"] == "explicit"
+
+
+def testSenderResolutionCannotCrossTargetMailbox(config):
+    snapshot = snapshotBuild(config)
+    mailbox = snapshot["mailboxes"][0]
+    mailbox["folders"].append(dict(path="INBOX", delimiter="/", attributes=[]))
+    mailbox["inventory"]["messages"][0].update(
+        folder="INBOX",
+        sender="manual@example.com",
+    )
+    resolutions = {
+        "schemaVersion": 1,
+        "senderMappings": {
+            "andy": {
+                "manual@example.com": {
+                    "targetMailbox": "kathy",
+                    "canonical": "Orders/Shop",
+                }
+            }
+        },
+    }
+    plan = migrationPlan(config, snapshot, resolutions)
+    assert not any(
+        proposal.get("classification", {}).get("method") == "userSenderDecision"
+        for proposal in plan["proposals"]
+        if proposal["source"].get("sender") == "manual@example.com"
+    )
+
+
+def testReviewQueueProvidesResolutionTarget(config):
+    snapshot = snapshotBuild(config)
+    mailbox = snapshot["mailboxes"][2]
+    mailbox["folders"].append(dict(path="INBOX", delimiter="/", attributes=[]))
+    mailbox["inventory"]["messages"][0].update(
+        folder="INBOX",
+        sender="legacy@example.com",
+    )
+    plan = migrationPlan(config, snapshot)
+    review = next(
+        entry
+        for entry in plan["reviewQueue"]
+        if entry.get("source", {}).get("sender") == "legacy@example.com"
+    )
+    assert review["mailbox"] == "old"
+    assert review["targetMailbox"] == "andy"
+
+
+def testReviewQueueResolutionControls(config):
+    from mailAgent.auditUi import auditAppBuild
+    from textual.widgets import Button, DataTable, Select
+
+    snapshot = snapshotBuild(config)
+    mailbox = snapshot["mailboxes"][0]
+    mailbox["folders"].append(dict(path="INBOX", delimiter="/", attributes=[]))
+    mailbox["inventory"]["messages"][0].update(
+        folder="INBOX",
+        sender="manual@example.com",
+    )
+    snapshot["migrationPlan"] = migrationPlan(config, snapshot)
+
+    async def uiInspect():
+        app = auditAppBuild(snapshot)
+        async with app.run_test(size=(120, 40)):
+            assert app.query_one("#review-table", DataTable)
+            assert app.query_one("#review-folder", Select)
+            assert app.query_one("#resolve-sender", Button)
 
     asyncio.run(uiInspect())
