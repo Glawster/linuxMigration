@@ -127,6 +127,9 @@ terminal.
   `myMail/Finance/Mark Bates`.
 - Show live destinations explicitly as IMAP, for example
   `andy IMAP/Finance/Mark Bates`.
+- Decode IMAP modified UTF-7 for display so a literal ampersand encoded as
+  `&-` is shown to the user as `&`; retain the original encoded server name
+  in the structured plan.
 - Do not describe a missing live folder generically as `create destination
   folder`; use `create IMAP mirror`.
 - Prefer concise reason labels in the table while retaining full evidence in the
