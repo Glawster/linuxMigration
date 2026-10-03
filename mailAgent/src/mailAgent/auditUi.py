@@ -1,6 +1,7 @@
 """Presentation only for the core audit and planning models."""
 
 from rich.text import Text
+from textual.binding import Binding
 from textual.app import App, ComposeResult
 from textual.coordinate import Coordinate
 from textual.containers import VerticalScroll
@@ -26,7 +27,12 @@ def auditAppBuild(snapshot: dict) -> App:
         TITLE = "Mailbox Audit"
         BINDINGS = [
             ("q", "quit", "Quit"),
-            ("space", "toggle_interest", "Toggle interesting sender"),
+            Binding(
+                "space",
+                "toggle_interest",
+                "Space to Toggle Sender of interest",
+                show=False,
+            ),
         ]
 
         def compose(self) -> ComposeResult:
@@ -75,10 +81,15 @@ def auditShow(snapshot: dict) -> str | None:
 
 
 def _interestPane(senderRows: list[dict], issue: str | None) -> ComposeResult:
-    with TabPane("Inbox Interest", id="inboxInterest"):
+    with TabPane("Inbox Digest", id="inboxInterest"):
         yield Static(
-            "Select a sender row and press Space to toggle ✓ Interesting. "
-            "Interesting senders are candidates for the daily digest.",
+            "Select a sender row and press Space to toggle ✓ Sender of interest. "
+            "Selected senders are candidates for the daily digest.",
+            markup=False,
+        )
+        yield Static(
+            "Space to Toggle Sender of interest",
+            id="digest-footer",
             markup=False,
         )
         if issue:
