@@ -870,7 +870,7 @@ def testPlanTabVisibleBeforePlanning(config):
         app = auditAppBuild(snapshot)
         async with app.run_test(size=(120, 40)):
             assert app.query_one("#plan", TabPane)
-            assert app.query_one("#run-planning", Button).label == "Run planning session"
+            assert app.query_one("#run-planning", Button).label == "Refresh Plan"
             assert "Planning has not been run for this session." in str(
                 app.query_one("#plan-summary", Static).render()
             )
@@ -1025,7 +1025,7 @@ def testPlanRefreshButton(config):
             planMenu.active = "planSummary"
             await pilot.pause()
             button = app.query_one("#refresh-planning", Button)
-            assert button.label == "Refresh planning session"
+            assert button.label == "Refresh Plan"
             button.focus()
             await pilot.press("enter")
             await pilot.pause()
