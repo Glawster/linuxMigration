@@ -51,3 +51,17 @@ Given three configured mailboxes:
   `~/.local/state/mailAgent/discovery/`;
 - a second discovery run can report structural/filter changes;
 - no IMAP write operation or Thunderbird filter modification occurs.
+
+
+## Conflict presentation refinement
+
+The Conflicts view must be user-facing rather than exposing Thunderbird storage
+internals.
+
+- Show the mailbox, Thunderbird filter name, status, problem and friendly
+  destination folder.
+- Keep raw filter-file paths and numeric rule identifiers in diagnostic data
+  only.
+- Collapse exact duplicate conflict rows in the TUI.
+- Distinguish advisory inferred overlaps from actual warnings.
+- Do not mutate or disable Thunderbird filters from this view.
