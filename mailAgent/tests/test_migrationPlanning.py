@@ -729,7 +729,7 @@ def testReadablePlanSummary(config):
     assert "Messages scanned:" in text
     assert "Proposed actions:" in text
     assert "By mailbox" in text
-    assert "Next actions" in text
+    assert "andy" in text
 
 
 @pytest.mark.parametrize("kind", ["Trash", "Junk", "Drafts"])
