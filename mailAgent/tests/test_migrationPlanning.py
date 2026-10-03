@@ -839,7 +839,9 @@ def testArchiveSenderClassificationAndPaypalContains(config):
 def testInboxInventoryCapturesSenderAndSubject():
     client = inventoryClient()
     inventory = inboxMessagesDiscover(
-        client, [dict(path="INBOX", delimiter=".", attributes=[])]
+        client,
+        [dict(path="INBOX", delimiter=".", attributes=[])],
+        batchSize=1,
     )
     assert inventory["complete"]
     assert len(inventory["messages"]) == 2
@@ -867,7 +869,7 @@ def testPlanTabVisibleBeforePlanning(config):
         async with app.run_test(size=(120, 40)):
             assert app.query_one("#plan", TabPane)
             assert app.query_one("#run-planning", Button).label == "Run planning session"
-            assert "No planning session" in str(
+            assert "Planning has not been run for this session." in str(
                 app.query_one("#plan-summary", Static).render()
             )
 
