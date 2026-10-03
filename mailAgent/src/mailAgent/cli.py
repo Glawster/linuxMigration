@@ -33,10 +33,8 @@ def main() -> None:
             from mailAgent.planSummary import planSummaryShow
 
             planSummaryShow(snapshot["migrationPlan"], logger)
-            if args.json is None:
-                auditShow(snapshot)
-        elif args.json is None:
-            auditShow(snapshot)
+        if args.json is None:
+            snapshot = _interactiveShow(args, config, snapshot, logger)
             logger.info("Audit complete: %d mailboxes", len(snapshot["mailboxes"]))
         if args.json is not None:
             output = _jsonPath(args)
@@ -53,6 +51,26 @@ def main() -> None:
             1,
             "Audit failed: check configuration (including roles) and snapshot files\n",
         )
+
+
+def _interactiveShow(
+    args: argparse.Namespace,
+    config: dict,
+    snapshot: dict,
+    logger: Any,
+) -> dict:
+    """Run the TUI and execute requested read-only follow-up workflows."""
+    from mailAgent.auditUi import auditShow
+    from mailAgent.planSummary import planSummaryShow
+
+    while auditShow(snapshot) == "runPlanning":
+        planningArgs = argparse.Namespace(**vars(args))
+        planningArgs.plan = True
+        planningArgs.confirm = False
+        planningArgs.json = None
+        snapshot = _snapshotBuild(planningArgs, config, logger)
+        planSummaryShow(snapshot["migrationPlan"], logger)
+    return snapshot
 
 
 ## arguments
