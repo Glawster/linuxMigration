@@ -143,7 +143,7 @@ def _planPane(plan: dict | None) -> ComposeResult:
                     markup=False,
                 )
                 yield Button(
-                    "Run planning session",
+                    "Refresh Plan",
                     id="run-planning",
                     variant="primary",
                 )
