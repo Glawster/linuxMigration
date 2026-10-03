@@ -1409,3 +1409,87 @@ def testProposalRowsGroupDuplicatesAndShowStores():
         "myMail/Shopping/Old",
         "User decision",
     ) in rows
+
+
+
+def testProposalRowsFiltering():
+    from mailAgent.auditUi import _proposalRowsFiltered
+
+    plan = dict(
+        archives=[],
+        proposals=[
+            dict(
+                action="migrate",
+                source=dict(
+                    mailbox="andy",
+                    folder="INBOX",
+                    uid="1",
+                    uidValidity="42",
+                    sender="shop@example.com",
+                ),
+                year=2026,
+                destination=dict(
+                    kind="imap",
+                    mailbox="andy",
+                    folder="Shopping.Shop",
+                    exists=False,
+                ),
+                requiresFolderCreation=True,
+                classification=dict(
+                    method="archiveSenderExact",
+                    confidence="high",
+                    reason="Archived sender history",
+                    evidenceCount=3,
+                ),
+            ),
+            dict(
+                action="migrate",
+                source=dict(
+                    mailbox="kathy",
+                    folder="Archive",
+                    uid="2",
+                    uidValidity="42",
+                    sender="bank@example.com",
+                ),
+                year=2026,
+                destination=dict(
+                    kind="imap",
+                    mailbox="kathy",
+                    folder="Finance.Bank",
+                    exists=True,
+                ),
+                requiresFolderCreation=False,
+                classification=dict(
+                    method="userSenderDecision",
+                    confidence="explicit",
+                    reason="User-selected canonical folder",
+                    evidenceCount=1,
+                ),
+            ),
+        ],
+    )
+
+    assert len(_proposalRowsFiltered(plan, "")) == 2
+    assert len(_proposalRowsFiltered(plan, "shop")) == 1
+    assert len(_proposalRowsFiltered(plan, "andy mirror")) == 1
+    assert len(_proposalRowsFiltered(plan, "kathy finance")) == 1
+    assert not _proposalRowsFiltered(plan, "missing")
+
+
+def testProposedMovesFilterControls(config):
+    from mailAgent.auditUi import auditAppBuild
+    from textual.widgets import DataTable, Input, Static
+
+    snapshot = snapshotBuild(config)
+    snapshot["migrationPlan"] = migrationPlan(config, snapshot)
+
+    async def uiInspect():
+        app = auditAppBuild(snapshot)
+        async with app.run_test(size=(120, 40)):
+            assert app.query_one("#proposal-filter", Input)
+            assert app.query_one("#proposal-table", DataTable)
+            assert "Showing " in str(
+                app.query_one("#proposal-filter-status", Static).render()
+            )
+
+    asyncio.run(uiInspect())
