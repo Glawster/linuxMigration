@@ -365,17 +365,47 @@ def _filtersPane(snapshot: dict) -> ComposeResult:
 
 def _conflictsPane(snapshot: dict) -> ComposeResult:
     table = DataTable(id="conflicts-table")
-    table.add_columns("Type", "Filter", "Message", "Target")
-    for entry in snapshot.get("conflicts", []):
-        table.add_row(
-            Text(entry.get("label", "")),
-            Text(entry.get("filter", "")),
-            Text(entry.get("message", "")),
-            Text(_destinationDisplay(entry.get("target", ""))),
-        )
+    table.add_columns("Mailbox", "Filter", "Status", "Problem", "Destination")
+    rows = _conflictRows(snapshot)
+    for row in rows:
+        table.add_row(*(Text(value) for value in row))
     yield table
-    if not snapshot.get("conflicts"):
+    if not rows:
         yield Static("No conflicts discovered", markup=False)
+
+
+def _conflictRows(snapshot: dict) -> list[tuple[str, str, str, str, str]]:
+    """Return de-duplicated user-facing filter conflict rows."""
+    identityMap = {}
+    for source in snapshot.get("sources", []):
+        for index, rule in enumerate(source.get("filters", [])):
+            identity = f'{source["path"]}#{index}'
+            identityMap[identity] = dict(
+                filterName=rule.get("name", "Unnamed filter"),
+                mailboxes=source.get("mailboxIds", []),
+            )
+
+    rows = set()
+    for entry in snapshot.get("conflicts", []):
+        metadata = identityMap.get(entry.get("filter", ""), {})
+        name = entry.get("filterName") or metadata.get("filterName") or "Multiple filters"
+        mailboxes = entry.get("mailboxes") or metadata.get("mailboxes") or []
+        mailbox = ", ".join(mailboxes) if mailboxes else "Thunderbird"
+        status = "Warning" if entry.get("label") == "Warning/Conflict" else entry.get("label", "")
+        problem = entry.get("message", "")
+        categories = entry.get("categories", [])
+        if categories:
+            problem += ": " + ", ".join(categories)
+        rows.add(
+            (
+                mailbox,
+                name,
+                status,
+                problem,
+                _destinationDisplay(entry.get("target", "")),
+            )
+        )
+    return sorted(rows, key=lambda row: (row[0], row[1], row[2], row[3], row[4]))
 
 
 def _changesPane(snapshot: dict) -> ComposeResult:
