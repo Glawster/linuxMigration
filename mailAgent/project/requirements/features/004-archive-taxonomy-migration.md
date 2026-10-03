@@ -170,3 +170,21 @@ mailAgent may use the existing local archive as filing evidence.
 - Legacy mail uses the archive history of its configured personal migration target.
 - Classification uses headers only and never reads message bodies for this purpose.
 - Every inferred proposal records its classification method, confidence and reason.
+
+
+## Stored plan and refresh
+
+The most recent read-only migration plan must be persisted automatically under
+the configured mailAgent state directory so the user does not have to rescan
+mailboxes merely to review the previous plan.
+
+- Store the latest migration plan in `latest-plan.json`.
+- Loading the normal TUI should reuse that stored plan when one exists.
+- Show when the stored plan was generated.
+- When no plan exists, show `Run planning session`.
+- When a stored/current plan exists, show `Refresh planning session` instead.
+- Refresh performs a fresh read-only discovery and replaces the stored plan.
+- Persisting or refreshing a plan must not enable migration execution and must
+  not require `--confirm`.
+- A malformed or unsupported stored-plan schema must fail safely rather than be
+  silently interpreted.
