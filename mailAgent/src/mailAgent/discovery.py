@@ -161,13 +161,21 @@ def filtersReconcile(snapshot: dict) -> tuple[list, list]:
                     dict(
                         label="Inferred",
                         filter=identity,
+                        filterName=rule["name"],
+                        mailboxes=source.get("mailboxIds", []),
                         categories=categories,
                         message="Likely overlap with classification categories; review only",
                     )
                 )
             for issue in rule["issues"]:
                 conflicts.append(
-                    dict(label="Warning/Conflict", filter=identity, message=issue)
+                    dict(
+                        label="Warning/Conflict",
+                        filter=identity,
+                        filterName=rule["name"],
+                        mailboxes=source.get("mailboxIds", []),
+                        message=issue,
+                    )
                 )
             for target in rule["destinations"]:
                 try:
@@ -198,6 +206,8 @@ def filtersReconcile(snapshot: dict) -> tuple[list, list]:
                         dict(
                             label="Warning/Conflict",
                             filter=identity,
+                            filterName=rule["name"],
+                            mailboxes=source.get("mailboxIds", []),
                             message="Unresolved or ambiguous destination",
                             target=target,
                         )
