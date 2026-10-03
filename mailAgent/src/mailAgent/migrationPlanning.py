@@ -21,6 +21,7 @@ def migrationPlan(config: dict, snapshot: dict) -> dict:
         schemaVersion=1,
         liveYear=config["general"]["liveYear"],
         executionEnabled=False,
+        userSummary={},
         archives=[],
         mappings=[],
         proposals=[],
@@ -71,8 +72,152 @@ def migrationPlan(config: dict, snapshot: dict) -> dict:
             for r in plan["reviewQueue"]
         ),
     )
+    plan["userSummary"] = _userSummaryBuild(plan, accounts)
     logger.done("migration planning")
     return plan
+
+
+def _userSummaryBuild(plan: dict, accounts: dict) -> dict:
+    """Build a concise, actionable summary without per-message detail."""
+    reviews = plan["reviewQueue"]
+    proposals = plan["proposals"]
+    summary = plan["summary"]
+
+    unresolvedByMailbox = {}
+    for review in reviews:
+        if "source" not in review:
+            continue
+        mailbox = review["mailbox"]
+        reason = review["reason"]
+        unresolvedByMailbox.setdefault(mailbox, {})
+        unresolvedByMailbox[mailbox][reason] = (
+            unresolvedByMailbox[mailbox].get(reason, 0) + 1
+        )
+
+    mailboxSummaries = []
+    for account in accounts.values():
+        if account["role"] not in ("personal", "legacy"):
+            continue
+        mailbox = account["id"]
+        mailboxReviews = [r for r in reviews if r["mailbox"] == mailbox]
+        mailboxProposals = [
+            p for p in proposals if p["source"]["mailbox"] == mailbox
+        ]
+        mailboxSummaries.append(
+            dict(
+                mailbox=mailbox,
+                role=account["role"],
+                proposedActions=len(mailboxProposals),
+                reviewItems=len(mailboxReviews),
+                unclassifiedMessages=sum(
+                    count
+                    for reason, count in unresolvedByMailbox.get(mailbox, {}).items()
+                    if reason == "No unambiguous canonical archive folder"
+                ),
+                mirrorFoldersProposed=sum(
+                    mapping["mailbox"] == mailbox and mapping.get("mirrorProposed", False)
+                    for mapping in plan["mappings"]
+                ),
+            )
+        )
+
+    decisions = []
+    for review in reviews:
+        if review.get("policy") == "explicitSentMapping":
+            decisions.append(
+                dict(
+                    mailbox=review["mailbox"],
+                    folder=review["folder"],
+                    messages=review.get("messageCount"),
+                    decision="Choose the canonical archive folder for Sent mail",
+                )
+            )
+        elif review.get("policy") == "exclude" and review.get(
+            "requiresRetentionDecision"
+        ):
+            decisions.append(
+                dict(
+                    mailbox=review["mailbox"],
+                    folder=review["folder"],
+                    messages=review.get("messageCount"),
+                    decision="Choose the future retention policy for this system folder",
+                )
+            )
+
+    groupedIssues = []
+    for mailbox, reasons in unresolvedByMailbox.items():
+        for reason, count in reasons.items():
+            groupedIssues.append(
+                dict(mailbox=mailbox, reason=reason, messages=count)
+            )
+
+    mirrorCount = sum(
+        mapping.get("mirrorProposed", False) for mapping in plan["mappings"]
+    )
+    unclassifiedCount = sum(
+        issue["messages"]
+        for issue in groupedIssues
+        if issue["reason"] == "No unambiguous canonical archive folder"
+    )
+
+    if proposals and reviews:
+        status = "Review required before any future execution"
+    elif proposals:
+        status = "Plan ready for review"
+    elif reviews:
+        status = "Planning blocked by unresolved items"
+    else:
+        status = "No migration changes proposed"
+
+    readable = [
+        "PLANNING ONLY - no mail has been changed.",
+        (
+            f'{summary["messagesScanned"]} messages scanned; '
+            f'{summary["proposals"]} actions proposed; '
+            f'{summary["reviewItems"]} review items.'
+        ),
+    ]
+    if summary["systemFolderMessagesExcluded"]:
+        readable.append(
+            f'{summary["systemFolderMessagesExcluded"]} messages in system folders '
+            "are excluded from normal migration."
+        )
+    if unclassifiedCount:
+        readable.append(
+            f"{unclassifiedCount} messages still need a canonical archive folder."
+        )
+    if mirrorCount:
+        readable.append(
+            f"{mirrorCount} IMAP mirror folders are proposed from the local taxonomy."
+        )
+
+    nextSteps = []
+    if unclassifiedCount:
+        nextSteps.append(
+            "Resolve message classification so INBOX/archive mail can map to the local taxonomy."
+        )
+    if any(d["decision"].startswith("Choose the canonical") for d in decisions):
+        nextSteps.append("Choose canonical folder mappings for Sent mail.")
+    if any("retention policy" in d["decision"] for d in decisions):
+        nextSteps.append(
+            "Decide future retention for Trash/Junk/Drafts; they remain excluded for now."
+        )
+    if mirrorCount:
+        nextSteps.append("Review proposed IMAP mirror folders before any are created.")
+    if not proposals:
+        nextSteps.append(
+            "No message moves are currently proposed; resolve the review items first."
+        )
+
+    return dict(
+        status=status,
+        safety="Planning only; execution is disabled and no mail is changed.",
+        readable=readable,
+        mailboxes=mailboxSummaries,
+        decisionsNeeded=decisions,
+        groupedMessageIssues=groupedIssues,
+        nextSteps=nextSteps,
+    )
 
 
 ## mapping
