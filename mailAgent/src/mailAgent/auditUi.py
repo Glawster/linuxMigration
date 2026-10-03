@@ -51,8 +51,6 @@ def auditAppBuild(snapshot: dict) -> App:
                 yield from _interestPane(senderRows, interestIssue)
                 yield from _auditPanes(snapshot)
                 yield from _planPane(snapshot.get("migrationPlan"))
-                if "migrationPlan" in snapshot:
-                    yield from _planningPanes(snapshot["migrationPlan"])
             yield Footer()
 
         def action_toggle_interest(self) -> None:
@@ -144,26 +142,133 @@ def _interestRows(snapshot: dict, interestData: dict) -> list[dict]:
 
 
 def _planPane(plan: dict | None) -> ComposeResult:
-    """Always show planning controls and the latest readable plan summary."""
+    """Always show Plan; expose planning detail as a second-level menu."""
     with TabPane("Plan", id="plan"):
-        with VerticalScroll():
-            yield Button(
-                "Run planning session",
-                id="run-planning",
-                variant="primary",
+        if plan is None:
+            with VerticalScroll():
+                yield Static(
+                    "Planning has not been run for this session.",
+                    id="plan-summary",
+                    markup=False,
+                )
+                yield Button(
+                    "Run planning session",
+                    id="run-planning",
+                    variant="primary",
+                )
+            return
+
+        with TabbedContent(id="plan-menu"):
+            with TabPane("Summary", id="planSummary"):
+                with VerticalScroll():
+                    yield Static(
+                        "\n".join(planSummaryLines(plan)),
+                        id="plan-summary",
+                        markup=False,
+                    )
+            yield from _planningPanes(plan)
+
+
+def _planningPanes(plan: dict) -> ComposeResult:
+    specifications = (
+        (
+            "Mapping",
+            "mappings",
+            "Canonical archive folders and their IMAP equivalents",
+            ("Mailbox", "Archive folder", "IMAP folder", "Status"),
+        ),
+        (
+            "Proposed Moves",
+            "proposals",
+            "Review what mailAgent proposes; execution is disabled",
+            ("Mailbox", "Sender", "Year", "Action", "Destination", "Reason"),
+        ),
+        (
+            "Review Queue",
+            "reviewQueue",
+            "Items that still need a decision",
+            ("Mailbox", "Folder / message", "Reason"),
+        ),
+        (
+            "Role Boundaries",
+            "excluded",
+            "Mailboxes excluded from personal archive planning",
+            ("Mailbox", "Role", "Policy"),
+        ),
+    )
+    for title, key, label, columns in specifications:
+        with TabPane(title, id=key):
+            yield Static(label, markup=False)
+            table = DataTable()
+            table.add_columns(*columns)
+            for entry in plan[key]:
+                table.add_row(*(Text(str(cell)) for cell in _planningRow(key, entry)))
+            yield table
+            if not plan[key]:
+                yield Static("No entries", markup=False)
+
+
+def _planningRow(key: str, entry: dict) -> tuple:
+    if key == "mappings":
+        status = entry.get(
+            "issue", "Existing folder" if entry["imapExists"] else "Folder proposed"
+        )
+        return (
+            entry["mailbox"],
+            entry["canonical"],
+            _folderDisplay(entry["imap"]) if entry["imap"] else "Unavailable",
+            status,
+        )
+    if key == "proposals":
+        source, destination = entry["source"], entry["destination"]
+        sender = source.get("sender", "Unknown sender")
+        destinationFolder = _folderDisplay(destination.get("folder", ""))
+        target = (
+            f'{destination["mailbox"]}: {destinationFolder}'
+            if destination.get("mailbox")
+            else destinationFolder
+        )
+        action = {
+            "migrate": "Move",
+            "archive": "Archive",
+            "retain": "Keep",
+        }.get(entry["action"], entry["action"].title())
+        classification = entry.get("classification")
+        reason = (
+            classification.get("reason", "")
+            if classification
+            else (
+                "Already in the correct folder"
+                if entry["action"] == "retain"
+                else "Current folder matches archive taxonomy"
             )
-            if plan is None:
-                yield Static(
-                    "No planning session has been run in this view.",
-                    id="plan-summary",
-                    markup=False,
-                )
-            else:
-                yield Static(
-                    "\n".join(planSummaryLines(plan)),
-                    id="plan-summary",
-                    markup=False,
-                )
+        )
+        if entry["requiresFolderCreation"]:
+            reason = (reason + "; create destination folder").strip("; ")
+        return (
+            source["mailbox"],
+            sender,
+            entry["year"],
+            action,
+            target,
+            reason,
+        )
+    if key == "reviewQueue":
+        source = entry.get("source", {})
+        folder = _folderDisplay(source.get("folder", entry.get("folder", "")))
+        if "messageCount" in entry:
+            count = entry["messageCount"]
+            folder += f" ({count if count is not None else 'unknown'} messages)"
+        sender = source.get("sender")
+        if sender:
+            folder = f"{folder} · {sender}" if folder else sender
+        return entry["mailbox"], folder, entry["reason"]
+    return entry["mailbox"], entry["role"], entry["reason"]
+
+
+def _folderDisplay(folder: str) -> str:
+    """Render IMAP hierarchy in the user-facing slash form."""
+    return folder.replace(".", "/")
 
 
 ## utilities
@@ -195,83 +300,3 @@ def _auditPanes(snapshot: dict) -> ComposeResult:
                     markup=False,
                 )
 
-
-def _planningPanes(plan: dict) -> ComposeResult:
-    specifications = (
-        (
-            "Mapping",
-            "mappings",
-            "Inferred · Canonical archive taxonomy",
-            ("Mailbox", "Canonical folder", "Local store", "IMAP folder", "Status"),
-        ),
-        (
-            "Proposed Moves",
-            "proposals",
-            "Inferred · Review proposals; execution disabled",
-            ("Source", "Year", "Action", "Destination", "Review"),
-        ),
-        (
-            "Review Queue",
-            "reviewQueue",
-            "Warning/Conflict · Resolve before migration",
-            ("Mailbox", "Folder / message", "Reason"),
-        ),
-        (
-            "Role Boundaries",
-            "excluded",
-            "Observed configuration · Available in Mailbox Audit",
-            ("Mailbox", "Role", "Policy"),
-        ),
-    )
-    for title, key, label, columns in specifications:
-        with TabPane(title, id=key):
-            yield Static(label, markup=False)
-            if key == "proposals" and "summary" in plan:
-                yield Static(json.dumps(plan["summary"], indent=2), markup=False)
-            table = DataTable()
-            table.add_columns(*columns)
-            for entry in plan[key]:
-                table.add_row(*(Text(str(cell)) for cell in _planningRow(key, entry)))
-            yield table
-            if not plan[key]:
-                yield Static("No entries", markup=False)
-
-
-def _planningRow(key: str, entry: dict) -> tuple:
-    if key == "mappings":
-        status = entry.get(
-            "issue", "Existing mirror" if entry["imapExists"] else "Mirror proposed"
-        )
-        return (
-            entry["mailbox"],
-            entry["canonical"],
-            entry["local"],
-            entry["imap"] or "Unavailable",
-            status,
-        )
-    if key == "proposals":
-        source, destination = entry["source"], entry["destination"]
-        origin = f'{source["mailbox"]}: {source["folder"]} (UID {source["uid"]})'
-        target = destination.get(
-            "path", f'{destination["mailbox"]}: {destination["folder"]}'
-        )
-        review = (
-            "Folder creation required"
-            if entry["requiresFolderCreation"]
-            else (
-                "Confirmation and verification required"
-                if entry["requiresConfirmation"]
-                else "Keep on server"
-            )
-        )
-        return origin, entry["year"], entry["action"], target, review
-    if key == "reviewQueue":
-        source = entry.get("source", {})
-        folder = source.get("folder", entry.get("folder", ""))
-        if "messageCount" in entry:
-            count = entry["messageCount"]
-            folder += f" ({count if count is not None else 'unknown'} messages)"
-        if source.get("uid"):
-            folder += " (UID " + source["uid"] + ")"
-        return entry["mailbox"], folder, entry["reason"]
-    return entry["mailbox"], entry["role"], entry["reason"]
