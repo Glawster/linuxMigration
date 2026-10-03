@@ -953,6 +953,12 @@ def testHideMyEmailRelayDecode():
     ) == "community@warp.dev"
     assert senderRelayDecode(
         "008a0a309fac5a49235_at_members_ebay_com_x9b7d412kmvyed_ddrq7807@icloud.com"
-    ) == "*@members.ebay.com"
+    ) == "008a0a309fac5a49235@members.ebay.com"
+    assert senderRelayDecode(
+        "admin_at_lewddungeonadventures_com_5hgvrxgfqc3729_ecae11c2@icloud.com"
+    ) == "admin@lewddungeonadventures.com"
+    assert senderRelayDecode(
+        "barclaycard_at_emails_barclaycard_co_uk_jvbcnca1d60ftp_cbn55768@icloud.com"
+    ) == "barclaycard@emails.barclaycard.co.uk"
     assert senderRelayDecode("normal@example.com") == "normal@example.com"
     assert senderRelayDecode("odd_at_value@icloud.com") == "odd_at_value@icloud.com"
