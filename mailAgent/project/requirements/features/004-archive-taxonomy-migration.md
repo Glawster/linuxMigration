@@ -151,3 +151,22 @@ presentation.
   requested.
 - JSON writing must not mutate mail.
 - The detailed structured plan remains in JSON for diagnostics and scripting.
+
+## Archive-history sender classification
+
+When the current IMAP folder does not identify a canonical archive destination,
+mailAgent may use the existing local archive as filing evidence.
+
+- Build a sender-to-canonical-folder index from local archive message headers.
+- Prefer an exact sender address that has historically been filed consistently
+  in one canonical folder.
+- A strong historical majority may be used when the sender appears in more than
+  one folder; the proposal must retain the evidence count and explanation.
+- If no historical sender evidence exists, a sender address containing a unique
+  canonical folder leaf may be used as a medium-confidence proposal. For
+  example, an address containing `paypal` may map to `Finance/PayPal` when that
+  is the unique matching canonical folder.
+- Ambiguous or weak matches remain in the review queue.
+- Legacy mail uses the archive history of its configured personal migration target.
+- Classification uses headers only and never reads message bodies for this purpose.
+- Every inferred proposal records its classification method, confidence and reason.
