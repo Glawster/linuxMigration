@@ -113,3 +113,23 @@ execution increment. See [implementation and limitations](../../../documentation
   items, system-folder messages excluded, and messages with invalid dates.
   Report unknown system-folder counts separately.
 - Keep all execution disabled.
+
+
+## User-readable plan summary
+
+The planning output must include a concise `userSummary` near the start of
+`migrationPlan` so a user does not need to interpret the detailed message-level
+JSON.
+
+The summary must:
+
+- state clearly that planning is read-only and no mail has been changed;
+- show messages scanned, proposed actions, and review-item counts;
+- show per-mailbox counts for proposals, review items, unclassified messages,
+  and proposed IMAP mirror folders;
+- aggregate message-level review failures by mailbox and reason;
+- list folder-level decisions still required, including Sent mappings and
+  future Trash/Junk/Drafts retention;
+- provide short next-step guidance based on the actual plan;
+- contain no passwords, message bodies, or other credential data;
+- preserve the detailed plan arrays for diagnostics and machine use.
