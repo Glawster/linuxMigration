@@ -89,11 +89,11 @@ Shared and support accounts remain excluded from personal archive proposals.
 
 The **Plan** tab is always visible. The most recent plan is stored automatically
 at `~/.local/state/mailAgent/discovery/latest-plan.json` and reused on the next
-normal TUI launch. Before a plan exists it shows a `Run planning session`
-button. Activating the button closes the current audit
+normal TUI launch. The Plan tab uses a `Refresh Plan` button to create or
+refresh the plan. Activating the button closes the current audit
 view, runs a fresh read-only planning scan, and reopens the TUI with the plan
 populated. Once a plan exists, the Plan summary shows when it was generated and
-offers `Refresh planning session` to perform a fresh read-only rescan and
+offers `Refresh Plan` to perform a fresh read-only rescan and
 replace the stored plan.
 
 Planning detail uses a second-level menu inside **Plan**: Summary, Mapping,
