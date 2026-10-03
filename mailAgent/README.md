@@ -83,6 +83,16 @@ is not opened and the structured result is written to file.
 `~/.local/state/mailAgent/discovery/`. Migration execution remains disabled.
 Shared and support accounts remain excluded from personal archive proposals.
 
+
+### Planning from the TUI
+
+The **Plan** tab is always visible. Before a plan exists it shows a
+`Run planning session` button. Activating the button closes the current audit
+view, runs a fresh read-only planning scan, and reopens the TUI with the
+readable plan summary and detailed planning tabs populated.
+
+The button does not enable migration execution or persist a snapshot.
+
 ## Discovery before organisation
 
 Before mailAgent changes any mailbox structure, it performs a read-only audit
