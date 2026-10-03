@@ -1493,3 +1493,69 @@ def testProposedMovesFilterControls(config):
             )
 
     asyncio.run(uiInspect())
+
+
+
+def testImapFolderDisplayDecodesModifiedUtf7():
+    from mailAgent.auditUi import _imapFolderDisplay
+
+    assert _imapFolderDisplay("Shopping.Marks &- Spencer") == "Shopping/Marks & Spencer"
+    assert _imapFolderDisplay("Plain.Folder") == "Plain/Folder"
+    assert _imapFolderDisplay("Broken &value") == "Broken &value"
+
+
+def testProposalRowsDecodeImapButNotLocalArchiveNames():
+    from mailAgent.auditUi import _proposalRows
+
+    plan = dict(
+        archives=[dict(mailbox="andy", root="/home/andy/Mail/myMail.sbd")],
+        proposals=[
+            dict(
+                action="migrate",
+                source=dict(
+                    mailbox="andy",
+                    folder="INBOX.Marks &- Spencer",
+                    uid="1",
+                    uidValidity="42",
+                    sender="shop@example.com",
+                ),
+                year=2026,
+                destination=dict(
+                    kind="imap",
+                    mailbox="andy",
+                    folder="Shopping.Marks &- Spencer",
+                    exists=True,
+                ),
+                requiresFolderCreation=False,
+                classification=None,
+            ),
+            dict(
+                action="archive",
+                source=dict(
+                    mailbox="andy",
+                    folder="INBOX",
+                    uid="2",
+                    uidValidity="42",
+                    sender="local@example.com",
+                ),
+                year=2025,
+                destination=dict(
+                    kind="local",
+                    mailbox="andy",
+                    folder="Shopping/Marks &- Spencer",
+                    path="/home/andy/Mail/myMail.sbd/Shopping.sbd/Marks &- Spencer",
+                    format="thunderbird",
+                ),
+                requiresFolderCreation=False,
+                classification=None,
+            ),
+        ],
+    )
+
+    rows = _proposalRows(plan)
+    assert any(
+        row[0] == "andy IMAP/INBOX/Marks & Spencer"
+        and row[4] == "andy IMAP/Shopping/Marks & Spencer"
+        for row in rows
+    )
+    assert any(row[4] == "myMail/Shopping/Marks &- Spencer" for row in rows)
