@@ -1,7 +1,5 @@
 """Presentation only for the core audit and planning models."""
 
-import json
-
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.coordinate import Coordinate
