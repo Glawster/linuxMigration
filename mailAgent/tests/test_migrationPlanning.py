@@ -845,3 +845,42 @@ def testInterestingSenderPreferences(tmp_path):
     assert path.stat().st_mode & 0o077 == 0
     data = interestSet("andy", "news@example.com", False, path)
     assert not interestIs(data, "andy", "news@example.com")
+
+
+def testPlanTabVisibleBeforePlanning(config):
+    from mailAgent.auditUi import auditAppBuild
+    from textual.widgets import Button, Static, TabPane
+
+    snapshot = snapshotBuild(config)
+    snapshot.pop("migrationPlan", None)
+
+    async def uiInspect():
+        app = auditAppBuild(snapshot)
+        async with app.run_test(size=(120, 40)):
+            assert app.query_one("#plan", TabPane)
+            assert app.query_one("#run-planning", Button).label == "Run planning session"
+            assert "No planning session" in str(
+                app.query_one("#plan-summary", Static).render()
+            )
+
+    asyncio.run(uiInspect())
+
+
+def testPlanButtonReturnsPlanningRequest(config):
+    from mailAgent.auditUi import auditAppBuild
+    from textual.widgets import Button, TabbedContent
+
+    snapshot = snapshotBuild(config)
+
+    async def uiInspect():
+        app = auditAppBuild(snapshot)
+        async with app.run_test(size=(120, 40)) as pilot:
+            app.query_one(TabbedContent).active = "plan"
+            await pilot.pause()
+            button = app.query_one("#run-planning", Button)
+            button.focus()
+            await pilot.press("enter")
+            await pilot.pause()
+        return app.return_value
+
+    assert asyncio.run(uiInspect()) == "runPlanning"
