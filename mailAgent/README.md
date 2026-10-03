@@ -70,9 +70,10 @@ Use [config.example.toml](config.example.toml) for the required role settings.
     mailAgent --plan --json ~/Documents/mail-plan.json
     mailAgent --plan --confirm --json
 
-`--plan` reads Date headers for personal/legacy messages and writes a concise
-human-readable summary through `organiseMyProjects.logUtils`. It does not open
-the full audit TUI.
+`--plan` reads Date/From headers for personal/legacy messages, writes the concise
+human-readable summary through `organiseMyProjects.logUtils`, and opens the TUI
+with a **Plan** tab containing the same readable summary. With `--json`, the TUI
+is not opened and the structured result is written to file.
 
 `--json` also writes the complete structured result to
 `~/.local/state/mailAgent/discovery/plan.json`. Supplying a path after
