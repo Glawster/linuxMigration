@@ -550,8 +550,8 @@ def testAuditPlanningViews(config):
                 assert app.query_one("#" + identity, TabPane)
             assert app.query_one("#folders-table", DataTable)
             assert app.query_one("#filters-table", DataTable)
-            assert app.query_one("#quota-table", DataTable)
             assert app.query_one("#changes-table", DataTable)
+            assert len(app.query("#quota")) == 0
             assert len(app.query("#run-planning")) == 0
             planMenu = app.query_one("#plan-menu", TabbedContent)
             planMenu.active = "proposals"
