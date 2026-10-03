@@ -26,13 +26,15 @@ def main() -> None:
             config = configValidate(rawConfig, path.parent)
         except ValueError as error:
             parser.exit(1, f"Audit failed: configuration: {error}\n")
-        if not args.plan and args.json is None:
+        if args.json is None:
             from mailAgent.auditUi import auditShow
         snapshot = _snapshotBuild(args, config, logger)
         if args.plan:
             from mailAgent.planSummary import planSummaryShow
 
             planSummaryShow(snapshot["migrationPlan"], logger)
+            if args.json is None:
+                auditShow(snapshot)
         elif args.json is None:
             auditShow(snapshot)
             logger.info("Audit complete: %d mailboxes", len(snapshot["mailboxes"]))
