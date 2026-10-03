@@ -1114,3 +1114,51 @@ def testAuditIssueReportingIncludesMailboxAndFolder():
         == "hwfc: Mailbox discovery failed; verify connection and credentials"
         for call in logger.error.call_args_list
     )
+
+
+
+def testStoreAndChangeRowsHideThunderbirdInternals():
+    from mailAgent.auditUi import _changeRows, _storeDisplay
+
+    assert _storeDisplay("myMail.sbd") == "myMail"
+    assert _storeDisplay("kathyMail.sbd") == "kathyMail"
+    assert _storeDisplay("myMail") == "myMail"
+
+    sourcePath = "/private/profile/ImapMail/server/msgFilterRules.dat"
+    snapshot = dict(
+        sources=[
+            dict(
+                path=sourcePath,
+                mailboxIds=["andy"],
+                account="server",
+            )
+        ],
+        changes=[
+            dict(
+                kind="filter added",
+                identity=(sourcePath, "BMW", 1),
+            ),
+            dict(
+                kind="filter destinations changed",
+                identity=(sourcePath, "Shopping", 1),
+                before=["imap://andy@example/Old%2FFolder"],
+                after=["imap://andy@example/Shopping%2FOrders"],
+            ),
+            dict(
+                kind="folder added",
+                identity=("old", "INBOX.Archive"),
+            ),
+        ],
+    )
+
+    rows = _changeRows(snapshot)
+    assert rows[0] == ("filter added", "andy", "BMW", "", "")
+    assert rows[1] == (
+        "filter destinations changed",
+        "andy",
+        "Shopping",
+        "Old/Folder",
+        "Shopping/Orders",
+    )
+    assert rows[2] == ("folder added", "old", "INBOX/Archive", "", "")
+    assert sourcePath not in " ".join(" ".join(row) for row in rows)
