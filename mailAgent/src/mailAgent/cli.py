@@ -36,24 +36,14 @@ def main() -> None:
             planSummaryShow(snapshot["migrationPlan"], logger)
         if args.json is None:
             snapshot = _interactiveShow(args, config, snapshot, logger)
-            logger.info("Audit complete: %d mailboxes", len(snapshot["mailboxes"]))
         if args.json is not None:
             output = _jsonPath(args)
             _jsonWrite(snapshot, output)
             logger.value("JSON output", output)
-        failed = [
-            mailbox
-            for mailbox in snapshot["mailboxes"]
-            if mailbox.get("failed")
-            or not mailbox.get("inventory", {}).get("complete", True)
-        ]
-        if failed:
-            for mailbox in failed:
-                for issue in mailbox.get("issues", []):
-                    logger.error(issue)
-                for issue in mailbox.get("inventory", {}).get("issues", []):
-                    logger.error(issue.get("message", "Mailbox inventory incomplete"))
+        if _auditIssuesReport(snapshot, logger):
+            logger.error("Audit finished with incomplete mailbox data")
             raise SystemExit(1)
+        logger.info("Audit complete: %d mailboxes", len(snapshot["mailboxes"]))
     except (OSError, ValueError, KeyError):
         parser.exit(
             1,
@@ -254,3 +244,31 @@ def _planLoad(state: Path) -> dict | None:
     if not isinstance(plan, dict) or plan.get("schemaVersion") != 1:
         raise ValueError("Unsupported stored migration plan schema")
     return plan
+
+
+
+def _auditIssuesReport(snapshot: dict, logger: Any) -> bool:
+    """Report mailbox issues with mailbox/folder context and useful severity."""
+    incomplete = False
+    for mailbox in snapshot["mailboxes"]:
+        identity = mailbox.get("id", mailbox.get("name", "mailbox"))
+        failed = mailbox.get("failed", False)
+        incomplete = incomplete or failed
+
+        for issue in mailbox.get("issues", []):
+            message = f"{identity}: {issue}"
+            if failed:
+                logger.error(message)
+            else:
+                logger.warning(message)
+
+        inventory = mailbox.get("inventory", {})
+        if not inventory.get("complete", True):
+            incomplete = True
+        for issue in inventory.get("issues", []):
+            folder = issue.get("folder")
+            scope = f"{identity}/{folder}" if folder else identity
+            logger.error(
+                f'{scope}: {issue.get("message", "Mailbox inventory incomplete")}'
+            )
+    return incomplete
