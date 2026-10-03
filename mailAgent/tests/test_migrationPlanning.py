@@ -15,6 +15,7 @@ from mailAgent.configuration import configValidate
 from mailAgent.discovery import discoveryRun, snapshotSave
 from mailAgent.messageInventory import messageParse, messagesDiscover
 from mailAgent.migrationPlanning import folderMappingsBuild, migrationPlan
+from mailAgent.planSummary import planSummaryLines
 
 
 @pytest.fixture
@@ -508,6 +509,7 @@ def testCoreNoTextualDependency():
         "configuration",
         "messageInventory",
         "migrationPlanning",
+        "planSummary",
     ):
         tree = ast.parse((root / (name + ".py")).read_text())
         imports = [
@@ -639,7 +641,7 @@ def testNonselectableDestinationsAndUnknownSource(config):
 
 
 @pytest.mark.parametrize("confirm", [False, True])
-def testCliPlanningPersistenceBoundary(config, tmp_path, monkeypatch, capsys, confirm):
+def testCliPlanningPersistenceBoundary(config, tmp_path, monkeypatch, confirm):
     from mailAgent import cli
     import mailAgent.discovery as discovery
 
@@ -672,10 +674,12 @@ def testCliPlanningPersistenceBoundary(config, tmp_path, monkeypatch, capsys, co
     cli.main()
     import json
 
-    output = json.loads(capsys.readouterr().out)
+    outputPath = state / "plan.json"
+    assert outputPath.is_file()
+    output = json.loads(outputPath.read_text())
     assert output["migrationPlan"]["executionEnabled"] is False
+    assert "userSummary" not in output["migrationPlan"]
     assert calls == [True]
-    assert state.exists() == confirm
     if confirm:
         assert (
             json.loads((state / "latest.json").read_text())["migrationPlan"][
@@ -683,6 +687,49 @@ def testCliPlanningPersistenceBoundary(config, tmp_path, monkeypatch, capsys, co
             ]
             is False
         )
+
+
+def testCliExplicitJsonFile(config, tmp_path, monkeypatch):
+    from mailAgent import cli
+    import mailAgent.discovery as discovery
+
+    configPath = tmp_path / "config.toml"
+    configPath.write_text(
+        (Path(__file__).parents[1] / "config.example.toml").read_text()
+    )
+    monkeypatch.setattr(cli.tomllib, "loads", lambda text: config)
+    monkeypatch.setattr(
+        discovery,
+        "discoveryRun",
+        lambda accounts, root, includeMessages=False: snapshotBuild(config),
+    )
+    outputPath = tmp_path / "exports" / "plan.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "mailAgent",
+            "--plan",
+            "--json",
+            str(outputPath),
+            "--config",
+            str(configPath),
+            "--state",
+            str(tmp_path / "state"),
+        ],
+    )
+    cli.main()
+    assert outputPath.is_file()
+
+
+def testReadablePlanSummary(config):
+    plan = migrationPlan(config, snapshotBuild(config))
+    lines = planSummaryLines(plan)
+    text = "\n".join(lines)
+    assert "Planning only - no mail has been changed." in text
+    assert "Messages scanned:" in text
+    assert "Proposed actions:" in text
+    assert "By mailbox" in text
+    assert "Next actions" in text
 
 
 @pytest.mark.parametrize("kind", ["Trash", "Junk", "Drafts"])
