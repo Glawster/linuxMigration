@@ -1180,7 +1180,11 @@ def testInboxDigestPresentation(config):
                 str(app.query_one("#digest-footer", Static).render())
                 == "Space to Toggle Sender of interest"
             )
-            binding = app.get_key_display("space")
-            assert binding is None
+            binding = next(
+                binding
+                for binding in app.BINDINGS
+                if getattr(binding, "key", None) == "space"
+            )
+            assert binding.show is False
 
     asyncio.run(uiInspect())
