@@ -4,18 +4,31 @@ import json
 
 from rich.text import Text
 from textual.app import App, ComposeResult
+from textual.coordinate import Coordinate
 from textual.containers import VerticalScroll
 from textual.widgets import DataTable, Footer, Header, Static, TabbedContent, TabPane
+
+from mailAgent.interest import interestIs, interestLoad, interestSet
 
 ## presentation
 
 
 def auditAppBuild(snapshot: dict) -> App:
     """Construct the audit app for interactive use or headless validation."""
+    try:
+        interestData = interestLoad()
+        interestIssue = None
+    except (OSError, ValueError):
+        interestData = {"schemaVersion": 1, "mailboxes": {}}
+        interestIssue = "Interesting-sender preferences could not be loaded"
+    senderRows = _interestRows(snapshot, interestData)
 
     class MailboxAudit(App):
         TITLE = "Mailbox Audit"
-        BINDINGS = [("q", "quit", "Quit")]
+        BINDINGS = [
+            ("q", "quit", "Quit"),
+            ("space", "toggle_interest", "Toggle interesting sender"),
+        ]
 
         def compose(self) -> ComposeResult:
             yield Header()
@@ -34,10 +47,28 @@ def auditAppBuild(snapshot: dict) -> App:
                                         "Observed\n" + json.dumps(mailbox, indent=2),
                                         markup=False,
                                     )
+                yield from _interestPane(senderRows, interestIssue)
                 yield from _auditPanes(snapshot)
                 if "migrationPlan" in snapshot:
                     yield from _planningPanes(snapshot["migrationPlan"])
             yield Footer()
+
+        def action_toggle_interest(self) -> None:
+            """Toggle the selected sender as interesting without changing mail."""
+            table = self.query_one("#interest-table", DataTable)
+            if self.focused is not table or not senderRows:
+                return
+            row = table.cursor_row
+            if row < 0 or row >= len(senderRows):
+                return
+            entry = senderRows[row]
+            interesting = not entry["interesting"]
+            interestSet(entry["mailbox"], entry["sender"], interesting)
+            entry["interesting"] = interesting
+            table.update_cell_at(
+                Coordinate(row, 0),
+                Text("✓" if interesting else ""),
+            )
 
     return MailboxAudit()
 
@@ -45,6 +76,64 @@ def auditAppBuild(snapshot: dict) -> App:
 def auditShow(snapshot: dict) -> None:
     """Display audit facts, canonical mappings, proposals and review issues."""
     auditAppBuild(snapshot).run()
+
+
+def _interestPane(senderRows: list[dict], issue: str | None) -> ComposeResult:
+    with TabPane("Inbox Interest", id="inboxInterest"):
+        yield Static(
+            "Select a sender row and press Space to toggle ✓ Interesting. "
+            "Interesting senders are candidates for the daily digest.",
+            markup=False,
+        )
+        if issue:
+            yield Static(issue, markup=False)
+        table = DataTable(id="interest-table", cursor_type="row")
+        table.add_columns(
+            "Interesting", "Mailbox", "Sender", "Inbox messages", "Example subject"
+        )
+        for entry in senderRows:
+            table.add_row(
+                Text("✓" if entry["interesting"] else ""),
+                Text(entry["mailbox"]),
+                Text(entry["sender"]),
+                Text(str(entry["count"])),
+                Text(entry["subject"]),
+            )
+        yield table
+        if not senderRows:
+            yield Static("No Inbox sender headers available", markup=False)
+
+
+def _interestRows(snapshot: dict, interestData: dict) -> list[dict]:
+    grouped = {}
+    for mailbox in snapshot["mailboxes"]:
+        identity = mailbox["id"]
+        for message in mailbox.get("inboxInventory", {}).get("messages", []):
+            sender = message.get("sender")
+            if not sender:
+                continue
+            key = (identity, sender)
+            entry = grouped.setdefault(
+                key,
+                dict(
+                    mailbox=identity,
+                    sender=sender,
+                    count=0,
+                    subject="",
+                    interesting=interestIs(interestData, identity, sender),
+                ),
+            )
+            entry["count"] += 1
+            if message.get("subject"):
+                entry["subject"] = message["subject"]
+    return sorted(
+        grouped.values(),
+        key=lambda entry: (
+            not entry["interesting"],
+            entry["mailbox"],
+            entry["sender"],
+        ),
+    )
 
 
 ## utilities
