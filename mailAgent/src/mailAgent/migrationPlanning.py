@@ -9,12 +9,14 @@ from mailAgent.archiveClassification import archiveSenderIndex, senderClassify
 from mailAgent.archiveDiscovery import archiveDiscover
 from mailAgent.configuration import configValidate
 from mailAgent.messageInventory import folderSystemKind
+from mailAgent.planResolution import senderResolutionGet
 
 ## workflow
 
 
-def migrationPlan(config: dict, snapshot: dict) -> dict:
+def migrationPlan(config: dict, snapshot: dict, resolutions: dict | None = None) -> dict:
     """Build a reviewable plan from observed folders and message metadata."""
+    resolutions = resolutions or {"schemaVersion": 1, "senderMappings": {}}
     config = configValidate(config, Path.cwd())
     logger = getLogger()
     logger.doing("migration planning")
@@ -58,6 +60,7 @@ def migrationPlan(config: dict, snapshot: dict) -> dict:
             archives,
             mappings,
             senderIndexes,
+            resolutions,
             plan,
         )
     messages = [
@@ -162,6 +165,7 @@ def _accountPlan(
     archives: dict,
     mappings: dict,
     senderIndexes: dict,
+    resolutions: dict,
     plan: dict,
 ) -> None:
     mailbox = observed.get(account["id"])
@@ -198,6 +202,7 @@ def _accountPlan(
             archive,
             mappings[target["id"]],
             senderIndexes.get(target["id"], {}),
+            resolutions,
             plan,
         )
 
@@ -245,6 +250,8 @@ def _messageMapping(
     archive: dict,
     mappings: list,
     senderIndex: dict,
+    target: dict,
+    resolutions: dict,
     liveYear: int,
 ) -> tuple[dict, dict | None]:
     if not _messageYearValid(message, liveYear):
@@ -262,6 +269,20 @@ def _messageMapping(
         return candidates[0], None
     if not archive["available"] or not archive.get("complete", True):
         raise ValueError("No unambiguous canonical archive folder")
+    decision = senderResolutionGet(resolutions, account["id"], message.get("sender"))
+    if decision and decision.get("targetMailbox") == target["id"]:
+        selected = [
+            mapping
+            for mapping in mappings
+            if mapping["canonical"] == decision.get("canonical")
+        ]
+        if len(selected) == 1:
+            return selected[0], dict(
+                method="userSenderDecision",
+                confidence="explicit",
+                reason="User-selected canonical folder",
+                evidenceCount=1,
+            )
     classification = senderClassify(message.get("sender"), mappings, senderIndex)
     if not classification:
         raise ValueError("No unambiguous canonical archive folder")
@@ -276,6 +297,7 @@ def _messagePlan(
     archive: dict,
     mappings: list,
     senderIndex: dict,
+    resolutions: dict,
     plan: dict,
 ) -> None:
     source = {
@@ -292,13 +314,21 @@ def _messagePlan(
             archive,
             mappings,
             senderIndex,
+            target,
+            resolutions,
             plan["liveYear"],
         )
         destination, action = _destinationBuild(
             source, target, message["year"], plan["liveYear"], mapping, archive
         )
     except ValueError as error:
-        _reviewAppend(plan, account["id"], str(error), source=source)
+        _reviewAppend(
+            plan,
+            account["id"],
+            str(error),
+            source=source,
+            targetMailbox=target["id"],
+        )
         return
     plan["proposals"].append(
         dict(
