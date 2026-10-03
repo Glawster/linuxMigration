@@ -386,8 +386,11 @@ def testCliFailuresContainNoSecrets(store, gpg, tmp_path, monkeypatch, capsys, c
         cli.main()
     output = capsys.readouterr()
     assert caught.value.code == 1
-    assert "GPG decryption failed" in output.out
+    assert "GPG decryption failed" in output.err
     assert SECRET not in output.out + output.err + str(caught.value) + caplog.text
+    exported = (tmp_path / "state" / "audit.json").read_text()
+    assert "GPG decryption failed" in exported
+    assert SECRET not in exported
 
 
 def testCoreHasNoTextualDependency():
