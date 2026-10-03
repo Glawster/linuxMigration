@@ -1,6 +1,7 @@
 """Collect Date headers and stable message identities over read-only IMAP."""
 
 import re
+from email.header import decode_header, make_header
 from email.parser import BytesParser
 from email.utils import getaddresses, parsedate_to_datetime
 from typing import Any
@@ -31,6 +32,31 @@ def messagesDiscover(client: Any, folders: list[dict], batchSize: int = 200) -> 
     return result
 
 
+def inboxMessagesDiscover(
+    client: Any, folders: list[dict], batchSize: int = 200
+) -> dict:
+    """Inspect Inbox headers for the interactive interesting-sender view."""
+    inbox = [
+        folder
+        for folder in folders
+        if folder["path"].lower() == "inbox"
+        or "\\inbox" in [attribute.lower() for attribute in folder["attributes"]]
+    ]
+    result = dict(messages=[], issues=[], complete=True)
+    for folder in inbox:
+        try:
+            _folderInspect(client, folder, batchSize, result)
+        except Exception:
+            result["complete"] = False
+            result["issues"].append(
+                dict(
+                    folder=folder["path"],
+                    message="Inbox inventory unavailable or incomplete",
+                )
+            )
+    return result
+
+
 ## parsing
 
 
@@ -54,7 +80,7 @@ def folderSystemKind(folder: dict) -> str | None:
 
 
 def messageParse(metadata: bytes, header: bytes, folder: str, uidValidity: str) -> dict:
-    """Parse a single UID and Date header; ambiguous dates remain reviewable."""
+    """Parse stable identity plus lightweight headers; never inspect the body."""
     uid = re.search(rb"\bUID\s+(\d+)\b", metadata)
     if not uid:
         raise ValueError("Missing UID in FETCH response")
@@ -64,6 +90,7 @@ def messageParse(metadata: bytes, header: bytes, folder: str, uidValidity: str) 
         uidValidity=uidValidity,
         year=None,
         sender=None,
+        subject="",
     )
     parsed = BytesParser().parsebytes(header)
     dates = parsed.get_all("Date", [])
@@ -74,6 +101,12 @@ def messageParse(metadata: bytes, header: bytes, folder: str, uidValidity: str) 
     ]
     if len(senders) == 1:
         result["sender"] = senders[0]
+    subject = parsed.get("Subject")
+    if subject:
+        try:
+            result["subject"] = str(make_header(decode_header(subject)))
+        except (LookupError, UnicodeError):
+            result["subject"] = str(subject)
     try:
         if len(dates) != 1:
             raise ValueError("Missing or duplicate Date header")
@@ -105,7 +138,9 @@ def _folderInspect(client: Any, folder: dict, batchSize: int, result: dict) -> N
     for start in range(0, len(identifiers), batchSize):
         batch = identifiers[start : start + batchSize]
         status, rows = client.uid(
-            "FETCH", b",".join(batch).decode(), "(UID BODY.PEEK[HEADER.FIELDS (DATE FROM)])"
+            "FETCH",
+            b",".join(batch).decode(),
+            "(UID BODY.PEEK[HEADER.FIELDS (DATE FROM SUBJECT)])",
         )
         if status != "OK":
             raise ValueError("UID FETCH failed")
