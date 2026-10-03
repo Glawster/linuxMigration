@@ -291,8 +291,6 @@ def _auditPanes(snapshot: dict) -> ComposeResult:
         yield from _filtersPane(snapshot)
     with TabPane("Conflicts", id="conflicts"):
         yield from _conflictsPane(snapshot)
-    with TabPane("Quota", id="quota"):
-        yield from _quotaPane(snapshot)
     with TabPane("Changes", id="changes"):
         yield from _changesPane(snapshot)
 
@@ -343,38 +341,6 @@ def _conflictsPane(snapshot: dict) -> ComposeResult:
     yield table
     if not snapshot.get("conflicts"):
         yield Static("No conflicts discovered", markup=False)
-
-
-def _quotaPane(snapshot: dict) -> ComposeResult:
-    table = DataTable(id="quota-table")
-    table.add_columns("Mailbox", "Resource", "Used", "Limit", "Unit", "Status")
-    rows = 0
-    for mailbox in snapshot["mailboxes"]:
-        quotas = mailbox.get("quota", [])
-        if quotas:
-            for quota in quotas:
-                rows += 1
-                table.add_row(
-                    Text(mailbox["id"]),
-                    Text(quota.get("resource", "")),
-                    Text(str(quota.get("used", ""))),
-                    Text(str(quota.get("limit", ""))),
-                    Text(quota.get("unit", "")),
-                    Text(""),
-                )
-        else:
-            rows += 1
-            table.add_row(
-                Text(mailbox["id"]),
-                Text(""),
-                Text(""),
-                Text(""),
-                Text(""),
-                Text("; ".join(mailbox.get("issues", [])) or "Unavailable"),
-            )
-    yield table
-    if not rows:
-        yield Static("No quota information discovered", markup=False)
 
 
 def _changesPane(snapshot: dict) -> ComposeResult:
