@@ -4,8 +4,10 @@ import re
 from email.utils import getaddresses
 
 
-_RELAY_SUFFIX = re.compile(r"_x[a-z0-9]+_[a-z0-9]+$", re.IGNORECASE)
-_OPAQUE_LOCAL = re.compile(r"^[0-9a-f]{16,}$", re.IGNORECASE)
+_RELAY_SUFFIX = re.compile(
+    r"_(?=[a-z0-9]*\\d)[a-z0-9]{6,}_(?=[a-z0-9]*\\d)[a-z0-9]{6,}$",
+    re.IGNORECASE,
+)
 
 
 def senderNormalize(value: str | None) -> str | None:
@@ -40,8 +42,6 @@ def senderRelayDecode(address: str) -> str:
     decodedDomain = originalDomain.replace("_", ".")
     if not _domainValid(decodedDomain):
         return address
-    if _OPAQUE_LOCAL.fullmatch(originalLocal):
-        return f"*@{decodedDomain}"
     return f"{originalLocal}@{decodedDomain}"
 
 
