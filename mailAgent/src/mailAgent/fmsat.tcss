@@ -1,0 +1,94 @@
+/* Textual adaptation of the canonical FMSAT palette from Glawster/fmsat app/fmsat.qss.
+   Palette:
+   canvas #f7f7f5; surface #101f2e; accentStrong #239b78; accent #31b98f;
+   accentHover #56d6b0; textPrimary #f5f8fb; textSecondary #d9e5ef;
+   textMuted #8fa3b8; border #263b4e; borderStrong #30465a;
+   successSurface #163b38; successText #75e0bf; warningSurface #40351c;
+   warningText #f0c76a; errorSurface #442329; errorText #ff9da7;
+*/
+
+Screen {
+    background: #101f2e;
+    color: #f5f8fb;
+}
+
+Header, Footer {
+    background: #101f2e;
+    color: #d9e5ef;
+}
+
+#safety {
+    background: #163b38;
+    color: #75e0bf;
+    border-bottom: solid #28675e;
+    padding: 0 1;
+    text-style: bold;
+}
+
+TabbedContent {
+    background: #101f2e;
+}
+
+Tabs {
+    background: #101f2e;
+    color: #8fa3b8;
+}
+
+Tab {
+    background: #101f2e;
+    color: #8fa3b8;
+}
+
+Tab:hover {
+    color: #56d6b0;
+}
+
+Tab.-active {
+    color: #239b78;
+    text-style: bold;
+}
+
+TabPane {
+    background: #101f2e;
+    color: #f5f8fb;
+    padding: 1;
+}
+
+Static {
+    background: #101f2e;
+    color: #d9e5ef;
+}
+
+DataTable {
+    background: #101f2e;
+    color: #f5f8fb;
+    border: solid #30465a;
+}
+
+DataTable > .datatable--header {
+    background: #101f2e;
+    color: #d9e5ef;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: #163b38;
+    color: #75e0bf;
+}
+
+DataTable > .datatable--hover {
+    background: #243545;
+    color: #f5f8fb;
+}
+
+DataTable:focus {
+    border: solid #56d6b0;
+}
+
+VerticalScroll {
+    background: #101f2e;
+}
+
+#inboxInterest DataTable {
+    height: 1fr;
+}
