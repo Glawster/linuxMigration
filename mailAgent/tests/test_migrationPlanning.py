@@ -938,14 +938,14 @@ def testPlanningRowsAreUserFacing():
     )
     row = _planningRow("proposals", proposal)
     assert row[:5] == (
-        "andy",
+        "andy IMAP/INBOX",
         "service@paypal.com",
+        1,
         2026,
-        "Move",
-        "andy: Finance/PayPal",
+        "andy IMAP/Finance/PayPal",
     )
     assert "UID" not in " ".join(str(value) for value in row)
-    assert "create destination folder" in row[5]
+    assert "create IMAP mirror" in row[5]
 
 
 def testHideMyEmailRelayDecode():
@@ -1302,3 +1302,110 @@ def testReviewQueueResolutionControls(config):
             assert app.query_one("#resolve-sender", Button)
 
     asyncio.run(uiInspect())
+
+
+
+def testProposalRowsGroupDuplicatesAndShowStores():
+    from mailAgent.auditUi import _proposalRows
+
+    plan = dict(
+        archives=[
+            dict(
+                mailbox="andy",
+                root="/home/andy/Mail/myMail.sbd",
+            )
+        ],
+        proposals=[
+            dict(
+                action="migrate",
+                source=dict(
+                    mailbox="andy",
+                    folder="INBOX",
+                    uid="1",
+                    uidValidity="42",
+                    sender="shop@example.com",
+                ),
+                year=2026,
+                destination=dict(
+                    kind="imap",
+                    mailbox="andy",
+                    folder="Shopping.Shop",
+                    exists=False,
+                ),
+                requiresFolderCreation=True,
+                classification=dict(
+                    method="archiveSenderExact",
+                    confidence="high",
+                    reason="Archived sender history",
+                    evidenceCount=3,
+                ),
+            ),
+            dict(
+                action="migrate",
+                source=dict(
+                    mailbox="andy",
+                    folder="INBOX",
+                    uid="2",
+                    uidValidity="42",
+                    sender="shop@example.com",
+                ),
+                year=2026,
+                destination=dict(
+                    kind="imap",
+                    mailbox="andy",
+                    folder="Shopping.Shop",
+                    exists=False,
+                ),
+                requiresFolderCreation=True,
+                classification=dict(
+                    method="archiveSenderExact",
+                    confidence="high",
+                    reason="Archived sender history",
+                    evidenceCount=3,
+                ),
+            ),
+            dict(
+                action="archive",
+                source=dict(
+                    mailbox="andy",
+                    folder="INBOX",
+                    uid="3",
+                    uidValidity="42",
+                    sender="old@example.com",
+                ),
+                year=2025,
+                destination=dict(
+                    kind="local",
+                    mailbox="andy",
+                    folder="Shopping/Old",
+                    path="/home/andy/Mail/myMail.sbd/Shopping.sbd/Old",
+                    format="thunderbird",
+                ),
+                requiresFolderCreation=False,
+                classification=dict(
+                    method="userSenderDecision",
+                    confidence="explicit",
+                    reason="User-selected canonical folder",
+                    evidenceCount=1,
+                ),
+            ),
+        ],
+    )
+
+    rows = _proposalRows(plan)
+    assert (
+        "andy IMAP/INBOX",
+        "shop@example.com",
+        2,
+        2026,
+        "andy IMAP/Shopping/Shop",
+        "Archive history (3); create IMAP mirror",
+    ) in rows
+    assert (
+        "andy IMAP/INBOX",
+        "old@example.com",
+        1,
+        2025,
+        "myMail/Shopping/Old",
+        "User decision",
+    ) in rows
