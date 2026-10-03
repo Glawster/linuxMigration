@@ -9,6 +9,7 @@ from textual.containers import VerticalScroll
 from textual.widgets import DataTable, Footer, Header, Static, TabbedContent, TabPane
 
 from mailAgent.interest import interestIs, interestLoad, interestSet
+from mailAgent.planSummary import planSummaryLines
 
 ## presentation
 
@@ -50,6 +51,7 @@ def auditAppBuild(snapshot: dict) -> App:
                 yield from _interestPane(senderRows, interestIssue)
                 yield from _auditPanes(snapshot)
                 if "migrationPlan" in snapshot:
+                    yield from _planPane(snapshot["migrationPlan"])
                     yield from _planningPanes(snapshot["migrationPlan"])
             yield Footer()
 
@@ -134,6 +136,17 @@ def _interestRows(snapshot: dict, interestData: dict) -> list[dict]:
             entry["sender"],
         ),
     )
+
+
+def _planPane(plan: dict) -> ComposeResult:
+    """Show the same readable plan summary produced by mailAgent --plan."""
+    with TabPane("Plan", id="plan"):
+        with VerticalScroll():
+            yield Static(
+                "\n".join(planSummaryLines(plan)),
+                id="plan-summary",
+                markup=False,
+            )
 
 
 ## utilities
