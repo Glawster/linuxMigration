@@ -88,8 +88,13 @@ Shared and support accounts remain excluded from personal archive proposals.
 
 The **Plan** tab is always visible. Before a plan exists it shows a
 `Run planning session` button. Activating the button closes the current audit
-view, runs a fresh read-only planning scan, and reopens the TUI with the
-readable plan summary and detailed planning tabs populated.
+view, runs a fresh read-only planning scan, and reopens the TUI with the plan
+populated. Once a plan exists the button is not shown.
+
+Planning detail uses a second-level menu inside **Plan**: Summary, Mapping,
+Proposed Moves, Review Queue and Role Boundaries. Mapping hides filesystem
+storage paths. Proposed Moves shows the sender instead of IMAP UID values and
+renders destination hierarchy with `/` separators for readability.
 
 The button does not enable migration execution or persist a snapshot.
 
