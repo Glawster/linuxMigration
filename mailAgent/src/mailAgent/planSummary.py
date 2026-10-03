@@ -45,7 +45,9 @@ def planSummaryLines(plan: dict) -> list[str]:
             for proposal in proposals
             if proposal.get("source", {}).get("mailbox") == mailbox
         ]
-        mailboxReviews = [review for review in reviews if review.get("mailbox") == mailbox]
+        mailboxReviews = [
+            review for review in reviews if review.get("mailbox") == mailbox
+        ]
         unclassified = sum(
             1
             for review in mailboxReviews
