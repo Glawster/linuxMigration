@@ -98,6 +98,9 @@ renders destination hierarchy with `/` separators for readability.
 
 The button does not enable migration execution or persist a snapshot.
 
+
+The TUI does not expose a dedicated quota tab. IMAP quota data may still be discovered internally and can be surfaced later as a warning if it becomes operationally relevant.
+
 ## Discovery before organisation
 
 Before mailAgent changes any mailbox structure, it performs a read-only audit
