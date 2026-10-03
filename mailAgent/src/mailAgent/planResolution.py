@@ -6,7 +6,7 @@ from pathlib import Path
 
 from mailAgent.senderAddress import senderNormalize
 
-SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 1
 
 
 def resolutionPath() -> Path:
@@ -18,9 +18,9 @@ def resolutionLoad(path: Path | None = None) -> dict:
     """Load and validate plan-resolution preferences."""
     path = path or resolutionPath()
     if not path.is_file():
-        return {"schemaVersion": SCHEMA_VERSION, "senderMappings": {}}
+        return {"schemaVersion": _SCHEMA_VERSION, "senderMappings": {}}
     data = json.loads(path.read_text())
-    if not isinstance(data, dict) or data.get("schemaVersion") != SCHEMA_VERSION:
+    if not isinstance(data, dict) or data.get("schemaVersion") != _SCHEMA_VERSION:
         raise ValueError("Unsupported plan-resolution schema")
     mappings = data.get("senderMappings")
     if not isinstance(mappings, dict):
@@ -63,7 +63,10 @@ def senderResolutionSet(
     normalized = senderNormalize(sender)
     if not normalized or not sourceMailbox or not targetMailbox or not canonical:
         raise ValueError("Sender resolution requires mailbox, sender and canonical folder")
-    if any(part in ("", ".", "..") for part in canonical.split("/")):
+    if (
+        any(part in ("", ".", "..") for part in canonical.split("/"))
+        or any(ord(char) < 32 for char in canonical)
+    ):
         raise ValueError("Invalid canonical folder")
     path = path or resolutionPath()
     data = resolutionLoad(path)
