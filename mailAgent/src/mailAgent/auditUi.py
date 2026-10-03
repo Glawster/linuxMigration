@@ -5,7 +5,16 @@ from textual.binding import Binding
 from textual.app import App, ComposeResult
 from textual.coordinate import Coordinate
 from textual.containers import VerticalScroll
-from textual.widgets import Button, DataTable, Footer, Header, Static, TabbedContent, TabPane
+from textual.widgets import (
+    Button,
+    DataTable,
+    Footer,
+    Header,
+    Select,
+    Static,
+    TabbedContent,
+    TabPane,
+)
 
 from mailAgent.interest import interestIs, interestLoad, interestSet
 from mailAgent.planSummary import planSummaryLines
@@ -68,9 +77,47 @@ def auditAppBuild(snapshot: dict) -> App:
             )
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
-            """Return a planning request to the CLI when the Plan button is used."""
+            """Handle planning refresh and explicit review decisions."""
+            if event.button.id == "resolve-sender":
+                self._senderResolutionSave(snapshot.get("migrationPlan"))
+                return
             if event.button.id in ("run-planning", "refresh-planning"):
                 self.exit("runPlanning")
+
+        def _senderResolutionSave(self, plan: dict | None) -> None:
+            if not plan:
+                return
+            table = self.query_one("#review-table", DataTable)
+            chooser = self.query_one("#review-folder", Select)
+            status = self.query_one("#review-resolution-status", Static)
+            row = table.cursor_row
+            if row < 0 or row >= len(plan["reviewQueue"]):
+                status.update("Select a Review Queue row first.")
+                return
+            entry = plan["reviewQueue"][row]
+            source = entry.get("source", {})
+            sender = source.get("sender")
+            targetMailbox = entry.get("targetMailbox")
+            if not sender or not targetMailbox:
+                status.update("This review item is not a sender-classification decision.")
+                return
+            selection = chooser.value
+            if not isinstance(selection, tuple) or len(selection) != 2:
+                status.update("Choose a canonical folder first.")
+                return
+            selectedMailbox, canonical = selection
+            if selectedMailbox != targetMailbox:
+                status.update(f"Choose a folder belonging to {targetMailbox}.")
+                return
+            from mailAgent.planResolution import senderResolutionSet
+
+            senderResolutionSet(
+                entry["mailbox"],
+                sender,
+                targetMailbox,
+                canonical,
+            )
+            self.exit("runPlanning")
 
     return MailboxAudit()
 
@@ -213,11 +260,40 @@ def _planningPanes(plan: dict) -> ComposeResult:
     for title, key, label, columns in specifications:
         with TabPane(title, id=key):
             yield Static(label, markup=False)
-            table = DataTable()
+            table = DataTable(
+                id="review-table" if key == "reviewQueue" else None,
+                cursor_type="row" if key == "reviewQueue" else "cell",
+            )
             table.add_columns(*columns)
             for entry in plan[key]:
                 table.add_row(*(Text(str(cell)) for cell in _planningRow(key, entry)))
             yield table
+            if key == "reviewQueue":
+                options = [
+                    (
+                        f'{mapping["mailbox"]} — {mapping["canonical"]}',
+                        (mapping["mailbox"], mapping["canonical"]),
+                    )
+                    for mapping in plan["mappings"]
+                    if mapping.get("localSelectable")
+                ]
+                yield Static(
+                    "For an unclassified sender, select its Review Queue row, "
+                    "choose the canonical folder, then save. The decision applies "
+                    "to that sender in the source mailbox.",
+                    markup=False,
+                )
+                yield Select(
+                    options,
+                    prompt="Choose canonical folder",
+                    id="review-folder",
+                )
+                yield Button(
+                    "Use folder for selected sender",
+                    id="resolve-sender",
+                    variant="primary",
+                )
+                yield Static("", id="review-resolution-status", markup=False)
             if not plan[key]:
                 yield Static("No entries", markup=False)
 
