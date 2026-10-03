@@ -51,8 +51,9 @@ Run with:
 
     mailAgent
 
-Use `mailAgent --confirm` to persist the audit snapshot, or `--json` for
-noninteractive output. Mailbox operations remain read-only.
+Use `mailAgent --confirm` to persist the audit snapshot. JSON is an optional
+machine-readable export and is always written to a file rather than stdout.
+Mailbox operations remain read-only.
 
 The first version never deletes, moves, flags, or sends mail.
 
@@ -65,13 +66,20 @@ Use [config.example.toml](config.example.toml) for the required role settings.
 
     mailAgent --plan
     mailAgent --plan --json
+    mailAgent --plan --json ~/Documents/mail-plan.json
     mailAgent --plan --confirm --json
 
-`--plan` reads Date headers for personal/legacy messages and shows Mapping,
-Proposed Moves, Review Queue and Role Boundaries panels. `--confirm` only saves
-the audit and plan under `~/.local/state/mailAgent/discovery/`.
-Migration execution remains disabled. Shared and support accounts remain
-visible in the audit and produce no personal archive proposals.
+`--plan` reads Date headers for personal/legacy messages and writes a concise
+human-readable summary through `organiseMyProjects.logUtils`. It does not open
+the full audit TUI.
+
+`--json` also writes the complete structured result to
+`~/.local/state/mailAgent/discovery/plan.json`. Supplying a path after
+`--json` writes there instead. JSON is not printed to the terminal.
+
+`--confirm` only saves the audit and plan baseline under
+`~/.local/state/mailAgent/discovery/`. Migration execution remains disabled.
+Shared and support accounts remain excluded from personal archive proposals.
 
 ## Discovery before organisation
 
