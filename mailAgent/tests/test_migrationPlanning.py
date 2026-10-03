@@ -1162,3 +1162,25 @@ def testStoreAndChangeRowsHideThunderbirdInternals():
     )
     assert rows[2] == ("folder added", "old", "INBOX/Archive", "", "")
     assert sourcePath not in " ".join(" ".join(row) for row in rows)
+
+
+
+def testInboxDigestPresentation(config):
+    from mailAgent.auditUi import auditAppBuild
+    from textual.widgets import Static, TabPane
+
+    snapshot = snapshotBuild(config)
+
+    async def uiInspect():
+        app = auditAppBuild(snapshot)
+        async with app.run_test(size=(120, 40)):
+            digest = app.query_one("#inboxInterest", TabPane)
+            assert str(digest._title) == "Inbox Digest"
+            assert (
+                str(app.query_one("#digest-footer", Static).render())
+                == "Space to Toggle Sender of interest"
+            )
+            binding = app.get_key_display("space")
+            assert binding is None
+
+    asyncio.run(uiInspect())
