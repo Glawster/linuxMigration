@@ -117,19 +117,37 @@ execution increment. See [implementation and limitations](../../../documentation
 
 ## User-readable plan summary
 
-The planning output must include a concise `userSummary` near the start of
-`migrationPlan` so a user does not need to interpret the detailed message-level
-JSON.
+`mailAgent --plan` must present a concise human-readable summary through
+`organiseMyProjects.logUtils`. The user must not need to inspect the detailed
+JSON to understand the plan.
 
-The summary must:
+The console summary must:
 
 - state clearly that planning is read-only and no mail has been changed;
-- show messages scanned, proposed actions, and review-item counts;
-- show per-mailbox counts for proposals, review items, unclassified messages,
-  and proposed IMAP mirror folders;
+- show messages scanned, proposed actions, review-item counts, and excluded
+  system-folder message counts;
+- show per-mailbox counts for proposed actions, review items, unclassified
+  messages, and proposed IMAP mirror folders where relevant;
 - aggregate message-level review failures by mailbox and reason;
 - list folder-level decisions still required, including Sent mappings and
   future Trash/Junk/Drafts retention;
-- provide short next-step guidance based on the actual plan;
-- contain no passwords, message bodies, or other credential data;
-- preserve the detailed plan arrays for diagnostics and machine use.
+- provide short next-action guidance based on the actual plan;
+- contain no passwords, message bodies, or other credential data.
+
+Presentation must remain separate from planning logic: `migrationPlanning.py`
+produces structured data and a presentation module renders that data through
+`logUtils`.
+
+### JSON output
+
+JSON is machine-readable diagnostic/export output, not the primary user
+presentation.
+
+- JSON must never be printed to stdout.
+- `mailAgent --plan --json` writes to the default plan JSON file under the
+  configured state directory.
+- `mailAgent --plan --json FILE` writes to the requested file.
+- The human-readable `logUtils` summary is still shown when JSON output is
+  requested.
+- JSON writing must not mutate mail.
+- The detailed structured plan remains in JSON for diagnostics and scripting.
