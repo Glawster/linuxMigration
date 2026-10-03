@@ -298,7 +298,7 @@ def _foldersPane(snapshot: dict) -> ComposeResult:
             rows += 1
             table.add_row(
                 Text(archive["mailbox"]),
-                Text(archive["name"]),
+                Text(_storeDisplay(archive["name"])),
                 Text("(archive unavailable)"),
                 Text(""),
                 Text(""),
@@ -309,7 +309,7 @@ def _foldersPane(snapshot: dict) -> ComposeResult:
             rows += 1
             table.add_row(
                 Text(archive["mailbox"]),
-                Text(archive["name"]),
+                Text(_storeDisplay(archive["name"])),
                 Text(folder["path"]),
                 Text(""),
                 Text(""),
@@ -411,19 +411,57 @@ def _conflictRows(snapshot: dict) -> list[tuple[str, str, str, str, str]]:
 def _changesPane(snapshot: dict) -> ComposeResult:
     table = DataTable(id="changes-table")
     table.add_columns("Change", "Mailbox", "Item", "Before", "After")
-    for entry in snapshot.get("changes", []):
-        identity = entry.get("identity", "")
-        mailbox, item = _identityDisplay(identity)
-        table.add_row(
-            Text(entry.get("kind", "")),
-            Text(mailbox),
-            Text(item),
-            Text(str(entry.get("before", ""))),
-            Text(str(entry.get("after", ""))),
-        )
+    rows = _changeRows(snapshot)
+    for row in rows:
+        table.add_row(*(Text(value) for value in row))
     yield table
-    if not snapshot.get("changes"):
+    if not rows:
         yield Static("No changes since the previous snapshot", markup=False)
+
+
+def _changeRows(snapshot: dict) -> list[tuple[str, str, str, str, str]]:
+    """Render structural changes without exposing Thunderbird storage paths."""
+    sourceMap = {
+        source.get("path", ""): source
+        for source in snapshot.get("sources", [])
+    }
+    rows = []
+    for entry in snapshot.get("changes", []):
+        kind = entry.get("kind", "")
+        identity = entry.get("identity", "")
+        mailbox, item = _changeIdentityDisplay(kind, identity, sourceMap)
+        rows.append(
+            (
+                kind,
+                mailbox,
+                item,
+                _changeValueDisplay(entry.get("before", "")),
+                _changeValueDisplay(entry.get("after", "")),
+            )
+        )
+    return rows
+
+
+def _changeIdentityDisplay(kind: str, identity, sourceMap: dict) -> tuple[str, str]:
+    if kind.startswith("filter ") and isinstance(identity, (list, tuple)):
+        sourcePath = str(identity[0]) if identity else ""
+        filterName = str(identity[1]) if len(identity) > 1 else "Unnamed filter"
+        source = sourceMap.get(sourcePath, {})
+        mailboxes = source.get("mailboxIds", [])
+        mailbox = ", ".join(mailboxes) or source.get("account", "Thunderbird")
+        return mailbox, filterName
+    return _identityDisplay(identity)
+
+
+def _changeValueDisplay(value) -> str:
+    if isinstance(value, list):
+        return ", ".join(_destinationDisplay(str(item)) for item in value)
+    return str(value)
+
+
+def _storeDisplay(name: str) -> str:
+    """Hide Thunderbird's .sbd storage implementation suffix."""
+    return name[:-4] if name.lower().endswith(".sbd") else name
 
 
 def _folderKindDisplay(folder: dict) -> str:
