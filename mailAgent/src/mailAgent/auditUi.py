@@ -11,6 +11,7 @@ from textual.widgets import (
     DataTable,
     Footer,
     Header,
+    Input,
     Select,
     Static,
     TabbedContent,
@@ -75,6 +76,22 @@ def auditAppBuild(snapshot: dict) -> App:
             table.update_cell_at(
                 Coordinate(row, 0),
                 Text("✓" if interesting else ""),
+            )
+
+        def on_input_changed(self, event: Input.Changed) -> None:
+            """Filter grouped Proposed Moves without changing the stored plan."""
+            if event.input.id != "proposal-filter":
+                return
+            plan = snapshot.get("migrationPlan")
+            if not plan:
+                return
+            table = self.query_one("#proposal-table", DataTable)
+            rows = _proposalRowsFiltered(plan, event.value)
+            table.clear(columns=False)
+            for row in rows:
+                table.add_row(*(Text(str(cell)) for cell in row))
+            self.query_one("#proposal-filter-status", Static).update(
+                f"Showing {len(rows)} of {len(_proposalRows(plan))} grouped moves"
             )
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -261,9 +278,23 @@ def _planningPanes(plan: dict) -> ComposeResult:
     for title, key, label, columns in specifications:
         with TabPane(title, id=key):
             yield Static(label, markup=False)
+            if key == "proposals":
+                yield Input(
+                    placeholder="Filter by source, sender, year, destination or reason",
+                    id="proposal-filter",
+                )
+                yield Static(
+                    f"Showing {len(_proposalRows(plan))} grouped moves",
+                    id="proposal-filter-status",
+                    markup=False,
+                )
             table = DataTable(
-                id="review-table" if key == "reviewQueue" else None,
-                cursor_type="row" if key == "reviewQueue" else "cell",
+                id=(
+                    "review-table"
+                    if key == "reviewQueue"
+                    else "proposal-table" if key == "proposals" else None
+                ),
+                cursor_type="row" if key in ("reviewQueue", "proposals") else "cell",
             )
             table.add_columns(*columns)
             entries = (
@@ -345,6 +376,22 @@ def _proposalRows(plan: dict) -> list[tuple]:
     return [
         (key[0], key[1], count, *key[2:])
         for key, count in sorted(grouped.items())
+    ]
+
+
+def _proposalRowsFiltered(plan: dict, value: str) -> list[tuple]:
+    """Filter grouped Proposed Moves using a case-insensitive text match."""
+    rows = _proposalRows(plan)
+    terms = [term for term in value.lower().split() if term]
+    if not terms:
+        return rows
+    return [
+        row
+        for row in rows
+        if all(
+            term in " ".join(str(cell).lower() for cell in row)
+            for term in terms
+        )
     ]
 
 
