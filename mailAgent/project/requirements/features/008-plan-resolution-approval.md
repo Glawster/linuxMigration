@@ -99,6 +99,18 @@ For the first increment:
 Non-sender review items remain visible until their corresponding policy
 increment is implemented.
 
+### Action guidance
+
+The Plan summary must make it obvious when the user needs to do something next.
+
+- If Review Queue items remain, show a prominent `ACTION NEEDED` message with
+  the count and direct the user to Review Queue.
+- If no Review Queue items remain but proposed moves still require missing IMAP
+  mirrors, direct the user to review Proposed Moves.
+- If no current user decision is required, say so explicitly.
+- When no plan exists yet, direct the user to Refresh Plan.
+- Refreshing a plan must update this guidance in place.
+
 ### Plan refresh UX
 
 Refreshing an existing plan must not close the Mailbox Audit TUI while discovery
@@ -131,7 +143,8 @@ and planning run.
 - explicit sender decisions are identifiable in the generated proposal;
 - no email or Thunderbird state changes when a decision is saved;
 - malformed resolution storage is reported safely rather than silently used;
-- refreshing an existing plan leaves the TUI mounted while the scan runs.
+- refreshing an existing plan leaves the TUI mounted while the scan runs;
+- the Plan summary clearly points the user at the next required action.
 
 ## Proposed Moves presentation
 
