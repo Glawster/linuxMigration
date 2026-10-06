@@ -1,7 +1,6 @@
 """Interactive audit wrapper that refreshes plans without dropping the TUI."""
 
 import asyncio
-from types import MethodType
 from typing import Callable
 
 from rich.text import Text
@@ -21,20 +20,22 @@ def auditAppBuild(
     planRefresh: Callable[[], dict] | None = None,
 ):
     """Build the audit app and optionally add in-place plan refresh support."""
-    app = _auditAppBuild(snapshot)
+    baseApp = _auditAppBuild(snapshot)
     if planRefresh is None:
-        return app
+        return baseApp
 
-    originalButtonHandler = app.on_button_pressed
+    baseClass = type(baseApp)
 
-    def onButtonPressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "refresh-planning":
-            _planRefreshStart(self, snapshot, planRefresh)
-            return
-        originalButtonHandler(event)
+    class InteractiveMailboxAudit(baseClass):
+        """Mailbox audit with an in-place refresh handler registered on the class."""
 
-    app.on_button_pressed = MethodType(onButtonPressed, app)
-    return app
+        def on_button_pressed(self, event: Button.Pressed) -> None:
+            if event.button.id == "refresh-planning":
+                _planRefreshStart(self, snapshot, planRefresh)
+                return
+            super().on_button_pressed(event)
+
+    return InteractiveMailboxAudit()
 
 
 def auditShow(
