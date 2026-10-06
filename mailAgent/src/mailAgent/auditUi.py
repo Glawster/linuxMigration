@@ -18,7 +18,7 @@ from textual.widgets import (
     TabPane,
 )
 
-from mailAgent.interest import interestIs, interestLoad, interestSet
+from mailAgent.interest import interestIs, interestLoad, interestSet, interestSuggest
 from mailAgent.planSummary import planSummaryLines
 
 ## presentation
@@ -148,8 +148,8 @@ def auditShow(snapshot: dict) -> str | None:
 def _interestPane(senderRows: list[dict], issue: str | None) -> ComposeResult:
     with TabPane("Inbox Digest", id="inboxInterest"):
         yield Static(
-            "Select a sender row and press Space to toggle ✓ Sender of interest. "
-            "Selected senders are candidates for the daily digest.",
+            "mailAgent marks likely digest senders with ★. Press Space to toggle ✓ "
+            "In digest for the selected sender; suggestions never change your choice.",
             markup=False,
         )
         yield Static(
@@ -160,16 +160,15 @@ def _interestPane(senderRows: list[dict], issue: str | None) -> ComposeResult:
         if issue:
             yield Static(issue, markup=False)
         table = DataTable(id="interest-table", cursor_type="row")
-        table.add_columns(
-            "Interesting", "Mailbox", "Sender", "Inbox messages", "Example subject"
-        )
+        table.add_columns("In digest", "Suggested", "Mailbox", "Sender", "#", "Why")
         for entry in senderRows:
             table.add_row(
                 Text("✓" if entry["interesting"] else ""),
+                Text("★" if entry["suggested"] else ""),
                 Text(entry["mailbox"]),
                 Text(entry["sender"]),
                 Text(str(entry["count"])),
-                Text(entry["subject"]),
+                Text(entry["suggestionReason"]),
             )
         yield table
         if not senderRows:
@@ -191,17 +190,24 @@ def _interestRows(snapshot: dict, interestData: dict) -> list[dict]:
                     mailbox=identity,
                     sender=sender,
                     count=0,
-                    subject="",
+                    subjects=[],
                     interesting=interestIs(interestData, identity, sender),
                 ),
             )
             entry["count"] += 1
             if message.get("subject"):
-                entry["subject"] = message["subject"]
+                entry["subjects"].append(message["subject"])
+    rows = []
+    for entry in grouped.values():
+        suggested, reason = interestSuggest(entry["sender"], entry.pop("subjects"))
+        entry["suggested"] = suggested
+        entry["suggestionReason"] = reason
+        rows.append(entry)
     return sorted(
-        grouped.values(),
+        rows,
         key=lambda entry: (
             not entry["interesting"],
+            not entry["suggested"],
             entry["mailbox"],
             entry["sender"],
         ),
@@ -214,7 +220,7 @@ def _planPane(plan: dict | None) -> ComposeResult:
         if plan is None:
             with VerticalScroll():
                 yield Static(
-                    "Planning has not been run for this session.",
+                    "⚠ ACTION NEEDED: Refresh Plan to prepare the migration review.",
                     id="plan-summary",
                     markup=False,
                 )
@@ -235,6 +241,11 @@ def _planPane(plan: dict | None) -> ComposeResult:
                             id="plan-generated",
                             markup=False,
                         )
+                    yield Static(
+                        _planActionText(plan),
+                        id="plan-action",
+                        markup=False,
+                    )
                     yield Button(
                         "Refresh Plan",
                         id="refresh-planning",
@@ -246,6 +257,28 @@ def _planPane(plan: dict | None) -> ComposeResult:
                         markup=False,
                     )
             yield from _planningPanes(plan)
+
+
+def _planActionText(plan: dict) -> str:
+    reviews = len(plan.get("reviewQueue", []))
+    if reviews:
+        return f"⚠ ACTION NEEDED: {reviews} items need decisions — open Review Queue."
+    mirrors = sum(
+        proposal.get("requiresFolderCreation", False)
+        for proposal in plan.get("proposals", [])
+    )
+    if mirrors:
+        return (
+            f"⚠ ACTION NEEDED: {mirrors} proposed moves need IMAP mirror folders; "
+            "review Proposed Moves."
+        )
+    return "✓ No user decisions are currently required by this plan."
+
+
+def _planningEntries(plan: dict, key: str) -> list:
+    if key == "roleBoundaries":
+        return plan.get("roleBoundaries", plan.get("excluded", []))
+    return plan.get(key, [])
 
 
 def _planningPanes(plan: dict) -> ComposeResult:
@@ -270,8 +303,8 @@ def _planningPanes(plan: dict) -> ComposeResult:
         ),
         (
             "Role Boundaries",
-            "excluded",
-            "Mailboxes excluded from personal archive planning",
+            "roleBoundaries",
+            "How every configured mailbox participates in mailAgent planning",
             ("Mailbox", "Role", "Policy"),
         ),
     )
@@ -297,10 +330,11 @@ def _planningPanes(plan: dict) -> ComposeResult:
                 cursor_type="row" if key in ("reviewQueue", "proposals") else "cell",
             )
             table.add_columns(*columns)
+            sourceEntries = _planningEntries(plan, key)
             entries = (
                 _proposalRows(plan)
                 if key == "proposals"
-                else [_planningRow(key, entry) for entry in plan[key]]
+                else [_planningRow(key, entry) for entry in sourceEntries]
             )
             for row in entries:
                 table.add_row(*(Text(str(cell)) for cell in row))
@@ -331,7 +365,7 @@ def _planningPanes(plan: dict) -> ComposeResult:
                     variant="primary",
                 )
                 yield Static("", id="review-resolution-status", markup=False)
-            if not plan[key]:
+            if not sourceEntries:
                 yield Static("No entries", markup=False)
 
 

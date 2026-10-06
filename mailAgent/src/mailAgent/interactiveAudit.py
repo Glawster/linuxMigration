@@ -7,6 +7,8 @@ from rich.text import Text
 from textual.widgets import Button, DataTable, Input, Select, Static
 
 from mailAgent.auditUi import (
+    _planActionText,
+    _planningEntries,
     _planningRow,
     _proposalRows,
     _proposalRowsFiltered,
@@ -87,6 +89,7 @@ async def _planRefresh(
 
 def _planWidgetsUpdate(app, plan: dict) -> None:
     """Refresh existing Plan widgets without replacing tabs or filter controls."""
+    app.query_one("#plan-action", Static).update(_planActionText(plan))
     app.query_one("#plan-summary", Static).update("\n".join(planSummaryLines(plan)))
 
     proposalFilter = app.query_one("#proposal-filter", Input).value
@@ -98,7 +101,7 @@ def _planWidgetsUpdate(app, plan: dict) -> None:
 
     _paneTableReplace(app, "mappings", plan, "mappings")
     _paneTableReplace(app, "reviewQueue", plan, "reviewQueue")
-    _paneTableReplace(app, "excluded", plan, "excluded")
+    _paneTableReplace(app, "roleBoundaries", plan, "roleBoundaries")
 
     chooser = app.query_one("#review-folder", Select)
     if hasattr(chooser, "set_options"):
@@ -117,7 +120,7 @@ def _planWidgetsUpdate(app, plan: dict) -> None:
 def _paneTableReplace(app, paneId: str, plan: dict, key: str) -> None:
     pane = app.query_one("#" + paneId)
     table = pane.query_one(DataTable)
-    rows = [_planningRow(key, entry) for entry in plan[key]]
+    rows = [_planningRow(key, entry) for entry in _planningEntries(plan, key)]
     _tableReplace(table, rows)
 
 

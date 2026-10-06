@@ -28,10 +28,13 @@ def migrationPlan(config: dict, snapshot: dict, resolutions: dict | None = None)
         mappings=[],
         proposals=[],
         reviewQueue=[],
+        roleBoundaries=[],
         excluded=[],
     )
     accounts = {account["id"]: account for account in config["mailboxes"]}
     observed = {mailbox["id"]: mailbox for mailbox in snapshot["mailboxes"]}
+    for account in accounts.values():
+        plan["roleBoundaries"].append(_roleBoundary(account))
     archives, mappings, senderIndexes = {}, {}, {}
     for account in accounts.values():
         if account["role"] == "personal":
@@ -88,6 +91,19 @@ def migrationPlan(config: dict, snapshot: dict, resolutions: dict | None = None)
     )
     logger.done("migration planning")
     return plan
+
+
+def _roleBoundary(account: dict) -> dict:
+    role = account["role"]
+    if role == "personal":
+        policy = "Canonical local archive; live-year mail remains in personal IMAP"
+    elif role == "legacy":
+        policy = f'Migrate into personal mailbox {account["migrationTarget"]}'
+    elif role == "shared":
+        policy = "Preserve shared server taxonomy; no personal archive migration"
+    else:
+        policy = "Support/access mailbox; no personal archive migration"
+    return dict(mailbox=account["id"], role=role, reason=policy)
 
 
 ## mapping
