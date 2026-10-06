@@ -1,12 +1,16 @@
-"""Digest reason policies keep personal mail prominent without changing mail."""
+"""Digest reason and sender policies keep personal mail prominent safely."""
 
 import asyncio
 
 from mailAgent.interest import (
     interestEffective,
     interestLoad,
+    interestPersonPolicyGet,
+    interestPersonPolicySet,
     interestReasonPolicies,
     interestReasonSet,
+    interestSenderPolicyGet,
+    interestSenderPolicySet,
     interestSet,
     interestSuggest,
 )
@@ -31,12 +35,45 @@ def testDigestReasonDefaultsAndPersistence(tmp_path):
     assert path.stat().st_mode & 0o077 == 0
 
 
-def testExplicitSenderIncludeOverridesReasonPolicy(tmp_path):
+def testSenderPolicyCanOverrideIncludedReason(tmp_path):
     path = tmp_path / "interesting.json"
     data = interestLoad(path)
-    assert not interestEffective(data, "andy", "shop@example.com", "delivery")
-    data = interestSet("andy", "shop@example.com", True, path)
+    assert interestEffective(data, "andy", "friend@example.com", "person")
+
+    data = interestSenderPolicySet("andy", "friend@example.com", "out", path)
+    assert interestSenderPolicyGet(data, "andy", "friend@example.com") == "out"
+    assert not interestEffective(data, "andy", "friend@example.com", "person")
+
+    data = interestSenderPolicySet("andy", "shop@example.com", "in", path)
     assert interestEffective(data, "andy", "shop@example.com", "delivery")
+
+    data = interestSenderPolicySet("andy", "shop@example.com", "auto", path)
+    assert not interestEffective(data, "andy", "shop@example.com", "delivery")
+
+
+def testLegacyInterestSetRemainsCompatible(tmp_path):
+    path = tmp_path / "interesting.json"
+    data = interestSet("andy", "friend@example.com", True, path)
+    assert interestSenderPolicyGet(data, "andy", "friend@example.com") == "in"
+    data = interestSet("andy", "friend@example.com", False, path)
+    assert interestSenderPolicyGet(data, "andy", "friend@example.com") == "auto"
+
+
+def testPersonOverrideCorrectsFalsePositiveAndNegative(tmp_path):
+    path = tmp_path / "interesting.json"
+    data = interestLoad(path)
+    assert interestPersonPolicyGet(data, "andy", "person@example.com") == "auto"
+
+    data = interestPersonPolicySet("andy", "person@example.com", "no", path)
+    assert interestPersonPolicyGet(data, "andy", "person@example.com") == "no"
+    assert interestSuggest("person@example.com", [], "Andy Smith", "no") == (False, "")
+
+    data = interestPersonPolicySet("andy", "plain@example.com", "yes", path)
+    assert interestPersonPolicyGet(data, "andy", "plain@example.com") == "yes"
+    assert interestSuggest("plain@example.com", [], "", "yes") == (True, "person")
+
+    data = interestPersonPolicySet("andy", "plain@example.com", "auto", path)
+    assert interestPersonPolicyGet(data, "andy", "plain@example.com") == "auto"
 
 
 def testLikelyPersonNeedsHumanDisplayNameAndNonAutomatedAddress():
@@ -49,15 +86,19 @@ def testLikelyPersonNeedsHumanDisplayNameAndNonAutomatedAddress():
     assert interestSuggest("plain@example.com", [], "") == (False, "")
 
 
-def testSubjectReasonTakesPrecedenceOverPerson():
+def testSubjectReasonTakesPrecedenceOverPersonOverride():
     assert interestSuggest(
-        "andy.smith@example.com", ["Your parcel delivery is tomorrow"], "Andy Smith"
+        "andy.smith@example.com",
+        ["Your parcel delivery is tomorrow"],
+        "Andy Smith",
+        "no",
     ) == (True, "delivery")
 
 
-def testDigestReasonSubPanel(monkeypatch, tmp_path):
+def testDigestSubPanelsUseDirectEditableTables(monkeypatch, tmp_path):
     from mailAgent import auditUi
-    from textual.widgets import Button, DataTable, Select, TabPane, TabbedContent
+    from textual.coordinate import Coordinate
+    from textual.widgets import DataTable, TabPane, TabbedContent
 
     preference = tmp_path / "interesting.json"
     monkeypatch.setattr(auditUi, "interestLoad", lambda: interestLoad(preference))
@@ -68,23 +109,71 @@ def testDigestReasonSubPanel(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         auditUi,
-        "interestSet",
-        lambda mailbox, sender, included: interestSet(
-            mailbox, sender, included, preference
+        "interestSenderPolicySet",
+        lambda mailbox, sender, policy: interestSenderPolicySet(
+            mailbox, sender, policy, preference
+        ),
+    )
+    monkeypatch.setattr(
+        auditUi,
+        "interestPersonPolicySet",
+        lambda mailbox, sender, policy: interestPersonPolicySet(
+            mailbox, sender, policy, preference
         ),
     )
 
-    snapshot = dict(mailboxes=[])
+    snapshot = dict(
+        mailboxes=[
+            dict(
+                id="andy",
+                inboxInventory=dict(
+                    messages=[
+                        dict(
+                            sender="friend@example.com",
+                            senderName="Andy Smith",
+                            subject="Hello",
+                        )
+                    ]
+                ),
+            )
+        ]
+    )
 
     async def uiInspect():
         app = auditUi.auditAppBuild(snapshot)
-        async with app.run_test(size=(120, 40)):
+        async with app.run_test(size=(120, 40)) as pilot:
             assert app.query_one("#digest-menu", TabbedContent)
             assert app.query_one("#digestSenders", TabPane)
             assert app.query_one("#digestReasons", TabPane)
-            table = app.query_one("#digest-reason-table", DataTable)
-            assert table.row_count >= 10
-            assert app.query_one("#digest-reason-policy", Select)
-            assert app.query_one("#digest-reason-apply", Button)
+
+            reasonTable = app.query_one("#digest-reason-table", DataTable)
+            assert reasonTable.row_count >= 10
+            assert len(app.query("#digest-reason-policy")) == 0
+            assert len(app.query("#digest-reason-apply")) == 0
+
+            reasonTable.focus()
+            reasonTable.cursor_coordinate = Coordinate(0, 1)
+            await pilot.press("left")
+            assert interestReasonPolicies(interestLoad(preference))["person"] == "manual"
+
+            senderTable = app.query_one("#interest-table", DataTable)
+            senderTable.focus()
+            senderTable.cursor_coordinate = Coordinate(0, 5)
+            await pilot.press("left")
+            assert (
+                interestSenderPolicyGet(
+                    interestLoad(preference), "andy", "friend@example.com"
+                )
+                == "out"
+            )
+
+            senderTable.cursor_coordinate = Coordinate(0, 6)
+            await pilot.press("left")
+            assert (
+                interestPersonPolicyGet(
+                    interestLoad(preference), "andy", "friend@example.com"
+                )
+                == "no"
+            )
 
     asyncio.run(uiInspect())
