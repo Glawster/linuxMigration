@@ -547,7 +547,7 @@ def testAuditPlanningViews(config):
                 "mappings",
                 "proposals",
                 "reviewQueue",
-                "excluded",
+                "roleBoundaries",
             ):
                 assert app.query_one("#" + identity, TabPane)
             assert app.query_one("#folders-table", DataTable)
@@ -808,7 +808,6 @@ def testSentRequiresExplicitMapping(config):
     assert len([p for p in plan["proposals"] if p["source"]["mailbox"] == "old"]) == 2
 
 
-
 def testArchiveSenderClassificationAndPaypalContains(config):
     root = Path(config["mailboxes"][0]["localArchive"])
     finance = root / "Finance.sbd"
@@ -873,7 +872,7 @@ def testPlanTabVisibleBeforePlanning(config):
         async with app.run_test(size=(120, 40)):
             assert app.query_one("#plan", TabPane)
             assert app.query_one("#run-planning", Button).label == "Refresh Plan"
-            assert "Planning has not been run for this session." in str(
+            assert "ACTION NEEDED: Refresh Plan" in str(
                 app.query_one("#plan-summary", Static).render()
             )
 
@@ -1036,7 +1035,6 @@ def testPlanRefreshButton(config):
     assert asyncio.run(uiInspect()) == "runPlanning"
 
 
-
 def testConflictRowsAreUserFacing():
     from mailAgent.auditUi import _conflictRows
 
@@ -1074,7 +1072,6 @@ def testConflictRowsAreUserFacing():
         )
     ]
     assert "/private/profile" not in " ".join(rows[0])
-
 
 
 def testAuditIssueReportingIncludesMailboxAndFolder():
@@ -1116,7 +1113,6 @@ def testAuditIssueReportingIncludesMailboxAndFolder():
         == "hwfc: Mailbox discovery failed; verify connection and credentials"
         for call in logger.error.call_args_list
     )
-
 
 
 def testStoreAndChangeRowsHideThunderbirdInternals():
@@ -1166,7 +1162,6 @@ def testStoreAndChangeRowsHideThunderbirdInternals():
     assert sourcePath not in " ".join(" ".join(row) for row in rows)
 
 
-
 def testInboxDigestPresentation(config):
     from mailAgent.auditUi import auditAppBuild
     from textual.widgets import Static, TabPane
@@ -1190,7 +1185,6 @@ def testInboxDigestPresentation(config):
             assert binding.show is False
 
     asyncio.run(uiInspect())
-
 
 
 def testSenderResolutionPersistsAndRefinesPlan(config, tmp_path):
@@ -1304,7 +1298,6 @@ def testReviewQueueResolutionControls(config):
     asyncio.run(uiInspect())
 
 
-
 def testProposalRowsGroupDuplicatesAndShowStores():
     from mailAgent.auditUi import _proposalRows
 
@@ -1411,7 +1404,6 @@ def testProposalRowsGroupDuplicatesAndShowStores():
     ) in rows
 
 
-
 def testProposalRowsFiltering():
     from mailAgent.auditUi import _proposalRowsFiltered
 
@@ -1493,7 +1485,6 @@ def testProposedMovesFilterControls(config):
             )
 
     asyncio.run(uiInspect())
-
 
 
 def testImapFolderDisplayDecodesModifiedUtf7():
