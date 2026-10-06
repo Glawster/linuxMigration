@@ -27,8 +27,6 @@ def main() -> None:
             config = configValidate(rawConfig, path.parent)
         except ValueError as error:
             parser.exit(1, f"Audit failed: configuration: {error}\n")
-        if args.json is None:
-            from mailAgent.auditUi import auditShow
         snapshot = _snapshotBuild(args, config, logger)
         if args.plan:
             from mailAgent.planSummary import planSummaryShow
@@ -58,17 +56,20 @@ def _interactiveShow(
     logger: Any,
 ) -> dict:
     """Run the TUI and execute requested read-only follow-up workflows."""
-    from mailAgent.auditUi import auditShow
-    from mailAgent.planSummary import planSummaryShow
+    from mailAgent.interactiveAudit import auditShow
 
-    while auditShow(snapshot) == "runPlanning":
+    def planRefresh() -> dict:
         planningArgs = argparse.Namespace(**vars(args))
         planningArgs.plan = True
         planningArgs.confirm = False
         planningArgs.json = None
-        snapshot = _snapshotBuild(planningArgs, config, logger)
-        planSummaryShow(snapshot["migrationPlan"], logger)
-    return snapshot
+        return _snapshotBuild(planningArgs, config, logger)
+
+    while True:
+        refresh = planRefresh if snapshot.get("migrationPlan") else None
+        if auditShow(snapshot, refresh) != "runPlanning":
+            return snapshot
+        snapshot = planRefresh()
 
 
 ## arguments
@@ -178,7 +179,6 @@ def _jsonWrite(snapshot: dict, path: Path) -> None:
     temporary.replace(path)
 
 
-
 def _thunderbirdRoot(configured: Path) -> Path:
     """Resolve native or Flatpak Thunderbird metadata root."""
     configured = configured.expanduser()
@@ -194,7 +194,6 @@ def _thunderbirdRoot(configured: Path) -> Path:
             if (candidate / "profiles.ini").is_file():
                 return candidate
     return configured
-
 
 
 def _localArchivesDiscover(config: dict) -> list[dict]:
@@ -224,7 +223,6 @@ def _localArchivesDiscover(config: dict) -> list[dict]:
     return archives
 
 
-
 def _planPath(state: Path) -> Path:
     """Return the durable latest-plan path."""
     return state.expanduser() / "latest-plan.json"
@@ -249,7 +247,6 @@ def _planLoad(state: Path) -> dict | None:
     if not isinstance(plan, dict) or plan.get("schemaVersion") != 1:
         raise ValueError("Unsupported stored migration plan schema")
     return plan
-
 
 
 def _auditIssuesReport(snapshot: dict, logger: Any) -> bool:
