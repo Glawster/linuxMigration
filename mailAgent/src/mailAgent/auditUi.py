@@ -223,6 +223,9 @@ def _interestPane(
                 if issue:
                     yield Static(issue, markup=False)
                 table = _DigestPolicyTable(id="interest-table", cursor_type="cell")
+                # Keep the table constrained to the remaining tab height so DataTable
+                # performs its own vertical scrolling and keeps the cursor visible.
+                table.styles.height = "1fr"
                 table.add_columns(
                     "Mailbox",
                     "Sender",
@@ -247,6 +250,7 @@ def _interestPane(
                 reasonTable = _DigestPolicyTable(
                     id="digest-reason-table", cursor_type="cell"
                 )
+                reasonTable.styles.height = "1fr"
                 reasonTable.add_columns("Reason", "Setting")
                 for reason in interestReasons():
                     reasonTable.add_row(
