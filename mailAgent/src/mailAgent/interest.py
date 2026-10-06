@@ -7,6 +7,22 @@ import tempfile
 
 DEFAULT_INTEREST_FILE = Path.home() / ".config/mailAgent/interesting.json"
 
+_DIGEST_SUBJECT_SIGNALS = (
+    ("action required", "action required"),
+    ("appointment", "appointment"),
+    ("booking", "booking"),
+    ("delivery", "delivery"),
+    ("dispatch", "dispatch"),
+    ("invoice", "invoice"),
+    ("order", "order"),
+    ("payment", "payment"),
+    ("reminder", "reminder"),
+    ("renewal", "renewal"),
+    ("security", "security"),
+    ("verification", "verification"),
+    ("verify", "verification"),
+)
+
 
 def interestLoad(path: Path | None = None) -> dict:
     """Load sender-interest preferences; missing files mean no selections."""
@@ -26,6 +42,15 @@ def interestLoad(path: Path | None = None) -> dict:
 def interestIs(data: dict, mailbox: str, sender: str) -> bool:
     """Return whether the exact normalized sender is marked interesting."""
     return _senderNormalize(sender) in data.get("mailboxes", {}).get(mailbox, [])
+
+
+def interestSuggest(sender: str, subjects: list[str]) -> tuple[bool, str]:
+    """Suggest digest inclusion from transparent, lightweight Inbox signals."""
+    text = " ".join(subject for subject in subjects if isinstance(subject, str)).lower()
+    for needle, label in _DIGEST_SUBJECT_SIGNALS:
+        if needle in text:
+            return True, label
+    return False, ""
 
 
 def interestSet(
