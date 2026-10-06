@@ -16,10 +16,10 @@ from mailAgent.auditUi import (
 from mailAgent.planSummary import planSummaryLines
 
 
-PlanRefresh = Callable[[], dict]
+_PlanRefresh = Callable[[], dict]
 
 
-def auditAppBuild(snapshot: dict, planRefresh: PlanRefresh | None = None):
+def auditAppBuild(snapshot: dict, planRefresh: _PlanRefresh | None = None):
     """Build the audit app and optionally add in-place plan refresh support."""
     app = _auditAppBuild(snapshot)
     if planRefresh is None:
@@ -37,12 +37,12 @@ def auditAppBuild(snapshot: dict, planRefresh: PlanRefresh | None = None):
     return app
 
 
-def auditShow(snapshot: dict, planRefresh: PlanRefresh | None = None) -> str | None:
+def auditShow(snapshot: dict, planRefresh: _PlanRefresh | None = None) -> str | None:
     """Display the audit TUI and keep it active while refreshing a stored plan."""
     return auditAppBuild(snapshot, planRefresh).run()
 
 
-def _planRefreshStart(app, snapshot: dict, planRefresh: PlanRefresh) -> None:
+def _planRefreshStart(app, snapshot: dict, planRefresh: _PlanRefresh) -> None:
     """Start one background plan refresh while leaving the current TUI mounted."""
     button = app.query_one("#refresh-planning", Button)
     button.disabled = True
@@ -55,18 +55,18 @@ def _planRefreshStart(app, snapshot: dict, planRefresh: PlanRefresh) -> None:
     )
 
 
-async def _planRefresh(app, snapshot: dict, planRefresh: PlanRefresh) -> None:
+async def _planRefresh(app, snapshot: dict, planRefresh: _PlanRefresh) -> None:
     """Run synchronous discovery off the UI loop and replace plan widgets in place."""
     button = app.query_one("#refresh-planning", Button)
     generated = app.query_one("#plan-generated", Static)
     try:
         refreshed = await asyncio.to_thread(planRefresh)
         plan = refreshed["migrationPlan"]
+        _planWidgetsUpdate(app, plan)
         snapshot.clear()
         snapshot.update(refreshed)
-        _planWidgetsUpdate(app, plan)
         generated.update("Plan refreshed · " + plan.get("generatedAt", "time unavailable"))
-    except (OSError, ValueError, KeyError) as error:
+    except Exception as error:  # UI boundary: preserve the existing plan on any refresh failure.
         generated.update("Plan refresh failed · " + str(error))
     finally:
         button.disabled = False
@@ -88,16 +88,17 @@ def _planWidgetsUpdate(app, plan: dict) -> None:
     _paneTableReplace(app, "excluded", plan, "excluded")
 
     chooser = app.query_one("#review-folder", Select)
-    chooser.set_options(
-        [
-            (
-                f'{mapping["mailbox"]} — {mapping["canonical"]}',
-                (mapping["mailbox"], mapping["canonical"]),
-            )
-            for mapping in plan["mappings"]
-            if mapping.get("localSelectable")
-        ]
-    )
+    if hasattr(chooser, "set_options"):
+        chooser.set_options(
+            [
+                (
+                    f'{mapping["mailbox"]} — {mapping["canonical"]}',
+                    (mapping["mailbox"], mapping["canonical"]),
+                )
+                for mapping in plan["mappings"]
+                if mapping.get("localSelectable")
+            ]
+        )
 
 
 def _paneTableReplace(app, paneId: str, plan: dict, key: str) -> None:
