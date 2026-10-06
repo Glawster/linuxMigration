@@ -55,7 +55,7 @@ def testSubjectReasonTakesPrecedenceOverPerson():
     ) == (True, "delivery")
 
 
-def testDigestReasonSubPanel(config, monkeypatch, tmp_path):
+def testDigestReasonSubPanel(monkeypatch, tmp_path):
     from mailAgent import auditUi
     from textual.widgets import Button, DataTable, Select, TabPane, TabbedContent
 
