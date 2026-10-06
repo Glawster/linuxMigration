@@ -18,7 +18,16 @@ from textual.widgets import (
     TabPane,
 )
 
-from mailAgent.interest import interestIs, interestLoad, interestSet, interestSuggest
+from mailAgent.interest import (
+    interestEffective,
+    interestIs,
+    interestLoad,
+    interestReasonPolicies,
+    interestReasons,
+    interestReasonSet,
+    interestSet,
+    interestSuggest,
+)
 from mailAgent.planSummary import planSummaryLines
 
 ## presentation
@@ -30,7 +39,7 @@ def auditAppBuild(snapshot: dict) -> App:
         interestData = interestLoad()
         interestIssue = None
     except (OSError, ValueError):
-        interestData = {"schemaVersion": 1, "mailboxes": {}}
+        interestData = {"schemaVersion": 1, "mailboxes": {}, "reasonPolicies": {}}
         interestIssue = "Interesting-sender preferences could not be loaded"
     senderRows = _interestRows(snapshot, interestData)
 
@@ -56,13 +65,13 @@ def auditAppBuild(snapshot: dict) -> App:
             with TabbedContent():
                 with TabPane("Folders", id="folders"):
                     yield from _foldersPane(snapshot)
-                yield from _interestPane(senderRows, interestIssue)
+                yield from _interestPane(senderRows, interestData, interestIssue)
                 yield from _auditPanes(snapshot)
                 yield from _planPane(snapshot.get("migrationPlan"))
             yield Footer()
 
         def action_toggle_interest(self) -> None:
-            """Toggle the selected sender as interesting without changing mail."""
+            """Toggle an explicit sender include without changing mail."""
             table = self.query_one("#interest-table", DataTable)
             if self.focused is not table or not senderRows:
                 return
@@ -71,12 +80,16 @@ def auditAppBuild(snapshot: dict) -> App:
                 return
             entry = senderRows[row]
             interesting = not entry["interesting"]
-            interestSet(entry["mailbox"], entry["sender"], interesting)
+            updated = interestSet(entry["mailbox"], entry["sender"], interesting)
+            interestData.clear()
+            interestData.update(updated)
             entry["interesting"] = interesting
+            _interestEntryRefresh(entry, interestData)
             table.update_cell_at(
                 Coordinate(row, 0),
-                Text("✓" if interesting else ""),
+                Text("✓" if entry["included"] else ""),
             )
+            table.update_cell_at(Coordinate(row, 5), Text(entry["includedBy"]))
 
         def on_input_changed(self, event: Input.Changed) -> None:
             """Filter grouped Proposed Moves without changing the stored plan."""
@@ -96,11 +109,43 @@ def auditAppBuild(snapshot: dict) -> App:
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
             """Handle planning refresh and explicit review decisions."""
+            if event.button.id == "digest-reason-apply":
+                self._digestReasonSave()
+                return
             if event.button.id == "resolve-sender":
                 self._senderResolutionSave(snapshot.get("migrationPlan"))
                 return
             if event.button.id in ("run-planning", "refresh-planning"):
                 self.exit("runPlanning")
+
+        def _digestReasonSave(self) -> None:
+            table = self.query_one("#digest-reason-table", DataTable)
+            chooser = self.query_one("#digest-reason-policy", Select)
+            status = self.query_one("#digest-reason-status", Static)
+            row = table.cursor_row
+            reasons = interestReasons()
+            if row < 0 or row >= len(reasons):
+                status.update("Select a reason first.")
+                return
+            policy = chooser.value
+            if policy not in ("in", "out", "manual"):
+                status.update("Choose In, Manual or Out first.")
+                return
+            reason = reasons[row]
+            updated = interestReasonSet(reason, policy)
+            interestData.clear()
+            interestData.update(updated)
+            table.update_cell_at(Coordinate(row, 1), Text(policy.title()))
+            senderTable = self.query_one("#interest-table", DataTable)
+            for index, entry in enumerate(senderRows):
+                _interestEntryRefresh(entry, interestData)
+                senderTable.update_cell_at(
+                    Coordinate(index, 0), Text("✓" if entry["included"] else "")
+                )
+                senderTable.update_cell_at(
+                    Coordinate(index, 5), Text(entry["includedBy"])
+                )
+            status.update(f"{reason.title()} set to {policy.title()}.")
 
         def _senderResolutionSave(self, plan: dict | None) -> None:
             if not plan:
@@ -145,34 +190,64 @@ def auditShow(snapshot: dict) -> str | None:
     return auditAppBuild(snapshot).run()
 
 
-def _interestPane(senderRows: list[dict], issue: str | None) -> ComposeResult:
+def _interestPane(
+    senderRows: list[dict], interestData: dict, issue: str | None
+) -> ComposeResult:
     with TabPane("Inbox Digest", id="inboxInterest"):
-        yield Static(
-            "mailAgent marks likely digest senders with ★. Press Space to toggle ✓ "
-            "In digest for the selected sender; suggestions never change your choice.",
-            markup=False,
-        )
-        yield Static(
-            "Space to Toggle Sender of interest",
-            id="digest-footer",
-            markup=False,
-        )
-        if issue:
-            yield Static(issue, markup=False)
-        table = DataTable(id="interest-table", cursor_type="row")
-        table.add_columns("In digest", "Suggested", "Mailbox", "Sender", "#", "Why")
-        for entry in senderRows:
-            table.add_row(
-                Text("✓" if entry["interesting"] else ""),
-                Text("★" if entry["suggested"] else ""),
-                Text(entry["mailbox"]),
-                Text(entry["sender"]),
-                Text(str(entry["count"])),
-                Text(entry["suggestionReason"]),
-            )
-        yield table
-        if not senderRows:
-            yield Static("No Inbox sender headers available", markup=False)
+        with TabbedContent(id="digest-menu"):
+            with TabPane("Senders", id="digestSenders"):
+                yield Static(
+                    "Digest inclusion follows the Include Reasons policy. Press Space "
+                    "to explicitly include the selected sender; an explicit sender "
+                    "include overrides an Out or Manual reason.",
+                    markup=False,
+                )
+                yield Static(
+                    "Space to Toggle Sender of interest",
+                    id="digest-footer",
+                    markup=False,
+                )
+                if issue:
+                    yield Static(issue, markup=False)
+                table = DataTable(id="interest-table", cursor_type="row")
+                table.add_columns(
+                    "In digest", "Mailbox", "Sender", "#", "Reason", "Included by"
+                )
+                for entry in senderRows:
+                    table.add_row(
+                        Text("✓" if entry["included"] else ""),
+                        Text(entry["mailbox"]),
+                        Text(entry["sender"]),
+                        Text(str(entry["count"])),
+                        Text(entry["reason"]),
+                        Text(entry["includedBy"]),
+                    )
+                yield table
+                if not senderRows:
+                    yield Static("No Inbox sender headers available", markup=False)
+            with TabPane("Include Reasons", id="digestReasons"):
+                yield Static(
+                    "Choose whether each reason is automatically In, always Out unless "
+                    "the sender is explicitly included, or Manual only.",
+                    markup=False,
+                )
+                policies = interestReasonPolicies(interestData)
+                reasonTable = DataTable(id="digest-reason-table", cursor_type="row")
+                reasonTable.add_columns("Reason", "Policy")
+                for reason in interestReasons():
+                    reasonTable.add_row(Text(reason.title()), Text(policies[reason].title()))
+                yield reasonTable
+                yield Select(
+                    (("In", "in"), ("Manual", "manual"), ("Out", "out")),
+                    prompt="Choose policy for selected reason",
+                    id="digest-reason-policy",
+                )
+                yield Button(
+                    "Apply reason policy",
+                    id="digest-reason-apply",
+                    variant="primary",
+                )
+                yield Static("", id="digest-reason-status", markup=False)
 
 
 def _interestRows(snapshot: dict, interestData: dict) -> list[dict]:
@@ -189,6 +264,7 @@ def _interestRows(snapshot: dict, interestData: dict) -> list[dict]:
                 dict(
                     mailbox=identity,
                     sender=sender,
+                    senderName="",
                     count=0,
                     subjects=[],
                     interesting=interestIs(interestData, identity, sender),
@@ -197,21 +273,41 @@ def _interestRows(snapshot: dict, interestData: dict) -> list[dict]:
             entry["count"] += 1
             if message.get("subject"):
                 entry["subjects"].append(message["subject"])
+            if message.get("senderName") and not entry["senderName"]:
+                entry["senderName"] = message["senderName"]
     rows = []
     for entry in grouped.values():
-        suggested, reason = interestSuggest(entry["sender"], entry.pop("subjects"))
+        suggested, reason = interestSuggest(
+            entry["sender"], entry.pop("subjects"), entry.pop("senderName")
+        )
         entry["suggested"] = suggested
-        entry["suggestionReason"] = reason
+        entry["reason"] = reason
+        _interestEntryRefresh(entry, interestData)
         rows.append(entry)
     return sorted(
         rows,
         key=lambda entry: (
-            not entry["interesting"],
-            not entry["suggested"],
+            not entry["included"],
+            entry["reason"] != "person",
             entry["mailbox"],
             entry["sender"],
         ),
     )
+
+
+def _interestEntryRefresh(entry: dict, interestData: dict) -> None:
+    entry["included"] = interestEffective(
+        interestData,
+        entry["mailbox"],
+        entry["sender"],
+        entry["reason"],
+    )
+    if entry["interesting"]:
+        entry["includedBy"] = "Sender"
+    elif entry["included"] and entry["reason"]:
+        entry["includedBy"] = "Reason"
+    else:
+        entry["includedBy"] = ""
 
 
 def _planPane(plan: dict | None) -> ComposeResult:
