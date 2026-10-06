@@ -3,6 +3,7 @@
 import argparse
 from datetime import datetime, timezone
 import json
+import logging
 from pathlib import Path
 import tomllib
 from typing import Any
@@ -63,7 +64,18 @@ def _interactiveShow(
         planningArgs.plan = True
         planningArgs.confirm = False
         planningArgs.json = None
-        return _snapshotBuild(planningArgs, config, logger)
+        consoleHandlers = [
+            handler
+            for handler in logger.logger.handlers
+            if type(handler) is logging.StreamHandler
+        ]
+        for handler in consoleHandlers:
+            logger.logger.removeHandler(handler)
+        try:
+            return _snapshotBuild(planningArgs, config, logger)
+        finally:
+            for handler in consoleHandlers:
+                logger.logger.addHandler(handler)
 
     while True:
         refresh = planRefresh if snapshot.get("migrationPlan") else None
