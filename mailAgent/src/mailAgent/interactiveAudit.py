@@ -31,9 +31,10 @@ def auditAppBuild(
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
             if event.button.id == "refresh-planning":
+                # Textual dispatches to base-class handlers unless prevented.
+                event.prevent_default()
                 _planRefreshStart(self, snapshot, planRefresh)
                 return
-            super().on_button_pressed(event)
 
     return InteractiveMailboxAudit()
 
@@ -77,7 +78,8 @@ async def _planRefresh(
         snapshot.clear()
         snapshot.update(refreshed)
         status.update("Plan refreshed · " + plan.get("generatedAt", "time unavailable"))
-    except Exception as error:  # UI boundary: preserve the existing plan on any refresh failure.
+    except Exception as error:
+        # UI boundary: preserve the existing plan on any refresh failure.
         status.update("Plan refresh failed · " + str(error))
     finally:
         button.disabled = False
