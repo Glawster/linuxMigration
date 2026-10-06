@@ -83,6 +83,15 @@ policy so the user can verify how each mailbox participates in the plan.
 13. For IMAP-to-local archival, copy and verify before removing the server copy.
 14. Record completed operations in persistent state.
 15. Show every configured mailbox and its role policy in Role Boundaries.
+16. Allow Inbox sender domains to be assigned to canonical personal archive
+    folders.
+17. Discover candidate parent folders from the first level of each personal
+    local archive taxonomy.
+18. Allow a new parent folder to be proposed when no existing parent is suitable.
+19. Keep domain-to-folder assignments mailbox-specific so `myMail` and
+    `kathyMail` may have different filing structures.
+20. Treat all new parent/child archive folders as proposals until a future
+    execution phase explicitly creates them.
 
 ## Acceptance criteria
 
@@ -92,7 +101,13 @@ policy so the user can verify how each mailbox participates in the plan.
 - `old` targets Andy current for live-year mail and `myMail` for older mail.
 - personal, legacy, shared and support mailboxes all appear in Role Boundaries.
 - shared/support roles remain readable in the TUI.
-- no mailbox mutation occurs in planning mode.
+- sender domains can be mapped to canonical folders beneath discovered parents.
+- only first-level archive folders are offered as discovered parents.
+- a new parent can be proposed without immediately creating it on disk.
+- one domain mapping applies to all matching senders for that personal mailbox.
+- domain mappings for `myMail` do not implicitly apply to `kathyMail`, and vice
+  versa.
+- no mailbox or archive mutation occurs in planning mode.
 
 ## Delivery status
 
@@ -176,6 +191,38 @@ mailAgent may use the existing local archive as filing evidence.
 - Legacy mail uses the archive history of its configured personal migration target.
 - Classification uses headers only and never reads message bodies for this purpose.
 - Every inferred proposal records its classification method, confidence and reason.
+
+## Domain-based sender filing
+
+The Inbox sender list may also be used to define durable domain-level archive
+filing rules for personal mailboxes.
+
+- Derive a normalized registrable-looking domain from each sender address for
+  grouping and presentation, while retaining the exact sender address for audit
+  purposes.
+- Group senders by domain so one filing decision can apply to all matching
+  senders in that personal mailbox.
+- If the domain already maps unambiguously to an existing canonical archive
+  folder, reuse that folder rather than proposing a duplicate.
+- Otherwise allow the user to assign the domain beneath one of the personal
+  archive's discovered first-level parent folders, such as `Cars`, `Finance` or
+  `Shopping`.
+- Discover parents independently from `myMail` and `kathyMail`; do not assume
+  the two archives have identical taxonomies.
+- Only first-level canonical archive folders are presented as parent choices.
+  Nested folders such as `Shopping/Amazon/Orders` contribute `Shopping` as the
+  parent, not `Amazon` or `Orders`.
+- If no existing parent is suitable, offer `Add parent…`. The entered value is
+  recorded as a proposed canonical parent for that personal archive.
+- Propose a child folder beneath the selected parent using a concise,
+  user-editable business/domain label, for example `bmw.com -> Cars/BMW`.
+- Distinguish existing folders, proposed child folders, and proposed parent +
+  child folders in the plan.
+- Persist the domain-to-canonical-folder decision separately from credentials.
+- Domain filing decisions are planning metadata only in this increment: they do
+  not create Thunderbird/local archive folders, create filters, or move mail.
+- A later execution requirement may use the approved mapping to create folders,
+  suggest filters and move/archive mail safely.
 
 
 ## Stored plan and refresh
