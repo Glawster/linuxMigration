@@ -5,10 +5,11 @@
 Allow the user to define what kinds of Inbox messages belong in a daily digest
 without changing mailbox content.
 
-The digest model has two layers:
+The digest model has three layers:
 
 1. reason policies that define which classes of messages are normally included;
-2. explicit sender includes that may override a reason policy.
+2. sender-specific digest overrides;
+3. sender-specific Person classification overrides.
 
 mailAgent may classify likely digest reasons from lightweight Inbox headers, but
 classification remains advisory and transparent.
@@ -24,23 +25,33 @@ The Mailbox Audit TUI includes an **Inbox Digest** view with two sub-panels:
 
 Each sender row shows:
 
-- whether the sender is currently included in the digest;
 - mailbox identity;
 - normalized sender email address;
 - number of current Inbox messages from that sender;
 - the reason inferred by mailAgent, when one exists;
-- whether inclusion came from an explicit Sender choice or from the Reason
-  policy.
+- effective digest status;
+- a sender-specific Digest setting;
+- a sender-specific Person setting.
 
 Do not show example subjects in the sender table. The view is intended to focus
 on sender addresses per mailbox rather than exposing message text unnecessarily.
 
-The user moves to a sender row and presses `Space` to toggle an explicit sender
-include. An explicit sender include wins over an `Out` or `Manual` reason policy.
-Removing the explicit sender include returns the sender to its reason policy.
+The **Digest** setting has three values:
 
-The Inbox Digest sender view shows `Space to Toggle Sender of interest`; this
-hint must not appear on unrelated tabs.
+- `Auto` - follow the classified reason policy;
+- `In` - always include this sender;
+- `Out` - always exclude this sender, even when its reason is `In`.
+
+The **Person** setting has three values:
+
+- `Auto` - use mailAgent's Person classification;
+- `Yes` - treat this sender as a person when no more specific subject reason is
+  present;
+- `No` - do not classify this sender as Person.
+
+Both settings are edited directly in the table. The user clicks/selects the
+setting cell and presses left/right arrow to move between the available values.
+Changes are persisted immediately; there is no separate Apply button.
 
 The interaction changes only mailAgent preferences. It must not move, flag,
 delete, mark read, or otherwise mutate any email.
@@ -51,10 +62,14 @@ The **Include Reasons** sub-panel lists every digest reason and lets the user se
 one of three policies:
 
 - `In` - messages classified with this reason are automatically included;
-- `Out` - messages are not included by this reason, unless their sender has an
-  explicit include;
-- `Manual` - the reason alone never includes the message; explicit sender
-  selection is required.
+- `Out` - messages are not included by this reason unless a sender-specific
+  Digest override is `In`;
+- `Manual` - the reason alone never includes the message; a sender-specific
+  Digest override is required.
+
+The setting is edited directly in the table. The user clicks/selects the
+Setting cell and presses left/right arrow to move through `Out`, `Manual` and
+`In`. The change is saved immediately.
 
 Initial defaults are:
 
@@ -95,8 +110,9 @@ classify obvious no-reply, newsletter, notification, billing, support, service,
 customer-service or similar operational addresses as people merely because a
 From display name is present.
 
-When a message matches a specific subject reason such as `Delivery`, that reason
-takes precedence over the generic `Person` classification.
+A sender-specific Person `No` corrects a false positive. Person `Yes` corrects a
+false negative. Subject-specific reasons such as `Delivery` still take
+precedence over Person classification.
 
 ## Persistence
 
@@ -107,16 +123,16 @@ Digest preferences are stored separately from mailbox credentials in:
 The file:
 
 - uses schema version 1;
-- stores normalized exact sender includes by mailbox ID;
-- may store reason policies in an optional `reasonPolicies` mapping;
-- remains backward compatible with an existing schema-1 file that contains only
-  sender selections;
+- may store reason policies in `reasonPolicies`;
+- may store sender-specific Auto/In/Out choices in `senderPolicies`;
+- may store sender-specific Auto/Yes/No Person choices in `personPolicies`;
+- remains backward compatible with an existing schema-1 `mailboxes` sender list;
 - is written atomically;
 - is created with user-only permissions;
 - contains no passwords or message bodies.
 
 Reason classification itself is not stored as a decision; it is recalculated
-from current Inbox headers.
+from current Inbox headers plus any Person override.
 
 ## Inbox discovery
 
@@ -136,9 +152,9 @@ required for sender-interest selection or classification.
 
 Effective sender inclusion is determined by:
 
-1. explicit sender include, if present;
+1. sender Digest `In` or `Out`, if explicitly set;
 2. otherwise the policy of the classified reason;
-3. otherwise Manual/not included.
+3. otherwise not included.
 
 Digest generation, delivery time, formatting, and read/unread handling remain
 separate future work.
@@ -146,13 +162,15 @@ separate future work.
 ## Acceptance criteria
 
 - Inbox Digest contains separate **Senders** and **Include Reasons** sub-panels;
-- the user can set every known reason to In, Out or Manual;
+- reason settings are changed directly with left/right arrows;
+- sender Digest settings are changed directly with left/right arrows;
+- sender Person settings are changed directly with left/right arrows;
+- reason and sender changes are saved immediately without a separate Apply step;
+- the user can force a sender Out even when Person or another reason is In;
+- the user can correct Person false positives with `No` and false negatives with
+  `Yes`;
 - Person and Reminder default to In;
 - Delivery, Dispatch, Order, Payment and Invoice default to Out;
-- explicit sender inclusion overrides Out and Manual reason policies;
-- removing an explicit sender include returns to the reason policy;
-- a likely human sender can be classified as Person using From header metadata;
-- obvious automated/service senders are not classified as Person;
 - subject-specific reasons take precedence over Person;
 - sender and reason choices persist across TUI sessions;
 - sender matching is mailbox-specific and case-insensitive;
