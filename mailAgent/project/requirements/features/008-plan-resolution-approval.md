@@ -99,6 +99,25 @@ For the first increment:
 Non-sender review items remain visible until their corresponding policy
 increment is implemented.
 
+### Plan refresh UX
+
+Refreshing an existing plan must not close the Mailbox Audit TUI while discovery
+and planning run.
+
+- Keep the current TUI mounted and responsive during the scan.
+- Disable the Refresh Plan button while one refresh is already running.
+- Show `Refreshing plan…` in the Plan summary while work is in progress.
+- Run the blocking discovery/planning workflow away from the Textual UI loop.
+- Replace the Summary, Mapping, Proposed Moves, Review Queue and Role Boundaries
+  data in place when the refresh succeeds.
+- Preserve the current Plan tab state and Proposed Moves filter control rather
+  than rebuilding the application.
+- Keep the previous plan visible if refresh fails and show the failure in the
+  Plan summary area.
+- A first plan, where no stored plan exists yet, may still use the original
+  create-plan transition; subsequent Refresh Plan operations must remain in the
+  mounted TUI.
+
 ## Acceptance criteria - first increment
 
 - an ambiguous sender can be assigned to a canonical folder from the TUI;
@@ -111,8 +130,8 @@ increment is implemented.
 - an invalid/nonexistent canonical destination is ignored safely;
 - explicit sender decisions are identifiable in the generated proposal;
 - no email or Thunderbird state changes when a decision is saved;
-- malformed resolution storage is reported safely rather than silently used.
-
+- malformed resolution storage is reported safely rather than silently used;
+- refreshing an existing plan leaves the TUI mounted while the scan runs.
 
 ## Proposed Moves presentation
 
