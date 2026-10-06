@@ -47,18 +47,33 @@ _AUTOMATED_SENDER = re.compile(
     re.IGNORECASE,
 )
 
+_SENDER_POLICIES = ("auto", "in", "out")
+_PERSON_POLICIES = ("auto", "yes", "no")
+
+
+def _emptyPreferences() -> dict:
+    return {
+        "schemaVersion": 1,
+        "mailboxes": {},
+        "reasonPolicies": {},
+        "senderPolicies": {},
+        "personPolicies": {},
+    }
+
 
 def interestLoad(path: Path | None = None) -> dict:
-    """Load sender and reason preferences; missing files use safe defaults."""
+    """Load digest preferences; missing files use safe defaults."""
     path = path or DEFAULT_INTEREST_FILE
     if not path.exists():
-        return {"schemaVersion": 1, "mailboxes": {}, "reasonPolicies": {}}
+        return _emptyPreferences()
     data = json.loads(path.read_text())
     if (
         not isinstance(data, dict)
         or data.get("schemaVersion") != 1
         or not isinstance(data.get("mailboxes"), dict)
         or not isinstance(data.get("reasonPolicies", {}), dict)
+        or not isinstance(data.get("senderPolicies", {}), dict)
+        or not isinstance(data.get("personPolicies", {}), dict)
     ):
         raise ValueError("Unsupported interesting-sender preference file")
     if any(
@@ -66,13 +81,32 @@ def interestLoad(path: Path | None = None) -> dict:
         for reason, policy in data.get("reasonPolicies", {}).items()
     ):
         raise ValueError("Unsupported digest reason policy")
+    _nestedPoliciesValidate(data.get("senderPolicies", {}), _SENDER_POLICIES)
+    _nestedPoliciesValidate(data.get("personPolicies", {}), _PERSON_POLICIES)
     data.setdefault("reasonPolicies", {})
+    data.setdefault("senderPolicies", {})
+    data.setdefault("personPolicies", {})
     return data
 
 
-def interestIs(data: dict, mailbox: str, sender: str) -> bool:
-    """Return whether the exact normalized sender is manually included."""
+def _nestedPoliciesValidate(values: dict, allowed: tuple[str, ...]) -> None:
+    for mailbox, policies in values.items():
+        if not isinstance(mailbox, str) or not isinstance(policies, dict):
+            raise ValueError("Unsupported digest sender policy")
+        if any(
+            not isinstance(sender, str) or policy not in allowed
+            for sender, policy in policies.items()
+        ):
+            raise ValueError("Unsupported digest sender policy")
+
+
+def _legacyInterestIs(data: dict, mailbox: str, sender: str) -> bool:
     return _senderNormalize(sender) in data.get("mailboxes", {}).get(mailbox, [])
+
+
+def interestIs(data: dict, mailbox: str, sender: str) -> bool:
+    """Return whether the exact sender is explicitly included."""
+    return interestSenderPolicyGet(data, mailbox, sender) == "in"
 
 
 def interestReasons() -> tuple[str, ...]:
@@ -104,25 +138,95 @@ def interestReasonSet(
     return _interestWrite(data, path)
 
 
+def interestSenderPolicyGet(data: dict, mailbox: str, sender: str) -> str:
+    """Return Auto/In/Out policy for one sender, honoring legacy explicit includes."""
+    sender = _senderNormalize(sender)
+    explicit = data.get("senderPolicies", {}).get(mailbox, {}).get(sender)
+    if explicit in _SENDER_POLICIES:
+        return explicit
+    return "in" if _legacyInterestIs(data, mailbox, sender) else "auto"
+
+
+def interestSenderPolicySet(
+    mailbox: str,
+    sender: str,
+    policy: str,
+    path: Path | None = None,
+) -> dict:
+    """Persist an Auto/In/Out override for one sender."""
+    sender = _senderNormalize(sender)
+    policy = policy.strip().lower() if isinstance(policy, str) else ""
+    if not sender or policy not in _SENDER_POLICIES:
+        raise ValueError("Invalid digest sender policy")
+    path = path or DEFAULT_INTEREST_FILE
+    data = interestLoad(path)
+    _legacyInterestRemove(data, mailbox, sender)
+    values = data.setdefault("senderPolicies", {}).setdefault(mailbox, {})
+    if policy == "auto":
+        values.pop(sender, None)
+    else:
+        values[sender] = policy
+    if not values:
+        data["senderPolicies"].pop(mailbox, None)
+    return _interestWrite(data, path)
+
+
+def interestPersonPolicyGet(data: dict, mailbox: str, sender: str) -> str:
+    """Return Auto/Yes/No person-classification override for one sender."""
+    sender = _senderNormalize(sender)
+    return data.get("personPolicies", {}).get(mailbox, {}).get(sender, "auto")
+
+
+def interestPersonPolicySet(
+    mailbox: str,
+    sender: str,
+    policy: str,
+    path: Path | None = None,
+) -> dict:
+    """Persist an Auto/Yes/No override for person classification."""
+    sender = _senderNormalize(sender)
+    policy = policy.strip().lower() if isinstance(policy, str) else ""
+    if not sender or policy not in _PERSON_POLICIES:
+        raise ValueError("Invalid person classification policy")
+    path = path or DEFAULT_INTEREST_FILE
+    data = interestLoad(path)
+    values = data.setdefault("personPolicies", {}).setdefault(mailbox, {})
+    if policy == "auto":
+        values.pop(sender, None)
+    else:
+        values[sender] = policy
+    if not values:
+        data["personPolicies"].pop(mailbox, None)
+    return _interestWrite(data, path)
+
+
 def interestSuggest(
     sender: str,
     subjects: list[str],
     senderName: str = "",
+    personPolicy: str = "auto",
 ) -> tuple[bool, str]:
     """Classify a digest reason from transparent, lightweight Inbox signals."""
     text = " ".join(subject for subject in subjects if isinstance(subject, str)).lower()
     for needle, label in _DIGEST_SUBJECT_SIGNALS:
         if needle in text:
             return True, label
+    if personPolicy == "yes":
+        return True, "person"
+    if personPolicy == "no":
+        return False, ""
     if _personLikely(sender, senderName):
         return True, "person"
     return False, ""
 
 
 def interestEffective(data: dict, mailbox: str, sender: str, reason: str) -> bool:
-    """Return effective digest inclusion; an explicit sender include wins."""
-    if interestIs(data, mailbox, sender):
+    """Return effective inclusion after sender override then reason policy."""
+    senderPolicy = interestSenderPolicyGet(data, mailbox, sender)
+    if senderPolicy == "in":
         return True
+    if senderPolicy == "out":
+        return False
     return interestReasonPolicies(data).get(reason, "manual") == "in"
 
 
@@ -132,23 +236,22 @@ def interestSet(
     interesting: bool,
     path: Path | None = None,
 ) -> dict:
-    """Persist an exact sender include preference atomically."""
-    path = path or DEFAULT_INTEREST_FILE
-    sender = _senderNormalize(sender)
-    if not sender:
-        raise ValueError("Cannot mark an empty sender")
-    data = interestLoad(path)
-    mailboxes = data.setdefault("mailboxes", {})
-    values = set(mailboxes.get(mailbox, []))
-    if interesting:
-        values.add(sender)
-    else:
-        values.discard(sender)
+    """Compatibility helper: True means In, False means Auto."""
+    return interestSenderPolicySet(
+        mailbox,
+        sender,
+        "in" if interesting else "auto",
+        path,
+    )
+
+
+def _legacyInterestRemove(data: dict, mailbox: str, sender: str) -> None:
+    values = set(data.get("mailboxes", {}).get(mailbox, []))
+    values.discard(sender)
     if values:
-        mailboxes[mailbox] = sorted(values)
+        data.setdefault("mailboxes", {})[mailbox] = sorted(values)
     else:
-        mailboxes.pop(mailbox, None)
-    return _interestWrite(data, path)
+        data.setdefault("mailboxes", {}).pop(mailbox, None)
 
 
 def _interestWrite(data: dict, path: Path) -> dict:
