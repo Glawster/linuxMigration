@@ -118,3 +118,44 @@ def testDigestKeyboardDirectionsAndSenderShortcuts(monkeypatch, tmp_path):
             )
 
     asyncio.run(uiInspect())
+
+
+def testDigestSenderTableScrollsWithCursor(monkeypatch, tmp_path):
+    from mailAgent import auditUi, interactiveAudit
+    from textual.coordinate import Coordinate
+    from textual.widgets import DataTable, TabbedContent
+
+    preference = tmp_path / "interesting.json"
+    monkeypatch.setattr(auditUi, "interestLoad", lambda: interestLoad(preference))
+
+    messages = [
+        dict(
+            sender=f"person{index:02d}@example.com",
+            senderName=f"Person {index:02d}",
+            subject="Hello",
+        )
+        for index in range(60)
+    ]
+    snapshot = dict(
+        mailboxes=[dict(id="andy", inboxInventory=dict(messages=messages))]
+    )
+
+    async def uiInspect():
+        app = interactiveAudit.auditAppBuild(snapshot)
+        async with app.run_test(size=(100, 24)) as pilot:
+            app.query_one(TabbedContent).active = "inboxInterest"
+            await pilot.pause()
+            app.query_one("#digest-menu", TabbedContent).active = "digestSenders"
+            await pilot.pause()
+
+            table = app.query_one("#interest-table", DataTable)
+            table.focus()
+            table.cursor_coordinate = Coordinate(0, 1)
+            for _ in range(35):
+                await pilot.press("down")
+            await pilot.pause()
+
+            assert table.cursor_row == 35
+            assert table.scroll_y > 0
+
+    asyncio.run(uiInspect())
