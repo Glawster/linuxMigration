@@ -96,7 +96,7 @@ def testSubjectReasonTakesPrecedenceOverPersonOverride():
 
 
 def testDigestSubPanelsUseDirectEditableTables(monkeypatch, tmp_path):
-    from mailAgent import auditUi
+    from mailAgent import auditUi, interactiveAudit
     from textual.coordinate import Coordinate
     from textual.widgets import DataTable, TabPane, TabbedContent
 
@@ -140,7 +140,7 @@ def testDigestSubPanelsUseDirectEditableTables(monkeypatch, tmp_path):
     )
 
     async def uiInspect():
-        app = auditUi.auditAppBuild(snapshot)
+        app = interactiveAudit.auditAppBuild(snapshot)
         async with app.run_test(size=(120, 40)) as pilot:
             assert app.query_one("#digest-menu", TabbedContent)
             assert app.query_one("#digestSenders", TabPane)
@@ -153,8 +153,10 @@ def testDigestSubPanelsUseDirectEditableTables(monkeypatch, tmp_path):
 
             reasonTable.focus()
             reasonTable.cursor_coordinate = Coordinate(0, 1)
-            await pilot.press("left")
+            await pilot.press("right")
             assert interestReasonPolicies(interestLoad(preference))["person"] == "manual"
+            await pilot.press("left")
+            assert interestReasonPolicies(interestLoad(preference))["person"] == "in"
 
             senderTable = app.query_one("#interest-table", DataTable)
             senderTable.focus()
@@ -164,7 +166,14 @@ def testDigestSubPanelsUseDirectEditableTables(monkeypatch, tmp_path):
                 interestSenderPolicyGet(
                     interestLoad(preference), "andy", "friend@example.com"
                 )
-                == "out"
+                == "in"
+            )
+            await pilot.press("right")
+            assert (
+                interestSenderPolicyGet(
+                    interestLoad(preference), "andy", "friend@example.com"
+                )
+                == "auto"
             )
 
             senderTable.cursor_coordinate = Coordinate(0, 6)
@@ -173,7 +182,14 @@ def testDigestSubPanelsUseDirectEditableTables(monkeypatch, tmp_path):
                 interestPersonPolicyGet(
                     interestLoad(preference), "andy", "friend@example.com"
                 )
-                == "no"
+                == "yes"
+            )
+            await pilot.press("right")
+            assert (
+                interestPersonPolicyGet(
+                    interestLoad(preference), "andy", "friend@example.com"
+                )
+                == "auto"
             )
 
     asyncio.run(uiInspect())
