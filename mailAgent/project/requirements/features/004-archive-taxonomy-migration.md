@@ -14,6 +14,10 @@ The application supports:
 - `shared`
 - `support`
 
+The Plan > Role Boundaries view must include every configured mailbox, not only
+mailboxes excluded from personal migration. It must state the role and concise
+policy so the user can verify how each mailbox participates in the plan.
+
 ## Initial mailbox behaviour
 
 ### Andy current - personal
@@ -78,6 +82,7 @@ The application supports:
 12. Require explicit confirmation for future mailbox mutations.
 13. For IMAP-to-local archival, copy and verify before removing the server copy.
 14. Record completed operations in persistent state.
+15. Show every configured mailbox and its role policy in Role Boundaries.
 
 ## Acceptance criteria
 
@@ -85,6 +90,7 @@ The application supports:
 - `hwfc` produces no mappings into `myMail` or `kathyMail`.
 - `andy` and `kathy` follow the live-year/local-archive split.
 - `old` targets Andy current for live-year mail and `myMail` for older mail.
+- personal, legacy, shared and support mailboxes all appear in Role Boundaries.
 - shared/support roles remain readable in the TUI.
 - no mailbox mutation occurs in planning mode.
 
