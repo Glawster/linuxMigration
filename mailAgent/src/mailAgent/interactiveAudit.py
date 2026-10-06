@@ -16,10 +16,10 @@ from mailAgent.auditUi import (
 from mailAgent.planSummary import planSummaryLines
 
 
-_PlanRefresh = Callable[[], dict]
-
-
-def auditAppBuild(snapshot: dict, planRefresh: _PlanRefresh | None = None):
+def auditAppBuild(
+    snapshot: dict,
+    planRefresh: Callable[[], dict] | None = None,
+):
     """Build the audit app and optionally add in-place plan refresh support."""
     app = _auditAppBuild(snapshot)
     if planRefresh is None:
@@ -37,17 +37,23 @@ def auditAppBuild(snapshot: dict, planRefresh: _PlanRefresh | None = None):
     return app
 
 
-def auditShow(snapshot: dict, planRefresh: _PlanRefresh | None = None) -> str | None:
+def auditShow(
+    snapshot: dict,
+    planRefresh: Callable[[], dict] | None = None,
+) -> str | None:
     """Display the audit TUI and keep it active while refreshing a stored plan."""
     return auditAppBuild(snapshot, planRefresh).run()
 
 
-def _planRefreshStart(app, snapshot: dict, planRefresh: _PlanRefresh) -> None:
+def _planRefreshStart(
+    app,
+    snapshot: dict,
+    planRefresh: Callable[[], dict],
+) -> None:
     """Start one background plan refresh while leaving the current TUI mounted."""
     button = app.query_one("#refresh-planning", Button)
     button.disabled = True
-    generated = app.query_one("#plan-generated", Static)
-    generated.update("Refreshing plan…")
+    _planStatusWidget(app).update("Refreshing plan…")
     app.run_worker(
         _planRefresh(app, snapshot, planRefresh),
         group="plan-refresh",
@@ -55,21 +61,33 @@ def _planRefreshStart(app, snapshot: dict, planRefresh: _PlanRefresh) -> None:
     )
 
 
-async def _planRefresh(app, snapshot: dict, planRefresh: _PlanRefresh) -> None:
+async def _planRefresh(
+    app,
+    snapshot: dict,
+    planRefresh: Callable[[], dict],
+) -> None:
     """Run synchronous discovery off the UI loop and replace plan widgets in place."""
     button = app.query_one("#refresh-planning", Button)
-    generated = app.query_one("#plan-generated", Static)
+    status = _planStatusWidget(app)
     try:
         refreshed = await asyncio.to_thread(planRefresh)
         plan = refreshed["migrationPlan"]
         _planWidgetsUpdate(app, plan)
         snapshot.clear()
         snapshot.update(refreshed)
-        generated.update("Plan refreshed · " + plan.get("generatedAt", "time unavailable"))
+        status.update("Plan refreshed · " + plan.get("generatedAt", "time unavailable"))
     except Exception as error:  # UI boundary: preserve the existing plan on any refresh failure.
-        generated.update("Plan refresh failed · " + str(error))
+        status.update("Plan refresh failed · " + str(error))
     finally:
         button.disabled = False
+
+
+def _planStatusWidget(app) -> Static:
+    """Use the generated-time row as refresh status, with summary as old-plan fallback."""
+    generated = app.query("#plan-generated")
+    if generated:
+        return generated.first(Static)
+    return app.query_one("#plan-summary", Static)
 
 
 def _planWidgetsUpdate(app, plan: dict) -> None:
