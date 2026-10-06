@@ -53,7 +53,7 @@ def _planRefreshStart(
     """Start one background plan refresh while leaving the current TUI mounted."""
     button = app.query_one("#refresh-planning", Button)
     button.disabled = True
-    _planStatusWidget(app).update("Refreshing plan…")
+    app.query_one("#plan-generated", Static).update("Refreshing plan…")
     app.run_worker(
         _planRefresh(app, snapshot, planRefresh),
         group="plan-refresh",
@@ -68,7 +68,7 @@ async def _planRefresh(
 ) -> None:
     """Run synchronous discovery off the UI loop and replace plan widgets in place."""
     button = app.query_one("#refresh-planning", Button)
-    status = _planStatusWidget(app)
+    status = app.query_one("#plan-generated", Static)
     try:
         refreshed = await asyncio.to_thread(planRefresh)
         plan = refreshed["migrationPlan"]
@@ -80,14 +80,6 @@ async def _planRefresh(
         status.update("Plan refresh failed · " + str(error))
     finally:
         button.disabled = False
-
-
-def _planStatusWidget(app) -> Static:
-    """Use the generated-time row as refresh status, with summary as old-plan fallback."""
-    generated = app.query("#plan-generated")
-    if generated:
-        return generated.first(Static)
-    return app.query_one("#plan-summary", Static)
 
 
 def _planWidgetsUpdate(app, plan: dict) -> None:
