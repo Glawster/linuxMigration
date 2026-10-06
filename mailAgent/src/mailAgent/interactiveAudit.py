@@ -6,6 +6,7 @@ from typing import Callable
 from rich.text import Text
 from textual.widgets import Button, DataTable, Input, Select, Static
 
+import mailAgent.auditUi as auditUi
 from mailAgent.auditUi import (
     _planActionText,
     _planningEntries,
@@ -14,6 +15,7 @@ from mailAgent.auditUi import (
     _proposalRowsFiltered,
     auditAppBuild as _auditAppBuild,
 )
+from mailAgent.digestInteraction import DigestPolicyTable
 from mailAgent.planSummary import planSummaryLines
 
 
@@ -22,6 +24,10 @@ def auditAppBuild(
     planRefresh: Callable[[], dict] | None = None,
 ):
     """Build the audit app and optionally add in-place plan refresh support."""
+    # Keep the presentation module UI-independent from this richer keyboard layer.
+    # _interestPane resolves this class at composition time, so the interactive CLI
+    # consistently gets the standardized digest controls whether or not a plan exists.
+    auditUi._DigestPolicyTable = DigestPolicyTable
     baseApp = _auditAppBuild(snapshot)
     if planRefresh is None:
         return baseApp
