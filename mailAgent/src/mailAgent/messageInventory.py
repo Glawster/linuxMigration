@@ -3,7 +3,7 @@
 import re
 from email.header import decode_header, make_header
 from email.parser import BytesParser
-from email.utils import parsedate_to_datetime
+from email.utils import getaddresses, parsedate_to_datetime
 from typing import Any
 
 from mailAgent.senderAddress import senderNormalize
@@ -92,13 +92,21 @@ def messageParse(metadata: bytes, header: bytes, folder: str, uidValidity: str) 
         uidValidity=uidValidity,
         year=None,
         sender=None,
+        senderName="",
         subject="",
     )
     parsed = BytesParser().parsebytes(header)
     dates = parsed.get_all("Date", [])
-    sender = senderNormalize(", ".join(parsed.get_all("From", [])))
+    fromValues = parsed.get_all("From", [])
+    sender = senderNormalize(", ".join(fromValues))
     if sender:
         result["sender"] = sender
+    addresses = getaddresses(fromValues)
+    if len(addresses) == 1 and addresses[0][0]:
+        try:
+            result["senderName"] = str(make_header(decode_header(addresses[0][0])))
+        except (LookupError, UnicodeError):
+            result["senderName"] = addresses[0][0]
     subject = parsed.get("Subject")
     if subject:
         try:
