@@ -648,7 +648,8 @@ def testNonselectableDestinationsAndUnknownSource(config):
     snapshot["mailboxes"][0]["folders"][1]["attributes"] = ["\\Noselect"]
     plan = migrationPlan(config, snapshot)
     assert not any(
-        p["source"]["mailbox"] == "old" and p["year"] == 2026 for p in plan["proposals"]
+        p["source"]["mailbox"] == "andy" and p["year"] == 2026
+        for p in plan["proposals"]
     )
     assert any("cannot receive" in r["reason"] for r in plan["reviewQueue"])
     root = Path(config["mailboxes"][0]["localArchive"])
@@ -806,6 +807,7 @@ def testSentRequiresExplicitMapping(config):
     config["mailboxes"][2]["folderMappings"] = {"INBOX.Sent": "Orders/Shop"}
     plan = migrationPlan(config, snapshot)
     assert len([p for p in plan["proposals"] if p["source"]["mailbox"] == "old"]) == 2
+
 
 
 def testArchiveSenderClassificationAndPaypalContains(config):
@@ -1035,6 +1037,7 @@ def testPlanRefreshButton(config):
     assert asyncio.run(uiInspect()) == "runPlanning"
 
 
+
 def testConflictRowsAreUserFacing():
     from mailAgent.auditUi import _conflictRows
 
@@ -1072,6 +1075,7 @@ def testConflictRowsAreUserFacing():
         )
     ]
     assert "/private/profile" not in " ".join(rows[0])
+
 
 
 def testAuditIssueReportingIncludesMailboxAndFolder():
@@ -1113,6 +1117,7 @@ def testAuditIssueReportingIncludesMailboxAndFolder():
         == "hwfc: Mailbox discovery failed; verify connection and credentials"
         for call in logger.error.call_args_list
     )
+
 
 
 def testStoreAndChangeRowsHideThunderbirdInternals():
@@ -1162,9 +1167,10 @@ def testStoreAndChangeRowsHideThunderbirdInternals():
     assert sourcePath not in " ".join(" ".join(row) for row in rows)
 
 
+
 def testInboxDigestPresentation(config):
     from mailAgent.auditUi import auditAppBuild
-    from textual.widgets import Static, TabPane
+    from textual.widgets import DataTable, TabPane, TabbedContent
 
     snapshot = snapshotBuild(config)
 
@@ -1173,16 +1179,14 @@ def testInboxDigestPresentation(config):
         async with app.run_test(size=(120, 40)):
             digest = app.query_one("#inboxInterest", TabPane)
             assert str(digest._title) == "Inbox Digest"
-            assert (
-                str(app.query_one("#digest-footer", Static).render())
-                == "Space to Toggle Sender of interest"
+            assert app.query_one("#digest-menu", TabbedContent)
+            assert app.query_one("#digestSenders", TabPane)
+            assert app.query_one("#digestReasons", TabPane)
+            assert app.query_one("#interest-table", DataTable).cursor_type == "cell"
+            assert app.query_one("#digest-reason-table", DataTable).cursor_type == "cell"
+            assert not any(
+                getattr(binding, "key", None) == "space" for binding in app.BINDINGS
             )
-            binding = next(
-                binding
-                for binding in app.BINDINGS
-                if getattr(binding, "key", None) == "space"
-            )
-            assert binding.show is False
 
     asyncio.run(uiInspect())
 
@@ -1298,6 +1302,7 @@ def testReviewQueueResolutionControls(config):
     asyncio.run(uiInspect())
 
 
+
 def testProposalRowsGroupDuplicatesAndShowStores():
     from mailAgent.auditUi import _proposalRows
 
@@ -1404,6 +1409,7 @@ def testProposalRowsGroupDuplicatesAndShowStores():
     ) in rows
 
 
+
 def testProposalRowsFiltering():
     from mailAgent.auditUi import _proposalRowsFiltered
 
@@ -1485,6 +1491,7 @@ def testProposedMovesFilterControls(config):
             )
 
     asyncio.run(uiInspect())
+
 
 
 def testImapFolderDisplayDecodesModifiedUtf7():
