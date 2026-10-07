@@ -1,0 +1,9 @@
+hostname: laptop
+
+profiles:
+  - common
+  - development
+
+repositories:
+
+git:

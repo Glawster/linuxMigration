@@ -1,0 +1,5 @@
+name: wow
+
+wow:
+  enabled: true
+  installDir: /mnt/games/wow

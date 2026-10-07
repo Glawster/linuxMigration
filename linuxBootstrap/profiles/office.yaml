@@ -1,0 +1,6 @@
+name: office
+
+flatpak:
+  - org.libreoffice.LibreOffice
+
+services:

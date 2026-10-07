@@ -1,0 +1,13 @@
+# Addresses are reserved by the router's DHCP service, not configured locally.
+devices:
+  main-pc:
+    hostname: Andy-PC
+    expectedIp: 192.168.1.200
+    managedBy: linuxBootstrap
+  tv-pc:
+    hostname: TV-PC
+    expectedIp: 192.168.1.201
+    managedBy: linuxBootstrap
+  mac:
+    expectedIp: 192.168.1.202
+    managedBy: router

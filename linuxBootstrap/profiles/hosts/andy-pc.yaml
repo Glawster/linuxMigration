@@ -1,0 +1,38 @@
+hostname: andy-pc
+
+network:
+  connection: Wired connection 3
+  address: 192.168.1.215/24
+  gateway: 192.168.1.254
+  dns: 192.168.1.254
+
+profiles:
+  - common
+  - development
+  - media
+
+packages:
+  apt:
+    - code
+    - openssh-server
+    - nfs-kernel-server
+  flatpak:
+    - com.rustdesk.RustDesk
+
+services:
+  - ssh
+  - nfs-kernel-server
+
+nfsExports:
+  - /mnt/video2 192.168.1.201(rw,sync,no_subtree_check)
+
+managedFiles:
+  - ssh/media-hosts.conf|.ssh/config.d/media-hosts.conf
+
+vscodeExtensions:
+  - openai.chatgpt
+  - vscodevim.vim
+
+repositories:
+
+git:

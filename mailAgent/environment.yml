@@ -1,0 +1,11 @@
+name: mailAgent
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pytest
+  - black
+  - pip:
+      - textual
+      - organiseMyProjects

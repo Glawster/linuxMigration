@@ -1,0 +1,53 @@
+[general]
+liveYear = 2026
+# Optional override; default is ~/.config/mailAgent/credentials.json.gpg
+# credentialsFile = "~/.config/mailAgent/credentials.json.gpg"
+
+# Replace each independent host and local archive path before running.
+# Relative archive paths are relative to this configuration file.
+[[mailboxes]]
+id = "andy"
+name = "Andy"
+host = "imap.andy.example"
+username = "andyw@glawster.com"
+credentialId = "andy"
+role = "personal"
+localArchive = "~/Mail/myMail"
+archiveFormat = "thunderbird"
+# Optional exact server folder -> canonical archive folder mappings:
+# folderMappings = { "INBOX.Orders" = "Orders" }
+
+[[mailboxes]]
+id = "kathy"
+name = "Kathy"
+host = "imap.kathy.example"
+username = "kathyw@glawster.com"
+credentialId = "kathy"
+role = "personal"
+localArchive = "~/Mail/kathyMail"
+archiveFormat = "thunderbird"
+
+[[mailboxes]]
+id = "old"
+name = "Old mailbox"
+host = "imap.legacy.example"
+username = "andy@glawster.com"
+credentialId = "old"
+role = "legacy"
+migrationTarget = "andy"
+
+[[mailboxes]]
+id = "hwfc"
+name = "HWFC"
+host = "imap.hwfc.example"
+username = "info@hillsboroughwalkingfootball.com"
+credentialId = "hwfc"
+role = "shared"
+
+[[mailboxes]]
+id = "clannEolas"
+name = "Clann Eolas"
+host = "imap.clanneolas.example"
+username = "info@clanneolas.com"
+credentialId = "clannEolas"
+role = "support"

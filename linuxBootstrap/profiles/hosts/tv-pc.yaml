@@ -1,0 +1,52 @@
+hostname: TV-PC
+expectedIp: 192.168.1.201
+
+profiles:
+  - common
+  - gaming
+  - vr
+  - media-library
+
+repositories:
+  - warp
+
+apt:
+  - code
+  - gh
+  - libapr1
+  - libaprutil1
+  - libasound2
+  - libglib2.0-0
+  - libxcb-cursor0
+  - libxcb-xinerama0
+  - libxkbcommon-x11-0
+  - ocl-icd-libopencl1
+  - warp-terminal
+  - openssh-server
+  - nfs-common
+
+services:
+  - ssh
+
+nfsMounts:
+  - 192.168.1.215:/mnt/video2 /mnt/video2 rw,_netdev,nofail,x-systemd.automount,nolock
+
+vscodeExtensions:
+  - openai.chatgpt
+  - vscodevim.vim
+
+installers:
+  - miniconda
+
+davinci:
+  enabled: true
+  remove: false
+  installerDir: ~/Downloads
+
+steamApps:
+  - 250820 SteamVR
+
+git:
+  name: Andy Wilson
+  email: murky_oblong0s@icloud.com
+  defaultBranch: main

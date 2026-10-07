@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+VPN_INTERFACE="tun0"
+QBITTORRENT="/usr/bin/qbittorrent"
+
+# The VPN interface must exist.
+if ! ip link show "$VPN_INTERFACE" >/dev/null 2>&1; then
+    echo "qBittorrent blocked - VPN interface $VPN_INTERFACE is not available." >&2
+    exit 1
+fi
+
+# Internet traffic must actually be routed through the VPN.
+ROUTE="$(ip route get 1.1.1.1 2>/dev/null)" || {
+    echo "qBittorrent blocked - unable to determine Internet route." >&2
+    exit 1
+}
+
+if [[ "$ROUTE" != *"dev $VPN_INTERFACE"* ]]; then
+    echo "qBittorrent blocked - Internet traffic is not routed through $VPN_INTERFACE." >&2
+    exit 1
+fi
+
+exec "$QBITTORRENT" "$@"
