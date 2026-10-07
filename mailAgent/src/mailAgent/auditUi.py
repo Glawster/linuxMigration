@@ -353,7 +353,7 @@ def _filingRuleSave(app, snapshot: dict, filingRows: list[dict], kind: str) -> N
     try:
         parent, child, proposed = _filingChoiceRead(app, snapshot, row)
         saved = (
-            _filingDomainStore(row, parent, child, proposed)
+            _filingDomainStore(app, row, parent, child, proposed)
             if kind == "domain"
             else _filingSenderStore(app, row, parent, child, proposed)
         )
@@ -364,23 +364,42 @@ def _filingRuleSave(app, snapshot: dict, filingRows: list[dict], kind: str) -> N
     _filingStatus(app, f"Saved {saved} -> {parent}/{child}. Mail was not changed.")
 
 
-def _filingDomainStore(row: dict, parent: str, child: str, proposed: bool) -> str:
+def _filingDomainStore(app, row: dict, parent: str, child: str, proposed: bool) -> str:
     from mailAgent.filing import filingDomainSet, filingPath
 
-    filingDomainSet(
-        row["mailbox"], row["domain"], parent, child, proposed, filingPath()
-    )
-    return row["domain"]
+    domain = _filingConfirmedDomain(app, row)
+    filingDomainSet(row["mailbox"], domain, parent, child, proposed, filingPath())
+    return domain
+
+
+def _filingConfirmedDomain(app, row: dict) -> str:
+    """Use a typed organisation domain when the shown host is uncertain."""
+    from mailAgent.filing import filingDomainClarify, filingPath
+
+    typed = app.query_one("#filing-domain", Input).value.strip()
+    if not typed:
+        return row["domain"]
+    if not row.get("domainUncertain"):
+        raise ValueError("This domain is already determined")
+    saved = filingDomainClarify(row["mailbox"], row["domain"], typed, filingPath())
+    host = row["domain"].strip().lower().rstrip(".")
+    return saved["mailboxes"][row["mailbox"]]["clarifications"][host]
 
 
 def _filingSenderStore(app, row: dict, parent: str, child: str, proposed: bool) -> str:
-    from mailAgent.filing import filingDomainExtract, filingPath, filingSenderSet
+    from mailAgent.filing import (
+        filingDomainMatch,
+        filingPath,
+        filingRulesLoad,
+        filingSenderSet,
+    )
     from mailAgent.senderAddress import senderNormalize
 
     sender = senderNormalize(app.query_one("#filing-sender", Input).value)
     if not sender:
         raise ValueError("Enter an exact sender address")
-    if filingDomainExtract(sender) != row["domain"]:
+    rules = filingRulesLoad(filingPath())
+    if not filingDomainMatch(sender, row["domain"], rules, row["mailbox"]):
         raise ValueError(f"Sender is not in {row['domain']}")
     filingSenderSet(row["mailbox"], sender, parent, child, proposed, filingPath())
     return sender
@@ -451,7 +470,12 @@ def _filingSelectedIdentity(app, filingRows: list[dict]):
 
 def _filingEditorsFill(app, snapshot: dict, row: dict) -> None:
     """Show the selected domain's parent and suggested folder."""
-    if not app.query("#filing-parent") or not app.query("#filing-child"):
+    if (
+        not app.query("#filing-parent")
+        or not app.query("#filing-child")
+        or not app.query("#filing-domain")
+        or not app.query("#filing-domain-hint")
+    ):
         return
     plan = snapshot.get("filingPlan") or {}
     chooser = app.query_one("#filing-parent", Select)
@@ -461,6 +485,14 @@ def _filingEditorsFill(app, snapshot: dict, row: dict) -> None:
     app.query_one("#filing-child", Input).value = (
         row.get("folder") or row.get("suggestion") or ""
     )
+    app.query_one("#filing-domain", Input).value = ""
+    hint = "This domain is already determined."
+    if row.get("domainUncertain"):
+        hint = (
+            "This domain is uncertain. Enter the organisation domain, or leave "
+            "it blank to confirm the domain shown."
+        )
+    app.query_one("#filing-domain-hint", Static).update(hint)
 
 
 def _filingSelectedRow(app, filingRows: list[dict]) -> dict | None:
@@ -517,6 +549,11 @@ def _filingPane(
             id="filing-child",
             value=first.get("folder") or first.get("suggestion") or "",
         )
+        yield Input(
+            placeholder="Organisation domain if this one is uncertain",
+            id="filing-domain",
+        )
+        yield Static("", id="filing-domain-hint", markup=False)
         yield Input(placeholder="Exact sender override, optional", id="filing-sender")
         yield Button("Add parent", id="filing-add-parent")
         yield Button("Save domain rule", id="filing-save-domain", variant="primary")

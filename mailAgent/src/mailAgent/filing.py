@@ -7,9 +7,12 @@ move mail, or enable the later execution phase.
 import json
 import os
 import tempfile
+from functools import lru_cache
+from importlib.resources import files
 from pathlib import Path
 
 from organiseMyProjects.logUtils import getLogger
+from publicsuffixlist import PublicSuffixList
 
 from mailAgent.archiveClassification import archiveSenderIndex, senderClassify
 from mailAgent.senderAddress import senderNormalize
@@ -17,48 +20,9 @@ from mailAgent.senderAddress import senderNormalize
 _SCHEMA_VERSION = 1
 _SAFE_HISTORY = ("archiveSenderExact", "archiveSenderMajority")
 _CHILD_DISPLAY = {"paypal": "PayPal"}
-_MULTI_LABEL_SUFFIXES = frozenset(
-    {
-        "ac.uk",
-        "co.uk",
-        "gov.uk",
-        "ltd.uk",
-        "me.uk",
-        "net.uk",
-        "org.uk",
-        "plc.uk",
-        "com.au",
-        "net.au",
-        "org.au",
-        "edu.au",
-        "gov.au",
-        "asn.au",
-        "id.au",
-        "co.nz",
-        "org.nz",
-        "net.nz",
-        "ac.nz",
-        "govt.nz",
-        "co.jp",
-        "or.jp",
-        "ne.jp",
-        "ac.jp",
-        "go.jp",
-        "com.br",
-        "co.za",
-        "com.mx",
-        "co.in",
-        "co.kr",
-        "com.cn",
-        "com.hk",
-        "com.sg",
-        "co.il",
-        "com.tr",
-        "com.ar",
-        "co.id",
-    }
-)
 _SECRET_KEYS = {"password", "secret", "token", "body", "subject"}
+_PSL = PublicSuffixList(accept_unknown=False)
+_PSL_ICANN = PublicSuffixList(accept_unknown=False, only_icann=True)
 
 
 ## workflow
@@ -129,6 +93,22 @@ def filingStatus(decision: dict | None, parents: list[str], folders: list[dict])
 ## rules
 
 
+def filingDomainClarify(
+    mailbox: str, host: str, domain: str, path: Path | None = None
+) -> dict:
+    """Record the organisation domain chosen for one uncertain sender host."""
+    _mailboxCheck(mailbox)
+    observed = _hostKey(host)
+    if filingDomainExtract("sender@" + observed):
+        raise ValueError("Domain does not need clarification")
+    chosen = _domainKey(domain)
+    path = path or filingPath()
+    data = filingRulesLoad(path)
+    entry = _mailboxEntry(data, mailbox)
+    entry["clarifications"][observed] = chosen
+    return _filingWrite(data, path)
+
+
 def filingDomainSet(
     mailbox: str,
     domain: str,
@@ -183,7 +163,7 @@ def filingSenderSet(
     """Persist an exact sender override for one mailbox taxonomy."""
     _mailboxCheck(mailbox)
     normalized = senderNormalize(sender)
-    if not normalized or not filingDomainExtract(normalized):
+    if not normalized or not _senderHost(normalized):
         raise ValueError("Invalid filing sender")
     decision = _decisionBuild(parent, child, parentProposed)
     return _decisionStore(mailbox, "senders", normalized, decision, path)
@@ -206,20 +186,28 @@ def filingChildSuggest(domain: str, folders: list | None = None) -> str:
 
 
 def filingDomainExtract(value: str | None) -> str | None:
-    """Return the registrable organisation domain for one sender.
+    """Return the organisation domain when the Public Suffix List agrees.
 
-    Country-code suffixes such as ``co.uk`` stay attached, so ``amazon.co.uk``
-    is not reduced to ``co.uk``.
+    The bundled list supplies the suffix boundary. A result is used only when
+    the full list and its ICANN section name the same registrable domain, so
+    ``amazon.co.uk`` stays intact. A public-suffix host, an unknown suffix, or
+    a private-section boundary such as ``shop.blogspot.com`` returns None.
     """
-    sender = senderNormalize(value)
-    if not sender or "@" not in sender:
+    host = _senderHost(value)
+    if not host:
         return None
-    labels = sender.rsplit("@", 1)[1].split(".")
-    if len(labels) < 2 or not all(_labelOk(label) for label in labels):
+    registrable = _PSL.privatesuffix(host)
+    if not isinstance(registrable, str) or not _domainLabelsOk(registrable):
         return None
-    if len(labels) >= 3 and ".".join(labels[-2:]) in _MULTI_LABEL_SUFFIXES:
-        return ".".join(labels[-3:])
-    return ".".join(labels[-2:])
+    if registrable != _PSL_ICANN.privatesuffix(host):
+        return None
+    return registrable
+
+
+def filingDomainMatch(sender: str, domain: str, rules: dict, mailbox: str) -> bool:
+    """Return whether one sender belongs to a filing row's domain."""
+    resolved, _uncertain = _organisationDomain(sender, rules, mailbox)
+    return resolved == domain
 
 
 def filingNameNormalize(value: str) -> str:
@@ -420,13 +408,47 @@ def _destinationBuild(
     return _imapDestination(owner, observedTarget, mappings, decision["canonical"])
 
 
+def _barePublicSuffix(domain: str) -> bool:
+    """Return whether a domain is a registry suffix rather than an organisation.
+
+    Labels such as ``co`` and ``com`` are counted from the bundled ICANN
+    section. A label that begins several suffixes is a registry designator, so
+    ``co.uk`` cannot be saved. A one-off apex such as ``nhs.uk`` can.
+    """
+    if _PSL.publicsuffix(domain) != domain or _PSL_ICANN.publicsuffix(domain) != domain:
+        return False
+    labels = domain.split(".")
+    return len(labels) == 1 or labels[0] in _registryLabels()
+
+
+def _domainClarification(rules: dict, mailbox: str, host: str) -> str | None:
+    value = (
+        rules.get("mailboxes", {}).get(mailbox, {}).get("clarifications", {}).get(host)
+    )
+    return value if isinstance(value, str) else None
+
+
 def _domainKey(domain: str) -> str:
-    if not isinstance(domain, str) or "@" in domain:
+    """Accept a confident registrable domain or a user-confirmed organisation."""
+    chosen = _hostKey(domain)
+    extracted = filingDomainExtract("sender@" + chosen)
+    if extracted not in (None, chosen) or _barePublicSuffix(chosen):
         raise ValueError("Invalid filing domain")
-    extracted = filingDomainExtract("sender@" + domain)
-    if extracted != domain:
+    return chosen
+
+
+def _domainLabelsOk(domain: str) -> bool:
+    labels = domain.split(".")
+    return len(labels) >= 2 and all(_labelOk(label) for label in labels)
+
+
+def _hostKey(domain: str) -> str:
+    if not isinstance(domain, str):
         raise ValueError("Invalid filing domain")
-    return domain
+    chosen = domain.strip().lower().rstrip(".")
+    if "@" in chosen or not _domainLabelsOk(chosen):
+        raise ValueError("Invalid filing domain")
+    return chosen
 
 
 def _domainRule(rules: dict, mailbox: str, domain: str) -> dict | None:
@@ -437,7 +459,12 @@ def _domainRule(rules: dict, mailbox: str, domain: str) -> dict | None:
 
 
 def _emptyMailbox() -> dict:
-    return {"domains": {}, "senders": {}, "proposedParents": []}
+    return {
+        "domains": {},
+        "senders": {},
+        "proposedParents": [],
+        "clarifications": {},
+    }
 
 
 def _emptyRules() -> dict:
@@ -609,6 +636,7 @@ def _mailboxEntry(data: dict, mailbox: str) -> dict:
     entry.setdefault("domains", {})
     entry.setdefault("senders", {})
     entry.setdefault("proposedParents", [])
+    entry.setdefault("clarifications", {})
     return entry
 
 
@@ -639,7 +667,7 @@ def _messageFile(
     if not isinstance(folder, str) or folder.lower() != "inbox":
         return
     sender = message.get("sender")
-    domain = filingDomainExtract(sender) if sender else None
+    domain, uncertain = _organisationDomain(sender, rules, owner["id"])
     if not domain:
         if message.get("seen") is True:
             _reviewAppend(
@@ -652,10 +680,22 @@ def _messageFile(
         return
     bucket = grouped.setdefault(
         (owner["id"], domain),
-        dict(owner=owner, messages=[], eligible=[]),
+        dict(owner=owner, messages=[], eligible=[], uncertain=False),
     )
+    bucket["uncertain"] = bucket["uncertain"] or uncertain
     bucket["messages"].append(message)
     if message.get("seen") is not True:
+        return
+    if uncertain and not _senderRule(rules, owner["id"], sender):
+        _reviewAppend(
+            plan,
+            account["id"],
+            folder,
+            "Domain needs clarification",
+            message,
+            domain,
+        )
+        bucket["eligible"].append(dict(message=message, decision=None, source=""))
         return
     _messagePropose(
         account, owner, message, folder, domain, archive, rules, prepared, plan, bucket
@@ -734,6 +774,24 @@ def _messageResolve(
         return None, "", ""
     decision, reason = found
     return decision, "archive history", reason
+
+
+def _organisationDomain(
+    sender: str | None, rules: dict, mailbox: str
+) -> tuple[str | None, bool]:
+    """Return the grouping domain and whether the user still has to confirm it."""
+    host = _senderHost(sender)
+    if not host:
+        return None, False
+    clarified = _domainClarification(rules, mailbox, host)
+    if clarified:
+        return clarified, False
+    extracted = filingDomainExtract(sender)
+    if extracted:
+        return extracted, False
+    if _domainRule(rules, mailbox, host):
+        return host, False
+    return host, True
 
 
 def _observed(snapshot: dict, mailbox: str) -> dict:
@@ -862,6 +920,33 @@ def _proposedCollect(plan: dict, rules: dict) -> None:
         )
 
 
+@lru_cache(maxsize=1)
+def _registryLabels() -> frozenset[str]:
+    """Return ICANN suffix labels that name a registry rather than one organisation."""
+    text = (
+        files("publicsuffixlist")
+        .joinpath("public_suffix_list.dat")
+        .read_text(encoding="utf-8")
+    )
+    counts: dict[str, int] = {}
+    icann = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped == "// ===BEGIN ICANN DOMAINS===":
+            icann = True
+            continue
+        if stripped == "// ===END ICANN DOMAINS===":
+            break
+        if not icann or not stripped or stripped.startswith("//"):
+            continue
+        rule = stripped.split()[0].lstrip("!*.")
+        if "." not in rule:
+            continue
+        label = rule.split(".", 1)[0]
+        counts[label] = counts.get(label, 0) + 1
+    return frozenset(label for label, count in counts.items() if count >= 3)
+
+
 def _reviewAppend(
     plan: dict,
     mailbox: str,
@@ -922,6 +1007,7 @@ def _rowsBuild(grouped: dict, rules: dict, prepared: dict, plan: dict) -> None:
                 status=filingStatus(decision, parents, folders),
                 decisionSource=source,
                 suggestion=filingChildSuggest(domain, folders),
+                domainUncertain=bucket.get("uncertain", False),
             )
         )
 
@@ -958,16 +1044,23 @@ def _rulesValidate(data: dict) -> None:
         domains = entry.get("domains", {})
         senders = entry.get("senders", {})
         proposed = entry.get("proposedParents", [])
+        clarifications = entry.get("clarifications", {})
         if (
             not isinstance(domains, dict)
             or not isinstance(senders, dict)
             or not isinstance(proposed, list)
+            or not isinstance(clarifications, dict)
         ):
             raise ValueError("Invalid filing-rules mailbox")
         for domain, decision in domains.items():
             if domain != _domainKey(domain):
                 raise ValueError("Invalid filing domain")
             _decisionValidate(decision)
+        for host, chosen in clarifications.items():
+            if host != _hostKey(host) or filingDomainExtract("sender@" + host):
+                raise ValueError("Invalid filing domain")
+            if chosen != _domainKey(chosen):
+                raise ValueError("Invalid filing domain")
         for sender, decision in senders.items():
             if senderNormalize(sender) != sender:
                 raise ValueError("Invalid filing sender override")
@@ -985,6 +1078,16 @@ def _secretKey(value) -> bool:
     elif isinstance(value, list):
         return any(_secretKey(item) for item in value)
     return False
+
+
+def _senderHost(value: str | None) -> str | None:
+    sender = senderNormalize(value)
+    if not sender or "@" not in sender:
+        return None
+    host = sender.rsplit("@", 1)[1].strip().lower().rstrip(".")
+    if not _domainLabelsOk(host):
+        return None
+    return host
 
 
 def _senderRule(rules: dict, mailbox: str, sender: str | None) -> dict | None:

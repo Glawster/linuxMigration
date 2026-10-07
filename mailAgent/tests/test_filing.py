@@ -13,6 +13,7 @@ from mailAgent.configuration import configValidate
 from mailAgent.filing import (
     filingChildSuggest,
     filingContextBuild,
+    filingDomainClarify,
     filingDomainExtract,
     filingDomainSet,
     filingNameNormalize,
@@ -75,6 +76,87 @@ def testRegistrableDomainsKeepCountryCodeSuffixes():
         == "barclaycard.co.uk"
     )
     assert filingDomainExtract("not-an-address") is None
+
+
+def testPublicSuffixListCoversLessObviousBoundaries():
+    assert filingDomainExtract("orders@amazon.com.au") == "amazon.com.au"
+    assert filingDomainExtract("news@bbc.co.uk") == "bbc.co.uk"
+    assert filingDomainExtract("shop@example.com.br") == "example.com.br"
+    assert filingDomainExtract("office@city.kawasaki.jp") == "city.kawasaki.jp"
+    assert filingDomainExtract("hello@www.x.kawasaki.jp") == "www.x.kawasaki.jp"
+    assert filingDomainExtract("admin@school.pvt.k12.wy.us") == "pvt.k12.wy.us"
+    assert filingDomainExtract("support@telinet.com.pg") == "telinet.com.pg"
+    assert filingDomainExtract("reader@foo.blogspot.com") is None
+    assert filingDomainExtract("pages@name.github.io") is None
+    assert filingDomainExtract("alerts@notifications.service.gov.uk") is None
+    assert filingDomainExtract("person@co.uk") is None
+    assert filingDomainExtract("person@com") is None
+
+
+def testUncertainDomainAsksForClarification(world, tmp_path):
+    rulesPath = tmp_path / "filing-rules.json"
+    for bare in ("co.uk", "com", "com.au", "mail.amazon.co.uk"):
+        with pytest.raises(ValueError):
+            filingDomainSet("andy", bare, "Finance", "PayPal", False, rulesPath)
+    with pytest.raises(ValueError):
+        filingDomainClarify("andy", "amazon.co.uk", "amazon.com", rulesPath)
+
+    snapshot = _snapshot(world)
+    snapshot["mailboxes"][0]["inboxInventory"]["messages"] = [
+        _message("nhs", "ask@nhs.uk", 2026, True),
+        _message("blog", "reader@foo.blogspot.com", 2026, True),
+        _message("pages", "pages@name.github.io", 2025, True),
+    ]
+    context = filingContextBuild(world["config"])
+    plan = filingPlanBuild(context, snapshot, filingRulesLoad(rulesPath))
+    assert not any(
+        item["source"]["uid"] in {"nhs", "blog", "pages"} for item in plan["proposals"]
+    )
+    rows = {row["domain"]: row for row in plan["rows"]}
+    assert rows["nhs.uk"]["status"] == "Needs choice"
+    assert rows["nhs.uk"]["domainUncertain"] is True
+    assert rows["foo.blogspot.com"]["domainUncertain"] is True
+    assert rows["name.github.io"]["domainUncertain"] is True
+    assert {
+        review["source"].get("sender")
+        for review in plan["reviews"]
+        if review["reason"] == "Domain needs clarification"
+    } == {
+        "ask@nhs.uk",
+        "reader@foo.blogspot.com",
+        "pages@name.github.io",
+    }
+    assert not (world["andy"] / "Medical").exists()
+
+    filingDomainSet("andy", "nhs.uk", "Medical", "NHS", True, rulesPath)
+    confirmed = filingPlanBuild(context, snapshot, filingRulesLoad(rulesPath))
+    nhs = _proposal(confirmed["proposals"], "andy", "nhs")
+    assert nhs["decisionSource"] == "domain"
+    assert nhs["canonical"] == "Medical/NHS"
+    assert nhs["source"]["domain"] == "nhs.uk"
+    assert nhs["executionPermitted"] is False
+    assert nhs["sourceRemovalAllowed"] is False
+    assert not any(
+        review["source"].get("sender") == "ask@nhs.uk"
+        for review in confirmed["reviews"]
+    )
+    assert not (world["andy"] / "Medical").exists()
+
+    filingDomainClarify("andy", "foo.blogspot.com", "blogspot.com", rulesPath)
+    filingDomainSet("andy", "blogspot.com", "Shopping", "Amazon", False, rulesPath)
+    clarified = filingPlanBuild(context, snapshot, filingRulesLoad(rulesPath))
+    blog = _proposal(clarified["proposals"], "andy", "blog")
+    assert blog["source"]["domain"] == "blogspot.com"
+    assert blog["canonical"] == "Shopping/Amazon"
+    assert blog["executionPermitted"] is False
+    assert not any(row["domain"] == "foo.blogspot.com" for row in clarified["rows"])
+    blogRow = next(row for row in clarified["rows"] if row["domain"] == "blogspot.com")
+    assert blogRow["domainUncertain"] is False
+    assert any(
+        review["source"].get("sender") == "pages@name.github.io"
+        and review["reason"] == "Domain needs clarification"
+        for review in clarified["reviews"]
+    )
 
 
 def testChildSuggestionAndFirstLevelParents(world):
@@ -194,7 +276,7 @@ def testReadInboxPlanIsScopedTraceableAndDoesNotMutate(world, tmp_path):
     assert history["destination"]["kind"] == "imap"
 
     assert any(
-        review["reason"] == "No safe canonical destination"
+        review["reason"] == "Domain needs clarification"
         and review["source"].get("sender") == "ask@nhs.uk"
         for review in plan["reviews"]
     )
@@ -210,18 +292,16 @@ def testUnsafeArchiveHistoryStaysInReview(world):
     context = filingContextBuild(world["config"])
     snapshot = _snapshot(world)
     snapshot["mailboxes"][0]["inboxInventory"]["messages"] = [
-        _message("guess", "notice@paypal-status.example", 2026, True)
+        _message("guess", "notice@paypal-status.com", 2026, True)
     ]
     plan = filingPlanBuild(
         context, snapshot, filingRulesLoad(world["root"] / "none.json")
     )
     assert plan["proposals"] == []
-    row = next(
-        item for item in plan["rows"] if item["domain"] == "paypal-status.example"
-    )
+    row = next(item for item in plan["rows"] if item["domain"] == "paypal-status.com")
     assert row["status"] == "Needs choice"
     assert any(
-        review["source"].get("sender") == "notice@paypal-status.example"
+        review["source"].get("sender") == "notice@paypal-status.com"
         and review["reason"] == "No safe canonical destination"
         for review in plan["reviews"]
     )
@@ -375,6 +455,8 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             )
             table.move_cursor(row=nhsRow)
             await pilot.pause()
+            hint = str(app.query_one("#filing-domain-hint", Static).render())
+            assert "uncertain" in hint.lower()
             app.query_one("#filing-parent-name", Input).value = "Medical"
             app.query_one("#filing-add-parent", Button).focus()
             await pilot.press("enter")

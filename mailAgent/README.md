@@ -168,7 +168,9 @@ mail stays in the Inbox. Andy and Kathy keep separate rules, stored in
 `~/.config/mailAgent/filing-rules.json`.
 
 The **Inbox Digest** tab includes a **Filing** panel. It groups the current
-Inbox by registrable domain and lets you choose or propose a parent folder.
+Inbox by registrable domain. When the Public Suffix List does not identify
+one organisation domain, the panel asks you to confirm it. You can choose or
+propose a parent folder.
 Saving a rule or proposing a parent does not create folders, move mail, or
 create Thunderbird filters. Filing execution remains disabled. See
 [Inbox filing](documentation/inboxFiling.md).

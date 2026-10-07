@@ -34,9 +34,25 @@ Shared and support mailboxes are excluded.
 
 ## Domains, parents and folders
 
-Senders are grouped by registrable organisation domain. `amazon.co.uk` stays
-intact rather than collapsing to `co.uk`. An exact sender override wins over
-the domain rule, and either user decision wins over archive history.
+Senders are grouped by registrable organisation domain. The boundary comes
+from the Public Suffix List shipped with the `publicsuffixlist` package, so
+`amazon.co.uk`, `city.kawasaki.jp` and `pvt.k12.wy.us` keep the suffix that
+list assigns. mailAgent does not keep its own suffix catalogue and does not
+download a new list while it runs.
+
+The full list and its ICANN section must agree before a domain is used
+automatically. When they do not, the host is shown for you to clarify. That
+covers a host that is only a public suffix, an unknown suffix, and a private
+suffix boundary such as `shop.blogspot.com` (the list can read that as the
+shop or as `blogspot.com`). Enter the organisation domain in the Filing
+panel, or leave it blank to confirm the domain shown. A saved confirmation
+still does not move mail. A one-label suffix such as `com`, or a registry
+suffix such as `co.uk`, is not accepted as an organisation domain. An apex
+the list does not split, such as `nhs.uk`, can be confirmed.
+
+An exact sender override wins over the domain rule, and either user decision
+wins over archive history. Until an uncertain domain is confirmed, archive
+history is not used to choose a destination for that host.
 
 Parents are the first level of the local archive only. `Shopping/Amazon/Orders`
 contributes the parent `Shopping`. Deeper names are not extra parents.
@@ -64,7 +80,8 @@ Durable rules live at:
 ```
 
 The file is mailbox-specific and can store domain rules, exact sender
-overrides, proposed parent names and the canonical `Parent/Child` path. It is
+overrides, a confirmed organisation domain for a host the suffix list left
+uncertain, proposed parent names and the canonical `Parent/Child` path. It is
 written atomically with user-only permissions. It has a schema version and it
 must not contain passwords, tokens or message content.
 
