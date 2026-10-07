@@ -449,6 +449,32 @@ def testAuditScreenUsesSharedStylesheet():
     sheet.parse()
 
 
+def testAuditTableTextStaysOnDarkSurface():
+    from textual.widgets import DataTable
+
+    from mailAgent.auditUi import auditAppBuild
+
+    snapshot = {
+        "schemaVersion": 1,
+        "mailboxes": [],
+        "localArchives": [],
+        "sources": [],
+    }
+
+    async def inspect() -> None:
+        app = auditAppBuild(snapshot)
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            table = app.query_one("#folders-table", DataTable)
+            background = table.styles.background
+            colour = table.styles.color
+            assert background.a == 1
+            assert (background.r + background.g + background.b) / 3 < 80
+            assert (colour.r + colour.g + colour.b) / 3 > 180
+
+    asyncio.run(inspect())
+
+
 def testFilingColumnsClipAndFit():
     from mailAgent.filingView import _columnWidths, _textClip
 
