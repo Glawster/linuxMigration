@@ -85,6 +85,9 @@ async def _planRefresh(
         _planWidgetsUpdate(app, plan)
         snapshot.clear()
         snapshot.update(refreshed)
+        refresher = getattr(app, "_filingRefresh", None)
+        if refresher:
+            refresher()
         status.update("Plan refreshed · " + plan.get("generatedAt", "time unavailable"))
     except Exception as error:
         # UI boundary: preserve the existing plan on any refresh failure.

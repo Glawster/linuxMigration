@@ -151,12 +151,22 @@ def _snapshotBuild(args: argparse.Namespace, config: dict, logger: Any) -> dict:
             snapshot,
             resolutionLoad(),
         )
-        snapshot["migrationPlan"]["generatedAt"] = datetime.now(timezone.utc).isoformat()
+        snapshot["migrationPlan"]["generatedAt"] = datetime.now(
+            timezone.utc
+        ).isoformat()
         _planSave(snapshot["migrationPlan"], state)
     elif args.json is None:
         storedPlan = _planLoad(state)
         if storedPlan is not None:
             snapshot["migrationPlan"] = storedPlan
+    from mailAgent.filing import filingContextBuild, filingPlanBuild, filingRulesLoad
+
+    snapshot["filingContext"] = filingContextBuild(config)
+    snapshot["filingPlan"] = filingPlanBuild(
+        snapshot["filingContext"],
+        snapshot,
+        filingRulesLoad(),
+    )
     if args.confirm:
         logger.action("persist discovery snapshot")
         snapshotSave(snapshot, state)
@@ -198,10 +208,8 @@ def _thunderbirdRoot(configured: Path) -> Path:
         return configured
     if configured == Path.home() / ".thunderbird":
         for candidate in (
-            Path.home()
-            / ".var/app/org.mozilla.thunderbird_esr/.thunderbird",
-            Path.home()
-            / ".var/app/org.mozilla.Thunderbird/.thunderbird",
+            Path.home() / ".var/app/org.mozilla.thunderbird_esr/.thunderbird",
+            Path.home() / ".var/app/org.mozilla.Thunderbird/.thunderbird",
         ):
             if (candidate / "profiles.ini").is_file():
                 return candidate
