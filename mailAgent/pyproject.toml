@@ -24,4 +24,4 @@ testpaths = ["tests"]
 python_functions = ["test*"]
 
 [tool.setuptools.package-data]
-mailAgent = ["*.tcss"]
+mailAgent = ["filingView.tcss"]

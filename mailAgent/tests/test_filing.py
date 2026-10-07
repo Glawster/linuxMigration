@@ -425,6 +425,30 @@ def testAuditSnapshotCarriesDisabledFilingPlan(world, tmp_path, monkeypatch):
     )
 
 
+def testAuditScreenUsesSharedStylesheet():
+    from importlib.resources import files
+    from pathlib import Path, PurePath
+
+    from mailAgent.auditUi import auditAppBuild
+    from textual.css.stylesheet import Stylesheet
+
+    source = files("organiseMyProjects").joinpath("myStyles.css")
+    app = auditAppBuild(
+        {
+            "schemaVersion": 1,
+            "mailboxes": [],
+            "localArchives": [],
+            "sources": [],
+        }
+    )
+    assert isinstance(app.CSS_PATH, PurePath)
+    assert Path(app.CSS_PATH) == Path(source)
+    assert app.css_path == [Path(source)]
+    sheet = Stylesheet()
+    sheet.read(app.css_path[0])
+    sheet.parse()
+
+
 def testFilingColumnsClipAndFit():
     from mailAgent.filingView import _columnWidths, _textClip
 

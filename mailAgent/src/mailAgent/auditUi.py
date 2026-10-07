@@ -1,5 +1,6 @@
 """Presentation only for the core audit and planning models."""
 
+from importlib.resources import files
 from pathlib import Path
 
 from rich.text import Text
@@ -82,6 +83,8 @@ def auditAppBuild(snapshot: dict) -> App:
     class MailboxAudit(App):
         TITLE = "Mailbox Audit"
         BINDINGS = [("q", "quit", "Quit")]
+        # Textual opens CSS_PATH directly. The installed resource is a filesystem path.
+        CSS_PATH = files("organiseMyProjects").joinpath("myStyles.css")
 
         def compose(self) -> ComposeResult:
             yield Header()
