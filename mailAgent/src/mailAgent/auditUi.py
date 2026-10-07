@@ -19,6 +19,7 @@ from textual.widgets import (
     TabPane,
 )
 
+from mailAgent.filingView import FilingView
 from mailAgent.interest import (
     interestEffective,
     interestLoad,
@@ -70,8 +71,6 @@ def auditAppBuild(snapshot: dict) -> App:
         }
         interestIssue = "Interesting-sender preferences could not be loaded"
     senderRows = _interestRows(snapshot, interestData)
-    filingPlan = snapshot.get("filingPlan") or {}
-    filingRows = list(filingPlan.get("rows", []))
     try:
         from mailAgent.filing import filingPath, filingRulesLoad
 
@@ -98,8 +97,7 @@ def auditAppBuild(snapshot: dict) -> App:
                     senderRows,
                     interestData,
                     interestIssue,
-                    filingPlan,
-                    filingRows,
+                    snapshot,
                     filingIssue,
                 )
                 yield from _auditPanes(snapshot)
@@ -174,31 +172,12 @@ def auditAppBuild(snapshot: dict) -> App:
             )
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
-            """Handle planning refresh, review decisions and filing rules."""
-            if event.button.id == "filing-add-parent":
-                self._filingParentAdd()
-                return
-            if event.button.id == "filing-save-domain":
-                self._filingDomainSave()
-                return
-            if event.button.id == "filing-save-sender":
-                self._filingSenderSave()
-                return
+            """Handle planning refresh and review decisions."""
             if event.button.id == "resolve-sender":
                 self._senderResolutionSave(snapshot.get("migrationPlan"))
                 return
             if event.button.id in ("run-planning", "refresh-planning"):
                 self.exit("runPlanning")
-
-        def on_data_table_row_highlighted(
-            self, event: DataTable.RowHighlighted
-        ) -> None:
-            """Keep the filing editors aligned with the selected domain."""
-            if event.data_table.id != "filing-table":
-                return
-            if event.cursor_row < 0 or event.cursor_row >= len(filingRows):
-                return
-            self._filingEditorsFill(filingRows[event.cursor_row])
 
         def _senderResolutionSave(self, plan: dict | None) -> None:
             if not plan:
@@ -237,20 +216,9 @@ def auditAppBuild(snapshot: dict) -> App:
             )
             self.exit("runPlanning")
 
-        def _filingParentAdd(self) -> None:
-            _filingParentAdd(self, snapshot, filingRows)
-
-        def _filingDomainSave(self) -> None:
-            _filingRuleSave(self, snapshot, filingRows, "domain")
-
-        def _filingSenderSave(self) -> None:
-            _filingRuleSave(self, snapshot, filingRows, "sender")
-
         def _filingRefresh(self) -> None:
-            _filingRefresh(self, snapshot, filingRows)
-
-        def _filingEditorsFill(self, row: dict) -> None:
-            _filingEditorsFill(self, snapshot, row)
+            """Reload the filing table after an external plan refresh."""
+            self.query_one(FilingView).planShow()
 
     return MailboxAudit()
 
@@ -264,8 +232,7 @@ def _interestPane(
     senderRows: list[dict],
     interestData: dict,
     issue: str | None,
-    filingPlan: dict,
-    filingRows: list[dict],
+    snapshot: dict,
     filingIssue: str | None,
 ) -> ComposeResult:
     with TabPane("Inbox Digest", id="inboxInterest"):
@@ -315,297 +282,8 @@ def _interestPane(
                     )
                 yield reasonTable
                 yield Static("", id="digest-reason-status", markup=False)
-            yield from _filingPane(filingPlan, filingRows, filingIssue)
-
-
-def _filingParentAdd(app, snapshot: dict, filingRows: list[dict]) -> None:
-    """Record a proposed parent for the selected domain without creating it."""
-    row = _filingSelectedRow(app, filingRows)
-    if not row:
-        _filingStatus(app, "Select a filing domain first.")
-        return
-    try:
-        from mailAgent.filing import filingNameNormalize, filingParentAdd, filingPath
-
-        parent = filingNameNormalize(app.query_one("#filing-parent-name", Input).value)
-        discovered = set(
-            (snapshot.get("filingPlan") or {})
-            .get("parents", {})
-            .get(row["mailbox"], [])
-        )
-        if parent in discovered:
-            _filingStatus(app, f"{parent} already exists.")
-            return
-        filingParentAdd(row["mailbox"], parent, filingPath())
-        _filingRecompute(app, snapshot, filingRows)
-    except ValueError as error:
-        _filingStatus(app, str(error))
-        return
-    _filingStatus(app, f"Proposed parent {parent}. No folder was created.")
-
-
-def _filingRuleSave(app, snapshot: dict, filingRows: list[dict], kind: str) -> None:
-    """Persist a domain rule or exact sender override and refresh the plan."""
-    row = _filingSelectedRow(app, filingRows)
-    if not row:
-        _filingStatus(app, "Select a filing domain first.")
-        return
-    try:
-        parent, child, proposed = _filingChoiceRead(app, snapshot, row)
-        saved = (
-            _filingDomainStore(app, row, parent, child, proposed)
-            if kind == "domain"
-            else _filingSenderStore(app, row, parent, child, proposed)
-        )
-        _filingRecompute(app, snapshot, filingRows)
-    except ValueError as error:
-        _filingStatus(app, str(error))
-        return
-    _filingStatus(app, f"Saved {saved} -> {parent}/{child}. Mail was not changed.")
-
-
-def _filingDomainStore(app, row: dict, parent: str, child: str, proposed: bool) -> str:
-    from mailAgent.filing import filingDomainSet, filingPath
-
-    domain = _filingConfirmedDomain(app, row)
-    filingDomainSet(row["mailbox"], domain, parent, child, proposed, filingPath())
-    return domain
-
-
-def _filingConfirmedDomain(app, row: dict) -> str:
-    """Use a typed organisation domain when the shown host is uncertain."""
-    from mailAgent.filing import filingDomainClarify, filingPath
-
-    typed = app.query_one("#filing-domain", Input).value.strip()
-    if not typed:
-        return row["domain"]
-    if not row.get("domainUncertain"):
-        raise ValueError("This domain is already determined")
-    saved = filingDomainClarify(row["mailbox"], row["domain"], typed, filingPath())
-    host = row["domain"].strip().lower().rstrip(".")
-    return saved["mailboxes"][row["mailbox"]]["clarifications"][host]
-
-
-def _filingSenderStore(app, row: dict, parent: str, child: str, proposed: bool) -> str:
-    from mailAgent.filing import (
-        filingDomainMatch,
-        filingPath,
-        filingRulesLoad,
-        filingSenderSet,
-    )
-    from mailAgent.senderAddress import senderNormalize
-
-    sender = senderNormalize(app.query_one("#filing-sender", Input).value)
-    if not sender:
-        raise ValueError("Enter an exact sender address")
-    rules = filingRulesLoad(filingPath())
-    if not filingDomainMatch(sender, row["domain"], rules, row["mailbox"]):
-        raise ValueError(f"Sender is not in {row['domain']}")
-    filingSenderSet(row["mailbox"], sender, parent, child, proposed, filingPath())
-    return sender
-
-
-def _filingChoiceRead(app, snapshot: dict, row: dict) -> tuple[str, str, bool]:
-    from mailAgent.filing import filingNameNormalize
-
-    plan = snapshot.get("filingPlan") or {}
-    discovered = set(plan.get("parents", {}).get(row["mailbox"], []))
-    selection = app.query_one("#filing-parent", Select).value
-    if not isinstance(selection, str) or selection == "__add__":
-        parent = filingNameNormalize(app.query_one("#filing-parent-name", Input).value)
-    else:
-        parent = filingNameNormalize(selection)
-    child = filingNameNormalize(app.query_one("#filing-child", Input).value)
-    return parent, child, parent not in discovered
-
-
-def _filingRecompute(app, snapshot: dict, filingRows: list[dict]) -> None:
-    from mailAgent.filing import filingPath, filingPlanBuild, filingRulesLoad
-
-    context = snapshot.get("filingContext")
-    if not context:
-        raise ValueError("Filing context is unavailable")
-    snapshot["filingPlan"] = filingPlanBuild(
-        context, snapshot, filingRulesLoad(filingPath())
-    )
-    _filingRefresh(app, snapshot, filingRows)
-
-
-def _filingRefresh(app, snapshot: dict, filingRows: list[dict]) -> None:
-    """Replace the filing table from the current plan, keeping the selected domain."""
-    previous = _filingSelectedIdentity(app, filingRows)
-    plan = snapshot.get("filingPlan") or {}
-    filingRows.clear()
-    filingRows.extend(plan.get("rows", []))
-    table = app.query_one("#filing-table", DataTable)
-    table.clear(columns=False)
-    for row in filingRows:
-        table.add_row(*(Text(str(cell)) for cell in _filingTableCells(row)))
-    _filingCursorRestore(table, filingRows, previous)
-    app.query_one("#filing-summary", Static).update(_filingSummary(plan))
-    app.query_one("#filing-overrides", Static).update(_filingOverrideText(plan))
-    app.query_one("#filing-empty", Static).update(
-        "" if filingRows else "No Inbox domains to file"
-    )
-    selected = _filingSelectedRow(app, filingRows)
-    if selected:
-        _filingEditorsFill(app, snapshot, selected)
-
-
-def _filingCursorRestore(table: DataTable, filingRows: list[dict], previous) -> None:
-    if not previous:
-        return
-    for index, row in enumerate(filingRows):
-        if (row["mailbox"], row["domain"]) == previous:
-            table.move_cursor(row=index)
-            return
-
-
-def _filingSelectedIdentity(app, filingRows: list[dict]):
-    row = _filingSelectedRow(app, filingRows)
-    if not row:
-        return None
-    return row["mailbox"], row["domain"]
-
-
-def _filingEditorsFill(app, snapshot: dict, row: dict) -> None:
-    """Show the selected domain's parent and suggested folder."""
-    if (
-        not app.query("#filing-parent")
-        or not app.query("#filing-child")
-        or not app.query("#filing-domain")
-        or not app.query("#filing-domain-hint")
-    ):
-        return
-    plan = snapshot.get("filingPlan") or {}
-    chooser = app.query_one("#filing-parent", Select)
-    chooser.set_options(_filingParentOptions(row["mailbox"], plan))
-    if row.get("parent"):
-        chooser.value = row["parent"]
-    app.query_one("#filing-child", Input).value = (
-        row.get("folder") or row.get("suggestion") or ""
-    )
-    app.query_one("#filing-domain", Input).value = ""
-    hint = "This domain is already determined."
-    if row.get("domainUncertain"):
-        hint = (
-            "This domain is uncertain. Enter the organisation domain, or leave "
-            "it blank to confirm the domain shown."
-        )
-    app.query_one("#filing-domain-hint", Static).update(hint)
-
-
-def _filingSelectedRow(app, filingRows: list[dict]) -> dict | None:
-    if not filingRows:
-        return None
-    table = app.query_one("#filing-table", DataTable)
-    row = table.cursor_row
-    if not isinstance(row, int) or row < 0 or row >= len(filingRows):
-        row = 0
-    return filingRows[row]
-
-
-def _filingStatus(app, message: str) -> None:
-    app.query_one("#filing-status", Static).update(message)
-
-
-def _filingPane(
-    filingPlan: dict, filingRows: list[dict], filingIssue: str | None
-) -> ComposeResult:
-    """Domain filing review. Saving a rule does not move mail or create folders."""
-    with TabPane("Filing", id="inboxFiling"):
-        yield Static(_filingSummary(filingPlan), id="filing-summary", markup=False)
-        if filingIssue:
-            yield Static(filingIssue, markup=False)
-        table = DataTable(id="filing-table", cursor_type="row")
-        table.styles.height = 12
-        table.add_columns(
-            "Domain", "Archive", "Inbox", "Parent", "Folder", "Destination", "Status"
-        )
-        for row in filingRows:
-            table.add_row(*(Text(str(cell)) for cell in _filingTableCells(row)))
-        yield table
-        yield Static(
-            "" if filingRows else "No Inbox domains to file",
-            id="filing-empty",
-            markup=False,
-        )
-        mailbox = filingRows[0]["mailbox"] if filingRows else ""
-        options = (
-            _filingParentOptions(mailbox, filingPlan)
-            if mailbox
-            else [("Add parent...", "__add__")]
-        )
-        yield Static(
-            "Choose an existing parent or add one. A new parent is stored as a "
-            "filing decision only; the folder is not created.",
-            markup=False,
-        )
-        yield Select(options, prompt="Parent", id="filing-parent")
-        yield Input(placeholder="New parent name", id="filing-parent-name")
-        first = filingRows[0] if filingRows else {}
-        yield Input(
-            placeholder="Folder name",
-            id="filing-child",
-            value=first.get("folder") or first.get("suggestion") or "",
-        )
-        yield Input(
-            placeholder="Organisation domain if this one is uncertain",
-            id="filing-domain",
-        )
-        yield Static("", id="filing-domain-hint", markup=False)
-        yield Input(placeholder="Exact sender override, optional", id="filing-sender")
-        yield Button("Add parent", id="filing-add-parent")
-        yield Button("Save domain rule", id="filing-save-domain", variant="primary")
-        yield Button("Save sender override", id="filing-save-sender")
-        yield Static(
-            _filingOverrideText(filingPlan), id="filing-overrides", markup=False
-        )
-        yield Static("", id="filing-status", markup=False)
-
-
-def _filingParentOptions(mailbox: str, plan: dict) -> list[tuple[str, str]]:
-    discovered = list(plan.get("parents", {}).get(mailbox, []))
-    proposed = [
-        name
-        for name in plan.get("proposedParents", {}).get(mailbox, [])
-        if name not in discovered
-    ]
-    options = [(name, name) for name in discovered]
-    options.extend((f"{name} (proposed)", name) for name in proposed)
-    options.append(("Add parent...", "__add__"))
-    return options
-
-
-def _filingSummary(plan: dict) -> str:
-    return (
-        "Read Inbox mail can be filed. Unread Inbox mail stays in the Inbox. "
-        f"Proposals: {len(plan.get('proposals', []))}. "
-        f"Need a choice: {len(plan.get('reviews', []))}. "
-        "Saving a rule does not move mail or create folders. Filing execution is disabled."
-    )
-
-
-def _filingOverrideText(plan: dict) -> str:
-    lines = [
-        f'{item["sender"]} -> {item["canonical"]} ({item["mailbox"]})'
-        for item in plan.get("senderOverrides", [])
-    ]
-    if not lines:
-        return "No exact sender overrides."
-    return "Sender overrides: " + "; ".join(lines)
-
-
-def _filingTableCells(row: dict) -> tuple:
-    return (
-        row.get("domain", ""),
-        row.get("archive", ""),
-        str(row.get("inboxCount", "")),
-        row.get("parent", ""),
-        row.get("folder", ""),
-        row.get("canonical", ""),
-        row.get("status", ""),
-    )
+            with TabPane("Filing", id="inboxFiling"):
+                yield FilingView(snapshot, filingIssue)
 
 
 def _interestRows(snapshot: dict, interestData: dict) -> list[dict]:

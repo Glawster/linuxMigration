@@ -1,0 +1,95 @@
+/* The filing tab fills the space under the digest tabs, and the table
+   takes the leftover height inside that tab. */
+Screen > TabbedContent {
+    height: 1fr;
+}
+
+Screen > TabbedContent > ContentSwitcher {
+    height: 1fr;
+}
+
+#inboxInterest {
+    height: 1fr;
+}
+
+#digest-menu {
+    height: 1fr;
+}
+
+#digest-menu > ContentSwitcher {
+    height: 1fr;
+}
+
+#digestSenders,
+#digestReasons,
+#inboxFiling {
+    height: 1fr;
+}
+
+FilingView {
+    height: 1fr;
+    layout: vertical;
+    overflow: hidden;
+}
+
+FilingView #filing-summary {
+    height: 1;
+}
+
+FilingView #filing-table {
+    height: 1fr;
+    min-height: 8;
+    scrollbar-gutter: stable;
+    overflow-x: hidden;
+}
+
+FilingView #filing-empty {
+    height: 1;
+}
+
+FilingEditor {
+    height: auto;
+    max-height: 12;
+    layout: vertical;
+}
+
+FilingEditor HorizontalGroup {
+    height: auto;
+}
+
+FilingEditor #filing-heading {
+    height: 1;
+    text-style: bold;
+}
+
+FilingEditor .filing-label {
+    width: auto;
+    height: 1;
+    padding: 0 1 0 0;
+    content-align: left middle;
+}
+
+FilingEditor .filing-value {
+    width: 1fr;
+    height: 1;
+    content-align: left middle;
+}
+
+FilingEditor .filing-field {
+    width: 1fr;
+    max-width: 40;
+    height: 1;
+}
+
+FilingEditor #filing-actions {
+    height: 1;
+}
+
+FilingEditor .filing-action {
+    width: 20;
+    min-width: 20;
+    max-width: 20;
+    height: 1;
+    margin: 0 1 0 0;
+    border: none;
+}

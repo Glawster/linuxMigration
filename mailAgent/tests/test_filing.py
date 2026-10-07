@@ -425,8 +425,22 @@ def testAuditSnapshotCarriesDisabledFilingPlan(world, tmp_path, monkeypatch):
     )
 
 
+def testFilingColumnsClipAndFit():
+    from mailAgent.filingView import _columnWidths, _textClip
+
+    assert _textClip("Shopping/Dunnes", 8) == "Shoppin…"
+    assert _textClip("Amazon", 8) == "Amazon"
+    widths = _columnWidths(120, 1)
+    assert widths["domain"] > widths["destination"]
+    assert widths["destination"] >= 8
+    assert sum(widths.values()) + 2 * len(widths) <= 120
+    narrow = _columnWidths(70, 1)
+    assert sum(narrow.values()) + 2 * len(narrow) <= 70
+
+
 def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkeypatch):
     from mailAgent.auditUi import auditAppBuild
+    from mailAgent.filingView import FilingEditor, FilingView
     from textual.widgets import Button, DataTable, Input, Select, Static, TabbedContent
 
     rulesPath = tmp_path / "filing-rules.json"
@@ -448,6 +462,39 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             await pilot.pause()
             table = app.query_one("#filing-table", DataTable)
             assert table.row_count >= 1
+            summary = str(app.query_one("#filing-summary", Static).render())
+            assert summary == (
+                "Read mail may be filed. "
+                "No folders or mail are changed in this phase."
+            )
+            view = app.query_one(FilingView)
+            editor = app.query_one(FilingEditor)
+            actions = [
+                app.query_one("#filing-add-parent", Button),
+                app.query_one("#filing-save-domain", Button),
+                app.query_one("#filing-save-sender", Button),
+            ]
+            assert all("filing-action" in button.classes for button in actions)
+            assert len({button.size.width for button in actions}) == 1
+            assert len({button.size.height for button in actions}) == 1
+            assert all(button.region.bottom <= app.size.height for button in actions)
+            assert table.size.height > editor.size.height
+            assert table.size.height * 10 >= view.size.height * 6
+            assert 0 < table.virtual_size.width <= table.scrollable_content_region.width
+
+            amazonRow = next(
+                index
+                for index in range(table.row_count)
+                if "amazon.co.uk" in str(table.get_row_at(index))
+            )
+            table.move_cursor(row=amazonRow)
+            await pilot.pause()
+            assert app.query_one("#filing-domain-row").display is False
+            assert "amazon.co.uk" in str(
+                app.query_one("#filing-heading", Static).render()
+            )
+            assert app.query_one("#filing-sender-row").display is False
+
             nhsRow = next(
                 index
                 for index in range(table.row_count)
@@ -455,8 +502,20 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             )
             table.move_cursor(row=nhsRow)
             await pilot.pause()
-            hint = str(app.query_one("#filing-domain-hint", Static).render())
-            assert "uncertain" in hint.lower()
+            heading = str(app.query_one("#filing-heading", Static).render())
+            assert heading.startswith("Filing:")
+            assert "nhs.uk" in heading
+            assert app.query_one("#filing-domain-row").display is True
+            assert "Needs choice" in str(
+                app.query_one("#filing-row-status", Static).render()
+            )
+            assert app.query_one("#filing-sender-row").display is False
+            app.query_one("#filing-save-sender", Button).focus()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.query_one("#filing-sender-row").display is True
+            assert all(button.region.bottom <= app.size.height for button in actions)
+
             app.query_one("#filing-parent-name", Input).value = "Medical"
             app.query_one("#filing-add-parent", Button).focus()
             await pilot.press("enter")

@@ -107,15 +107,27 @@ or require them.
 
 ## Review in the TUI
 
-Open **Inbox Digest**, then **Filing**. The table is domain-oriented and shows
-the archive (`myMail` or `kathyMail`), how many current Inbox messages the
-domain represents, the parent, the folder, the canonical destination and the
-status above.
+Open **Inbox Digest**, then **Filing**. One line says that read mail may be
+filed and that this phase changes neither folders nor mail. The table takes
+most of the panel and scrolls on its own. Each row is one organisation domain
+and shows the archive (`myMail` or `kathyMail`), how many current Inbox
+messages it represents, the parent, the folder, the canonical destination and
+the status.
 
-Choose an existing parent or add one, edit the folder name, and save a domain
-rule. Use the sender field only when one address needs a different destination.
-Neither action moves mail.
+The selected row is the heading of the editor under the table, for example
+`Filing: dpd.co.uk · kathyMail · 2 messages`. Choose a parent, edit the folder
+name, and save a domain rule. **Add parent** records a filing decision only;
+the folder is not created. The new-parent name is asked for only when you add
+a parent.
 
-Filing execution remains disabled. A later phase would have to perform the
-reviewed folder creation, IMAP move, and verified local archive steps under
-the existing migration safety rules.
+The organisation domain is shown in the heading. An editable organisation
+domain appears only when the Public Suffix List does not identify one. Leave
+that field blank to confirm the domain already shown, or type the organisation
+domain you mean.
+
+**Sender override** stays off the ordinary path. Use it only when one address
+needs a different destination from the rest of its domain.
+
+Neither action moves mail. Filing execution remains disabled. A later phase
+would have to perform the reviewed folder creation, IMAP move, and verified
+local archive steps under the existing migration safety rules.
