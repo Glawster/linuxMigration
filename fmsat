@@ -1,0 +1,2 @@
+#!/bin/bash
+exec /home/andy/miniconda3/envs/fmsat/bin/python -m fmsat 
