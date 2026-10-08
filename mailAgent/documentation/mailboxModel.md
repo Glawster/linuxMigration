@@ -253,5 +253,7 @@ REQ-009 plans filing for read `INBOX` mail into the same canonical taxonomy.
 Unread Inbox mail is not a filing action. Andy and Kathy use their own
 archives. The legacy mailbox reuses its personal target's rules and the
 live-year or local destination above. Shared and support mailboxes are
-excluded. Proposals do not create folders or move mail. See
-[Inbox filing](inboxFiling.md).
+excluded. A decision may instead Ignore the mail, leaving it in the Inbox, or
+Junk it so Thunderbird's junk filter can use the mark. Neither of those is a
+folder move. Proposals do not create folders, mark junk, or move mail in this
+phase. See [Inbox filing](inboxFiling.md).

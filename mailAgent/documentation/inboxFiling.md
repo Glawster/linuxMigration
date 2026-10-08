@@ -107,7 +107,7 @@ or require them.
 
 ## Review in the TUI
 
-Open **Inbox Digest**, then **Filing**. One line says that read mail may be
+Open **Moving Mail** on the main menu. One line says that read mail may be
 filed and that this phase changes neither folders nor mail. The table takes
 most of the panel and scrolls on its own. Each row is one organisation domain
 and shows the archive (`myMail` or `kathyMail`), how many current Inbox
@@ -119,6 +119,12 @@ The selected row is the heading of the editor under the table, for example
 name, and save a domain rule. **Add parent** records a filing decision only;
 the folder is not created. The new-parent name is asked for only when you add
 a parent.
+
+Two further dispositions are specified and are not folder moves. **Ignore**
+leaves the messages in the Inbox. **Junk** marks them as junk so Thunderbird's
+junk filter can recognise them; mailAgent does not move them to a folder and
+does not create a Thunderbird filter. The current screen does not offer those
+dispositions yet, and this phase still does not change flags or mail.
 
 The organisation domain is shown in the heading. An editable organisation
 domain appears only when the Public Suffix List does not identify one. Leave
@@ -133,5 +139,5 @@ would have to perform the reviewed folder creation, IMAP move, and verified
 local archive steps under the existing migration safety rules.
 
 The audit screen loads the shared organiseMyProjects stylesheet,
-`myStyles.css`. Filing layout, such as the table height and the equal-width
-actions, stays in `filingView.tcss`.
+`myStyles.css`. Moving Mail layout, such as the table height and the
+equal-width actions, stays in `filingView.tcss`.

@@ -15,7 +15,11 @@ from mailAgent.archiveDiscovery import archiveDiscover
 from mailAgent.configuration import configValidate
 from mailAgent.discovery import discoveryRun, snapshotSave
 from mailAgent.interest import interestIs, interestLoad, interestSet
-from mailAgent.messageInventory import inboxMessagesDiscover, messageParse, messagesDiscover
+from mailAgent.messageInventory import (
+    inboxMessagesDiscover,
+    messageParse,
+    messagesDiscover,
+)
 from mailAgent.migrationPlanning import folderMappingsBuild, migrationPlan
 from mailAgent.planResolution import resolutionLoad, senderResolutionSet
 from mailAgent.planSummary import planSummaryLines
@@ -725,7 +729,9 @@ def testCliExplicitJsonFile(config, tmp_path, monkeypatch):
     monkeypatch.setattr(
         discovery,
         "discoveryRun",
-        lambda accounts, root, includeMessages=False, includeInbox=False: snapshotBuild(config),
+        lambda accounts, root, includeMessages=False, includeInbox=False: snapshotBuild(
+            config
+        ),
     )
     outputPath = tmp_path / "exports" / "plan.json"
     monkeypatch.setattr(
@@ -807,7 +813,6 @@ def testSentRequiresExplicitMapping(config):
     config["mailboxes"][2]["folderMappings"] = {"INBOX.Sent": "Orders/Shop"}
     plan = migrationPlan(config, snapshot)
     assert len([p for p in plan["proposals"] if p["source"]["mailbox"] == "old"]) == 2
-
 
 
 def testArchiveSenderClassificationAndPaypalContains(config):
@@ -950,21 +955,32 @@ def testPlanningRowsAreUserFacing():
 
 
 def testHideMyEmailRelayDecode():
-    assert senderRelayDecode(
-        "bmwuk_at_service_bmw_com_x9b7cd6akmvy48_carg7807@icloud.com"
-    ) == "bmwuk@service.bmw.com"
-    assert senderRelayDecode(
-        "community_at_warp_dev_x9b7aab5kmvyab_58rq7807@icloud.com"
-    ) == "community@warp.dev"
-    assert senderRelayDecode(
-        "008a0a309fac5a49235_at_members_ebay_com_x9b7d412kmvyed_ddrq7807@icloud.com"
-    ) == "008a0a309fac5a49235@members.ebay.com"
-    assert senderRelayDecode(
-        "admin_at_lewddungeonadventures_com_5hgvrxgfqc3729_ecae11c2@icloud.com"
-    ) == "admin@lewddungeonadventures.com"
-    assert senderRelayDecode(
-        "barclaycard_at_emails_barclaycard_co_uk_jvbcnca1d60ftp_cbn55768@icloud.com"
-    ) == "barclaycard@emails.barclaycard.co.uk"
+    assert (
+        senderRelayDecode("bmwuk_at_service_bmw_com_x9b7cd6akmvy48_carg7807@icloud.com")
+        == "bmwuk@service.bmw.com"
+    )
+    assert (
+        senderRelayDecode("community_at_warp_dev_x9b7aab5kmvyab_58rq7807@icloud.com")
+        == "community@warp.dev"
+    )
+    assert (
+        senderRelayDecode(
+            "008a0a309fac5a49235_at_members_ebay_com_x9b7d412kmvyed_ddrq7807@icloud.com"
+        )
+        == "008a0a309fac5a49235@members.ebay.com"
+    )
+    assert (
+        senderRelayDecode(
+            "admin_at_lewddungeonadventures_com_5hgvrxgfqc3729_ecae11c2@icloud.com"
+        )
+        == "admin@lewddungeonadventures.com"
+    )
+    assert (
+        senderRelayDecode(
+            "barclaycard_at_emails_barclaycard_co_uk_jvbcnca1d60ftp_cbn55768@icloud.com"
+        )
+        == "barclaycard@emails.barclaycard.co.uk"
+    )
     assert senderRelayDecode("normal@example.com") == "normal@example.com"
     assert senderRelayDecode("odd_at_value@icloud.com") == "odd_at_value@icloud.com"
 
@@ -1037,7 +1053,6 @@ def testPlanRefreshButton(config):
     assert asyncio.run(uiInspect()) == "runPlanning"
 
 
-
 def testConflictRowsAreUserFacing():
     from mailAgent.auditUi import _conflictRows
 
@@ -1077,7 +1092,6 @@ def testConflictRowsAreUserFacing():
     assert "/private/profile" not in " ".join(rows[0])
 
 
-
 def testAuditIssueReportingIncludesMailboxAndFolder():
     from mailAgent import cli
 
@@ -1108,8 +1122,7 @@ def testAuditIssueReportingIncludesMailboxAndFolder():
     assert cli._auditIssuesReport(snapshot, logger)
     logger.warning.assert_called_once_with("andy: Quota unsupported")
     assert any(
-        call.args[0]
-        == "andy/INBOX.Sent: Message inventory unavailable or incomplete"
+        call.args[0] == "andy/INBOX.Sent: Message inventory unavailable or incomplete"
         for call in logger.error.call_args_list
     )
     assert any(
@@ -1117,7 +1130,6 @@ def testAuditIssueReportingIncludesMailboxAndFolder():
         == "hwfc: Mailbox discovery failed; verify connection and credentials"
         for call in logger.error.call_args_list
     )
-
 
 
 def testStoreAndChangeRowsHideThunderbirdInternals():
@@ -1167,7 +1179,6 @@ def testStoreAndChangeRowsHideThunderbirdInternals():
     assert sourcePath not in " ".join(" ".join(row) for row in rows)
 
 
-
 def testInboxDigestPresentation(config):
     from mailAgent.auditUi import auditAppBuild
     from textual.widgets import DataTable, TabPane, TabbedContent
@@ -1182,8 +1193,16 @@ def testInboxDigestPresentation(config):
             assert app.query_one("#digest-menu", TabbedContent)
             assert app.query_one("#digestSenders", TabPane)
             assert app.query_one("#digestReasons", TabPane)
+            moving = app.query_one("#inboxFiling", TabPane)
+            assert str(moving._title) == "Moving Mail"
+            assert all(
+                pane.id != "inboxFiling"
+                for pane in app.query_one("#digest-menu", TabbedContent).query(TabPane)
+            )
             assert app.query_one("#interest-table", DataTable).cursor_type == "cell"
-            assert app.query_one("#digest-reason-table", DataTable).cursor_type == "cell"
+            assert (
+                app.query_one("#digest-reason-table", DataTable).cursor_type == "cell"
+            )
             assert not any(
                 getattr(binding, "key", None) == "space" for binding in app.BINDINGS
             )
@@ -1302,7 +1321,6 @@ def testReviewQueueResolutionControls(config):
     asyncio.run(uiInspect())
 
 
-
 def testProposalRowsGroupDuplicatesAndShowStores():
     from mailAgent.auditUi import _proposalRows
 
@@ -1409,7 +1427,6 @@ def testProposalRowsGroupDuplicatesAndShowStores():
     ) in rows
 
 
-
 def testProposalRowsFiltering():
     from mailAgent.auditUi import _proposalRowsFiltered
 
@@ -1491,7 +1508,6 @@ def testProposedMovesFilterControls(config):
             )
 
     asyncio.run(uiInspect())
-
 
 
 def testImapFolderDisplayDecodesModifiedUtf7():

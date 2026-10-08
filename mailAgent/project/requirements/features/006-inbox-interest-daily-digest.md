@@ -13,18 +13,16 @@ The digest model has two layers:
 mailAgent may classify likely digest reasons from lightweight Inbox headers, but
 classification remains advisory and transparent.
 
-The Inbox sender inventory may also be used to define domain-level filing
-preferences for personal archive mailboxes without creating folders or moving
-mail during this requirement.
+Domain-level filing of Inbox senders is specified by
+[REQ-009](009-read-inbox-filing.md). It is the **Moving Mail** main-menu tab,
+not part of Inbox Digest.
 
 ## Interaction
 
-The Mailbox Audit TUI includes an **Inbox Digest** view with three sub-panels:
+The Mailbox Audit TUI includes an **Inbox Digest** view with two sub-panels:
 
 - **Senders** - current Inbox senders and their effective digest inclusion;
-- **Include Reasons** - the user's policy for each digest reason;
-- **Filing** - domain-level assignment of Inbox senders to canonical personal
-  archive folders.
+- **Include Reasons** - the user's policy for each digest reason.
 
 ### Direction convention
 
@@ -102,52 +100,6 @@ Initial defaults are:
 These defaults reflect that operational notifications are often useful but not
 necessarily personally relevant enough for a daily digest.
 
-### Filing
-
-The **Filing** sub-panel lets the user turn Inbox sender observations into
-canonical archive filing rules for personal mailboxes.
-
-Each row is grouped by sender domain and shows at least:
-
-- sender domain;
-- personal mailbox/archive (`myMail` or `kathyMail`);
-- selected parent folder;
-- proposed/existing child folder;
-- status such as `Existing`, `Proposed child`, `Proposed parent + child` or
-  `Needs choice`.
-
-Filing behaviour must follow these rules:
-
-- group multiple senders from the same domain into one filing decision for that
-  personal mailbox;
-- derive available parents from the first level of the corresponding local
-  archive taxonomy;
-- do not hard-code parent names such as Cars, Finance or Shopping;
-- keep discovered parents separate for `myMail` and `kathyMail`;
-- if a domain already maps unambiguously to an existing canonical folder, show
-  and reuse that folder;
-- otherwise let the user assign the domain beneath an existing discovered
-  parent;
-- include an `Add parent…` choice when no existing parent is suitable;
-- record a newly entered parent as a proposed canonical parent rather than
-  creating it immediately;
-- allow the proposed child/business label to be edited before approval;
-- persist domain-to-folder choices as mailAgent planning preferences;
-- changing a filing preference must not create local folders, Thunderbird
-  folders, filters, or move mail in this requirement.
-
-Examples:
-
-- `bmw.com -> myMail/Cars/BMW`;
-- `paypal.com -> myMail/Finance/PayPal`;
-- `amazon.co.uk -> myMail/Shopping/Amazon`;
-- a new category may be proposed as `myMail/Medical/NHS` when `Medical` does not
-  yet exist.
-
-Only the first level is considered a parent. A path such as
-`Shopping/Amazon/Orders` contributes `Shopping` as the parent choice, not
-`Amazon` or `Orders`.
-
 ## Classification reasons
 
 Subject-based reasons may include:
@@ -200,9 +152,8 @@ also durable.
 Reason classification itself is not stored as a decision; it is recalculated
 from current Inbox headers and then adjusted by any Person override.
 
-Domain filing preferences must also be durable and stored separately from
-credentials. Their storage may be separate from `interesting.json` if that
-keeps digest preference and archive-planning concerns cleaner.
+Domain filing preferences, including Ignore and Junk, are specified and stored
+by [REQ-009](009-read-inbox-filing.md), separately from `interesting.json`.
 
 ## Inbox discovery
 
@@ -231,8 +182,8 @@ separate future work.
 
 ## Acceptance criteria
 
-- Inbox Digest contains separate **Senders**, **Include Reasons** and **Filing**
-  sub-panels;
+- Inbox Digest contains separate **Senders** and **Include Reasons** sub-panels
+  and does not contain Moving Mail;
 - the user can set every known reason to In, Out or Manual;
 - Left consistently moves toward In/Yes and Right toward Out/No;
 - sender email selection supports `i`, `o`, `a`, `y` and `n` shortcuts;
@@ -245,13 +196,14 @@ separate future work.
 - obvious automated/service senders are not classified as Person;
 - subject-specific reasons take precedence over Person;
 - sender, person and reason choices persist across TUI sessions;
-- Filing groups Inbox senders by domain for each personal mailbox;
-- Filing discovers first-level parents independently from `myMail` and
-  `kathyMail`;
-- the user can select an existing parent or propose a new parent;
-- existing canonical domain folders are reused rather than duplicated;
-- filing choices persist but do not create folders or move mail;
+- domain filing, Ignore and Junk are specified by REQ-009 rather than by this
+  requirement;
 - sender matching is mailbox-specific and case-insensitive;
 - no email state changes when a preference is changed;
 - the TUI remains usable when no Inbox headers are available;
 - malformed preference storage is reported without modifying mail.
+
+## Change history
+
+- 2026-10-08: Moving Mail left Inbox Digest. Domain filing, Ignore and Junk
+  are specified by REQ-009.

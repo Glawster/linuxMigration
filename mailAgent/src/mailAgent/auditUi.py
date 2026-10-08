@@ -20,7 +20,7 @@ from textual.widgets import (
     TabPane,
 )
 
-from mailAgent.filingView import FilingView
+from mailAgent.filingView import FILING_CSS, FilingView
 from mailAgent.interest import (
     interestEffective,
     interestLoad,
@@ -85,6 +85,9 @@ def auditAppBuild(snapshot: dict) -> App:
         BINDINGS = [("q", "quit", "Quit")]
         # Textual opens CSS_PATH directly. The installed resource is a filesystem path.
         CSS_PATH = files("organiseMyProjects").joinpath("myStyles.css")
+        # Widget DEFAULT_CSS loses to this shared sheet. Applying the filing
+        # sheet here lets one-row fields stay readable.
+        CSS = FILING_CSS
 
         def compose(self) -> ComposeResult:
             yield Header()
@@ -96,13 +99,9 @@ def auditAppBuild(snapshot: dict) -> App:
             with TabbedContent():
                 with TabPane("Folders", id="folders"):
                     yield from _foldersPane(snapshot)
-                yield from _interestPane(
-                    senderRows,
-                    interestData,
-                    interestIssue,
-                    snapshot,
-                    filingIssue,
-                )
+                yield from _interestPane(senderRows, interestData, interestIssue)
+                with TabPane("Moving Mail", id="inboxFiling"):
+                    yield FilingView(snapshot, filingIssue)
                 yield from _auditPanes(snapshot)
                 yield from _planPane(snapshot.get("migrationPlan"))
             yield Footer()
@@ -153,7 +152,7 @@ def auditAppBuild(snapshot: dict) -> App:
             _interestTableRowUpdate(table, row, entry)
 
         def _digestSenderRowsRefresh(self) -> None:
-            table = self.query_one("#interest-table", DataTable)
+            table = self.query_one("#interest-table", DataTable) # type: ignore
             for index, entry in enumerate(senderRows):
                 _interestEntryRefresh(entry, interestData)
                 _interestTableRowUpdate(table, index, entry)
@@ -235,8 +234,6 @@ def _interestPane(
     senderRows: list[dict],
     interestData: dict,
     issue: str | None,
-    snapshot: dict,
-    filingIssue: str | None,
 ) -> ComposeResult:
     with TabPane("Inbox Digest", id="inboxInterest"):
         with TabbedContent(id="digest-menu"):
@@ -285,8 +282,6 @@ def _interestPane(
                     )
                 yield reasonTable
                 yield Static("", id="digest-reason-status", markup=False)
-            with TabPane("Filing", id="inboxFiling"):
-                yield FilingView(snapshot, filingIssue)
 
 
 def _interestRows(snapshot: dict, interestData: dict) -> list[dict]:

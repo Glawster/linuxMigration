@@ -19,7 +19,8 @@ from textual.widgets.data_table import ColumnKey
 import mailAgent.filing as filing
 from mailAgent.senderAddress import senderNormalize
 
-_FILING_CSS = Path(__file__).with_suffix(".tcss").read_text(encoding="utf-8")
+# Loaded as application CSS. Widget DEFAULT_CSS cannot override the shared sheet.
+FILING_CSS = Path(__file__).with_suffix(".tcss").read_text(encoding="utf-8")
 _DESTINATION_COLUMN = 5
 
 
@@ -28,8 +29,6 @@ _DESTINATION_COLUMN = 5
 
 class FilingView(Widget):
     """Domain table with a compact rule editor beneath it."""
-
-    DEFAULT_CSS = _FILING_CSS
 
     def __init__(self, snapshot: dict, issue: str | None = None) -> None:
         """Keep the shared snapshot. Saves write rules, then replace its plan."""
@@ -221,7 +220,7 @@ class FilingEditor(Widget):
         """Rows for the choice, with the rare fields hidden until needed."""
         yield Static("Filing: select a domain", id="filing-heading", markup=False)
         with HorizontalGroup(id="filing-choice-row"):
-            yield Static("Parent", classes="filing-label")
+            yield Static("Parent", classes="filing-label filing-lead")
             yield Select(
                 [("Add parent...", "__add__")],
                 prompt="Parent",
@@ -238,7 +237,7 @@ class FilingEditor(Widget):
             )
         with HorizontalGroup(id="filing-parent-name-row") as parentName:
             parentName.display = False
-            yield Static("New parent", classes="filing-label")
+            yield Static("New parent", classes="filing-label filing-lead")
             yield Input(
                 placeholder="New parent name",
                 id="filing-parent-name",
@@ -247,7 +246,7 @@ class FilingEditor(Widget):
             )
         with HorizontalGroup(id="filing-domain-row") as domainRow:
             domainRow.display = False
-            yield Static("Organisation domain", classes="filing-label")
+            yield Static("Organisation domain", classes="filing-label filing-lead")
             yield Input(
                 placeholder="example.co.uk",
                 id="filing-domain",
@@ -255,13 +254,13 @@ class FilingEditor(Widget):
                 classes="filing-field",
             )
         with HorizontalGroup(id="filing-status-row"):
-            yield Static("Status", classes="filing-label")
+            yield Static("Status", classes="filing-label filing-lead")
             yield Static(
                 "", id="filing-row-status", classes="filing-value", markup=False
             )
         with HorizontalGroup(id="filing-sender-row") as senderRow:
             senderRow.display = False
-            yield Static("Sender", classes="filing-label")
+            yield Static("Sender", classes="filing-label filing-lead")
             yield Input(
                 placeholder="Exact sender",
                 id="filing-sender",

@@ -32,6 +32,7 @@ The example configuration declares five independent mailboxes: Andy and Kathy
 - [REQ-008](project/requirements/features/008-plan-resolution-approval.md)
 - [REQ-009](project/requirements/features/009-read-inbox-filing.md)
 - [Inbox filing](documentation/inboxFiling.md)
+- [Requirements](project/requirements/requirementsIndex.md)
 
 ## Install
 
@@ -167,12 +168,14 @@ Read Inbox mail can be matched to the personal archive taxonomy. Unread Inbox
 mail stays in the Inbox. Andy and Kathy keep separate rules, stored in
 `~/.config/mailAgent/filing-rules.json`.
 
-The **Inbox Digest** tab includes a **Filing** panel. It groups the current
-Inbox by registrable domain. When the Public Suffix List does not identify
-one organisation domain, the panel asks you to confirm it. You can choose or
-propose a parent folder.
-Saving a rule or proposing a parent does not create folders, move mail, or
-create Thunderbird filters. Filing execution remains disabled. See
+The **Moving Mail** tab groups the current Inbox by registrable domain. When
+the Public Suffix List does not identify one organisation domain, the panel
+asks you to confirm it. You can choose or propose a parent folder.
+**Ignore** leaves that mail in the Inbox. **Junk** marks it for Thunderbird's
+junk filter instead of filing it to a folder. Neither choice is offered on
+the screen yet.
+Saving a rule or proposing a parent does not create folders, move mail, mark
+junk, or create Thunderbird filters. Filing execution remains disabled. See
 [Inbox filing](documentation/inboxFiling.md).
 
 Sent/system-folder policy decisions and approval of demand-driven IMAP mirror

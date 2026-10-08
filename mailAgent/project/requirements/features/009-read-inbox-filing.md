@@ -22,9 +22,12 @@ For a mailbox covered by this requirement:
 1. a message outside `INBOX` is not considered by normal Inbox filing;
 2. an unread message in `INBOX` is left unchanged;
 3. a read (`\\Seen`) message in `INBOX` becomes eligible for classification;
-4. an eligible message is moved only when a safe canonical destination has been
-   resolved;
-5. an ambiguous or unresolved message remains in `INBOX` and is presented for
+4. an eligible message is moved only when its disposition is to file and a safe
+   canonical destination has been resolved;
+5. a decision to Ignore leaves the message in `INBOX` and is not a move;
+6. a decision to Junk marks the message for Thunderbird's junk filter and is
+   not a move to a folder;
+7. an ambiguous or unresolved message remains in `INBOX` and is presented for
    review.
 
 Reading a message is therefore the user's signal that the message may be filed,
@@ -133,26 +136,51 @@ For an eligible read Inbox message, destination resolution should use this order
 3. an existing canonical archive-history classification when sufficiently safe;
 4. otherwise unresolved/review.
 
-A user decision always wins over an inferred classification.
+A user decision always wins over an inferred classification. Ignore and Junk
+are user decisions. Either one supersedes a folder mapping and archive-history
+classification for that same sender or domain.
 
 The plan must retain the reason/evidence for an inferred destination so the user
 can understand why it was selected.
 
-## Inbox Filing UI
+## Dispositions
 
-The existing Inbox area gains a **Filing** sub-panel alongside the sender/digest
-controls.
+A filing decision has one disposition:
 
-The Filing view should be domain-oriented and show at least:
+- **File** — use a canonical parent/child path, as described above;
+- **Ignore** — leave the messages in the Inbox. Do not propose a folder move
+  and do not delete them;
+- **Junk** — mark the messages as junk so Thunderbird's junk filter can
+  recognise them. Do not file them into the personal archive, do not move them
+  to a folder, and do not delete them.
+
+Ignore and Junk have no canonical folder path. A folder path is stored only
+for a File disposition.
+
+Junk is a mark, not a mailAgent move. mailAgent must not create a Thunderbird
+filter to express it. When execution is later permitted, the mark must be one
+Thunderbird's own junk filter already uses. Thunderbird account settings may
+still move mail after they see that mark; that move is Thunderbird's, not a
+mailAgent filing action.
+
+Phase 1 records Ignore and Junk and shows them as status. It does not change
+message flags, junk state, or mailbox contents.
+
+## Moving Mail
+
+**Moving Mail** is a tab on the Mailbox Audit main menu. It is not a sub-panel
+of Inbox Digest.
+
+The view is domain-oriented and shows at least:
 
 - mailbox/archive (`myMail` or `kathyMail`);
 - domain;
 - number of current Inbox messages represented;
-- discovered or selected Parent;
-- child/domain folder name;
-- resulting canonical destination;
-- status such as `Existing`, `Proposed child`, `Proposed parent + child`, or
-  `Needs choice`.
+- discovered or selected Parent, when the disposition is File;
+- child/domain folder name, when the disposition is File;
+- resulting canonical destination, when the disposition is File;
+- status: `Existing`, `Proposed child`, `Proposed parent + child`,
+  `Needs choice`, `Ignore`, or `Junk`.
 
 A representative view is:
 
@@ -161,10 +189,13 @@ Domain          Archive    Parent     Folder    Status
 amazon.co.uk    myMail     Shopping   Amazon    Existing
 bmw.com         myMail     Cars       BMW       Proposed child
 nhs.uk          myMail     Medical    NHS       Proposed parent + child
+news.example    myMail                          Ignore
+offers.example  kathyMail                       Junk
 ```
 
 The user must be able to select an existing discovered parent or propose a new
-one without changing mail during that interaction.
+one without changing mail during that interaction. Choosing Ignore or Junk
+does not ask for a folder and does not change mail during that interaction.
 
 ## Persistence
 
@@ -180,8 +211,9 @@ The persisted model must support, at minimum:
 
 - mailbox-specific domain mappings;
 - optional mailbox-specific exact-sender overrides;
-- proposed/new parent metadata where required;
-- canonical destination path;
+- the disposition (`file`, `ignore`, or `junk`);
+- proposed/new parent metadata where the disposition is File;
+- canonical destination path where the disposition is File;
 - schema versioning and validation.
 
 Persistence must be atomic, user-only, and contain no passwords or message
@@ -200,13 +232,15 @@ including:
 - stable message identity such as UID and UIDVALIDITY;
 - read/unread state used for eligibility;
 - sender and domain;
-- resolved canonical destination;
-- destination kind (`imap` or `local`);
+- disposition (`file`, `ignore`, or `junk`);
+- resolved canonical destination when the disposition is File;
+- destination kind (`imap` or `local`) when the disposition is File;
 - filing decision source (`sender`, `domain`, `archive history`, or equivalent);
 - whether destination folder creation is required;
 - whether execution is currently permitted.
 
-Unread Inbox messages must not appear as filing actions.
+Unread Inbox messages must not appear as filing actions. Ignore is not a move
+proposal. Junk is not a move proposal; it records the junk mark to apply later.
 
 ## Destination and live-year behaviour
 
@@ -245,6 +279,8 @@ legacy Thunderbird filters into mailAgent filing rules or identify conflicts.
 
 - unread Inbox mail is never moved by this workflow;
 - read mail with no resolved destination is never moved;
+- Ignore leaves the message in `INBOX` and never deletes it;
+- Junk does not file the message into the personal archive and never deletes it;
 - normal filing never deletes a message;
 - folder creation is explicit and reviewable;
 - local archival uses copy -> verify -> remove;
@@ -268,6 +304,11 @@ legacy Thunderbird filters into mailAgent filing rules or identify conflicts.
 - a resolved live-year message targets the canonical IMAP mirror;
 - a resolved older message targets the canonical local archive;
 - unresolved or ambiguous messages remain in Inbox and appear for review;
+- **Moving Mail** is a main-menu tab, and Inbox Digest does not contain it;
+- Ignore produces no folder proposal and leaves the messages in `INBOX`;
+- Junk produces no archive-folder proposal and records a junk mark for
+  Thunderbird's junk filter;
+- neither Ignore nor Junk deletes mail or creates a Thunderbird filter;
 - existing Thunderbird filters are discovered but new filters are not required
   or automatically created;
 - planning makes no mailbox or local archive mutations;
@@ -283,15 +324,26 @@ legacy Thunderbird filters into mailAgent filing rules or identify conflicts.
 - group Inbox senders by domain;
 - create/edit durable sender/domain filing mappings;
 - support proposed parents and child folders;
-- show Filing status in the TUI;
-- produce read-only filing proposals.
+- show Moving Mail status in the TUI, including Ignore and Junk;
+- produce read-only filing proposals;
+- record Ignore and Junk without changing flags or mail.
 
 ### Phase 2 - safe execution
 
 - identify read Inbox messages eligible for filing;
 - create approved destination folders where required;
-- move live-year messages within IMAP;
-- archive older messages using copy -> verify -> remove;
+- move live-year messages within IMAP only when the disposition is File;
+- archive older messages using copy -> verify -> remove only when the
+  disposition is File;
+- leave Ignore messages in `INBOX`;
+- mark Junk messages so Thunderbird's junk filter can use them, without
+  filing those messages into the personal archive;
 - log successful actions and retain retry-safe state.
 
 Phase 2 must not be enabled merely by completing Phase 1.
+
+## Change history
+
+- 2026-10-08: Moving Mail is a main-menu tab rather than an Inbox Digest
+  Filing sub-panel. Ignore leaves read Inbox mail in the Inbox. Junk marks it
+  for Thunderbird's junk filter instead of filing it to a folder.

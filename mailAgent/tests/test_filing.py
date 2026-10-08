@@ -475,6 +475,40 @@ def testAuditTableTextStaysOnDarkSurface():
     asyncio.run(inspect())
 
 
+def testFooterKeysUseHeadingColour():
+    from textual.widgets import Static
+
+    from mailAgent.auditUi import auditAppBuild
+
+    snapshot = {
+        "schemaVersion": 1,
+        "mailboxes": [],
+        "localArchives": [],
+        "sources": [],
+    }
+
+    async def inspect() -> None:
+        app = auditAppBuild(snapshot)
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            heading = app.query_one("#safety", Static).styles.color
+            keys = list(app.query("FooterKey"))
+            descriptions = {key.description.casefold() for key in keys}
+            assert "quit" in descriptions
+            assert "palette" in descriptions
+            for key in keys:
+                for name in ("footer-key--key", "footer-key--description"):
+                    colour = key.get_component_rich_style(name).color
+                    assert colour is not None
+                    assert (colour.triplet.red, colour.triplet.green, colour.triplet.blue) == (
+                        heading.r,
+                        heading.g,
+                        heading.b,
+                    )
+
+    asyncio.run(inspect())
+
+
 def testFilingColumnsClipAndFit():
     from mailAgent.filingView import _columnWidths, _textClip
 
@@ -488,10 +522,51 @@ def testFilingColumnsClipAndFit():
     assert sum(narrow.values()) + 2 * len(narrow) <= 70
 
 
+def _coloursContrast(foreground, background) -> None:
+    """Fail when text and its surface are too close to tell apart."""
+    assert background.a == 1
+    assert (
+        abs(
+            (foreground.r + foreground.g + foreground.b) / 3
+            - (background.r + background.g + background.b) / 3
+        )
+        > 80
+    )
+
+
+def _screenText(app) -> str:
+    """Return the text currently painted on the audit screen."""
+    import io
+
+    from rich.console import Console
+
+    console = Console(
+        width=app.size.width,
+        height=app.size.height,
+        file=io.StringIO(),
+        force_terminal=True,
+        record=True,
+        color_system="truecolor",
+    )
+    painted = app.screen._compositor.render_update(
+        full=True, screen_stack=app.app._background_screens
+    )
+    console.print(painted)
+    return console.export_text()
+
+
 def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkeypatch):
     from mailAgent.auditUi import auditAppBuild
     from mailAgent.filingView import FilingEditor, FilingView
-    from textual.widgets import Button, DataTable, Input, Select, Static, TabbedContent
+    from textual.widgets import (
+        Button,
+        DataTable,
+        Input,
+        Select,
+        Static,
+        TabbedContent,
+        TabPane,
+    )
 
     rulesPath = tmp_path / "filing-rules.json"
     monkeypatch.setattr("mailAgent.filing.filingPath", lambda: rulesPath)
@@ -506,9 +581,13 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
     async def uiInspect():
         app = auditAppBuild(snapshot)
         async with app.run_test(size=(140, 42)) as pilot:
-            app.query_one(TabbedContent).active = "inboxInterest"
-            await pilot.pause()
-            app.query_one("#digest-menu", TabbedContent).active = "inboxFiling"
+            moving = app.query_one("#inboxFiling", TabPane)
+            assert str(moving._title) == "Moving Mail"
+            assert all(
+                pane.id != "inboxFiling"
+                for pane in app.query_one("#digest-menu", TabbedContent).query(TabPane)
+            )
+            app.query_one(TabbedContent).active = "inboxFiling"
             await pilot.pause()
             table = app.query_one("#filing-table", DataTable)
             assert table.row_count >= 1
@@ -560,13 +639,45 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
                 app.query_one("#filing-row-status", Static).render()
             )
             assert app.query_one("#filing-sender-row").display is False
+            parent = app.query_one("#filing-parent", Select)
+            child = app.query_one("#filing-child", Input)
+            assert parent.region.y == child.region.y
+            assert parent.content_region.height == 2
+            assert child.content_region.height == 2
+            assert not child.styles.border
+            assert child.value.strip()
+            _coloursContrast(child.styles.color, child.styles.background)
+            label = parent.query_one("#label", Static)
+            current = parent.query_one("SelectCurrent")
+            _coloursContrast(label.styles.color, current.styles.background)
+            assert str(label.render()).strip()
+            for button in actions:
+                assert button.content_region.height == 2
+                assert not button.styles.border
+                assert str(button.label).strip()
+                _coloursContrast(button.styles.color, button.styles.background)
+            painted = _screenText(app)
+            assert "Add parent" in painted
+            assert "Save domain" in painted
+            assert "Sender override" in painted
+            assert child.value in painted
+            assert "▼" in painted
+
             app.query_one("#filing-save-sender", Button).focus()
             await pilot.press("enter")
             await pilot.pause()
             assert app.query_one("#filing-sender-row").display is True
             assert all(button.region.bottom <= app.size.height for button in actions)
 
-            app.query_one("#filing-parent-name", Input).value = "Medical"
+            app.query_one("#filing-add-parent", Button).focus()
+            await pilot.press("enter")
+            await pilot.pause()
+            name = app.query_one("#filing-parent-name", Input)
+            assert app.query_one("#filing-parent-name-row").display is True
+            assert name.region.x == parent.region.x
+            assert name.content_region.height == 2
+            assert not name.styles.border
+            name.value = "Medical"
             app.query_one("#filing-add-parent", Button).focus()
             await pilot.press("enter")
             await pilot.pause()
@@ -587,6 +698,38 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
     assert "Medical" in saved["mailboxes"]["andy"]["proposedParents"]
     assert saved["mailboxes"]["andy"]["domains"]["nhs.uk"]["canonical"] == "Medical/NHS"
     assert saved["mailboxes"]["andy"]["domains"]["nhs.uk"]["parentProposed"] is True
+
+
+def testAuditScreenHidesConsoleFilingLog(monkeypatch):
+    import io
+    import logging
+    from argparse import Namespace
+
+    from organiseMyProjects.logUtils import getLogger, setApplication
+
+    from mailAgent.cli import _interactiveShow
+
+    setApplication("mailAgent")
+    logger = getLogger(includeConsole=True)
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    logger.logger.addHandler(handler)
+
+    def auditShow(snapshot, refresh):
+        logger.done("inbox filing plan")
+        return None
+
+    monkeypatch.setattr("mailAgent.interactiveAudit.auditShow", auditShow)
+    try:
+        _interactiveShow(Namespace(), {}, {}, logger)
+    finally:
+        if handler in logger.logger.handlers:
+            logger.logger.removeHandler(handler)
+
+    assert "inbox filing plan" not in stream.getvalue()
+    assert any(
+        type(attached) is logging.StreamHandler for attached in logger.logger.handlers
+    )
 
 
 def _archiveCreate(root: Path) -> Path:

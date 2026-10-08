@@ -50,6 +50,26 @@ def main() -> None:
         )
 
 
+def _consoleQuiet(logger: Any) -> list[logging.Handler]:
+    """Remove console handlers so log lines are not drawn over the TUI."""
+    handlers = [
+        handler
+        for handler in logger.logger.handlers
+        if type(handler) is logging.StreamHandler
+    ]
+    for handler in handlers:
+        logger.logger.removeHandler(handler)
+    return handlers
+
+
+def _consoleRestore(logger: Any, handlers: list[logging.Handler]) -> None:
+    """Put console logging back after the TUI has closed."""
+    attached = set(logger.logger.handlers)
+    for handler in handlers:
+        if handler not in attached:
+            logger.logger.addHandler(handler)
+
+
 def _interactiveShow(
     args: argparse.Namespace,
     config: dict,
@@ -64,22 +84,16 @@ def _interactiveShow(
         planningArgs.plan = True
         planningArgs.confirm = False
         planningArgs.json = None
-        consoleHandlers = [
-            handler
-            for handler in logger.logger.handlers
-            if type(handler) is logging.StreamHandler
-        ]
-        for handler in consoleHandlers:
-            logger.logger.removeHandler(handler)
-        try:
-            return _snapshotBuild(planningArgs, config, logger)
-        finally:
-            for handler in consoleHandlers:
-                logger.logger.addHandler(handler)
+        return _snapshotBuild(planningArgs, config, logger)
 
     while True:
         refresh = planRefresh if snapshot.get("migrationPlan") else None
-        if auditShow(snapshot, refresh) != "runPlanning":
+        quiet = _consoleQuiet(logger)
+        try:
+            result = auditShow(snapshot, refresh)
+        finally:
+            _consoleRestore(logger, quiet)
+        if result != "runPlanning":
             return snapshot
         snapshot = planRefresh()
 
