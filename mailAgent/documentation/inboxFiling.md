@@ -139,5 +139,5 @@ would have to perform the reviewed folder creation, IMAP move, and verified
 local archive steps under the existing migration safety rules.
 
 The audit screen loads the shared organiseMyProjects stylesheet,
-`myStyles.css`. Moving Mail layout, such as the table height and the
-equal-width actions, stays in `filingView.tcss`.
+`myStyles.css`. Moving Mail layout, such as
+the table height and the equal-width actions, stays in `filingView.tcss`.

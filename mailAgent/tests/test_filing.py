@@ -500,7 +500,11 @@ def testFooterKeysUseHeadingColour():
                 for name in ("footer-key--key", "footer-key--description"):
                     colour = key.get_component_rich_style(name).color
                     assert colour is not None
-                    assert (colour.triplet.red, colour.triplet.green, colour.triplet.blue) == (
+                    assert (
+                        colour.triplet.red,
+                        colour.triplet.green,
+                        colour.triplet.blue,
+                    ) == (
                         heading.r,
                         heading.g,
                         heading.b,
@@ -642,9 +646,9 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             parent = app.query_one("#filing-parent", Select)
             child = app.query_one("#filing-child", Input)
             assert parent.region.y == child.region.y
-            assert parent.content_region.height == 2
-            assert child.content_region.height == 2
-            assert not child.styles.border
+            assert parent.content_region.height == 1
+            assert child.content_region.height == 1
+            assert child.styles.border
             assert child.value.strip()
             _coloursContrast(child.styles.color, child.styles.background)
             label = parent.query_one("#label", Static)
@@ -652,8 +656,8 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             _coloursContrast(label.styles.color, current.styles.background)
             assert str(label.render()).strip()
             for button in actions:
-                assert button.content_region.height == 2
-                assert not button.styles.border
+                assert button.content_region.height == 1
+                assert button.styles.border
                 assert str(button.label).strip()
                 _coloursContrast(button.styles.color, button.styles.background)
             painted = _screenText(app)
@@ -675,8 +679,8 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             name = app.query_one("#filing-parent-name", Input)
             assert app.query_one("#filing-parent-name-row").display is True
             assert name.region.x == parent.region.x
-            assert name.content_region.height == 2
-            assert not name.styles.border
+            assert name.content_region.height == 1
+            assert name.styles.border
             name.value = "Medical"
             app.query_one("#filing-add-parent", Button).focus()
             await pilot.press("enter")

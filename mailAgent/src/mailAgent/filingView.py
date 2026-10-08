@@ -218,7 +218,12 @@ class FilingEditor(Widget):
 
     def compose(self) -> ComposeResult:
         """Rows for the choice, with the rare fields hidden until needed."""
-        yield Static("Filing: select a domain", id="filing-heading", markup=False)
+        yield Static(
+            "Filing: select a domain",
+            id="filing-heading",
+            classes="heading",
+            markup=False,
+        )
         with HorizontalGroup(id="filing-choice-row"):
             yield Static("Parent", classes="filing-label filing-lead")
             yield Select(
@@ -256,7 +261,10 @@ class FilingEditor(Widget):
         with HorizontalGroup(id="filing-status-row"):
             yield Static("Status", classes="filing-label filing-lead")
             yield Static(
-                "", id="filing-row-status", classes="filing-value", markup=False
+                "",
+                id="filing-row-status",
+                classes="filing-value",
+                markup=False,
             )
         with HorizontalGroup(id="filing-sender-row") as senderRow:
             senderRow.display = False

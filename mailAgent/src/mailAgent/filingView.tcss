@@ -1,6 +1,5 @@
-/* Moving Mail is a top-level tab. The table takes the leftover height.
-   One-row fields use no box border: a solid border fills the row and hides
-   the text. This sheet is application CSS so it can override the shared one. */
+/* Moving Mail layout only. Colour, borders and the two-row control
+   come from myStyles.css. */
 
 Screen > TabbedContent {
     height: 1fr;
@@ -51,37 +50,21 @@ FilingView #filing-empty {
 
 FilingEditor {
     height: auto;
-    max-height: 18;
+    max-height: 32;
     layout: vertical;
     padding: 0;
-    background: #f7f7f5;
 }
 
 FilingEditor HorizontalGroup {
     height: auto;
     margin: 0;
     padding: 0;
-    background: #f7f7f5;
     align: left middle;
-}
-
-FilingEditor #filing-heading,
-FilingEditor #filing-status {
-    height: 2;
-    content-align: left middle;
-    background: #f7f7f5;
-}
-
-FilingEditor #filing-heading {
-    text-style: bold;
 }
 
 FilingEditor .filing-label {
     width: auto;
-    height: 2;
     padding: 0 1 0 0;
-    content-align: left middle;
-    background: #f7f7f5;
 }
 
 FilingEditor .filing-lead {
@@ -90,65 +73,17 @@ FilingEditor .filing-lead {
 
 FilingEditor .filing-value {
     width: 1fr;
-    height: 2;
-    content-align: left middle;
-    background: #f7f7f5;
 }
 
 FilingEditor .filing-field {
     width: 1fr;
     max-width: 40;
-    height: 2;
     margin: 0 1 0 0;
-    padding: 0 1;
-    border: none;
-    background: #101f2e;
-    color: #f5f8fb;
-    content-align: left middle;
-}
-
-FilingEditor .filing-field:focus {
-    border: none;
-    background: #243545;
-    color: #f5f8fb;
-}
-
-FilingEditor Select.filing-field > SelectCurrent {
-    height: 2;
-    padding: 0 1;
-    border: none;
-    background: #101f2e;
-    color: #f5f8fb;
-    content-align: left middle;
-    align: left middle;
-}
-
-FilingEditor Select.filing-field:focus > SelectCurrent {
-    border: none;
-    background: #243545;
-}
-
-FilingEditor #filing-actions {
-    height: 2;
 }
 
 FilingEditor .filing-action {
     width: 20;
     min-width: 20;
     max-width: 20;
-    height: 2;
     margin: 0 1 0 0;
-    padding: 0 1;
-    border: none;
-    background: #31b98f;
-    color: #061510;
-    text-style: bold;
-    content-align: center middle;
-}
-
-FilingEditor .filing-action:hover,
-FilingEditor .filing-action:focus {
-    border: none;
-    background: #56d6b0;
-    color: #061510;
 }
