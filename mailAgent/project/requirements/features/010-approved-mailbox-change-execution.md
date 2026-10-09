@@ -219,3 +219,15 @@ Mutation primitives should be small and testable. Tests must use fakes/fixtures 
 - execution results are persisted under `~/.local/state/mailAgent/` without bodies or secrets;
 - shared/support mailboxes are not mutated;
 - full project tests and checks pass before integration.
+
+
+## Initial implementation increment
+
+The first increment covers plan validation and durable execution journaling only.
+It does not connect to the CLI/TUI execution path or introduce mutation primitives.
+See [Execution boundary](../../../documentation/executionBoundary.md) for its
+schema, API contracts, verification requirements and restart policy.
+
+Next implement approved IMAP folder creation and one live-year File primitive
+before extending mutation to local archival and Junk. Keep orchestration and
+TUI presentation separate from the core modules.

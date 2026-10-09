@@ -33,6 +33,8 @@ The example configuration declares five independent mailboxes: Andy and Kathy
 - [REQ-009](project/requirements/features/009-read-inbox-filing.md)
 - [Inbox filing](documentation/inboxFiling.md)
 - [Requirements](project/requirements/requirementsIndex.md)
+- [Execution boundary](documentation/executionBoundary.md)
+- [REQ-010](project/requirements/features/010-approved-mailbox-change-execution.md)
 
 ## Install
 
