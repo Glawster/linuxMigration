@@ -47,7 +47,7 @@ def inboxMessagesDiscover(
     result = dict(messages=[], issues=[], complete=True)
     for folder in inbox:
         try:
-            _folderInspect(client, folder, batchSize, result, "DATE FROM SUBJECT")
+            _folderInspect(client, folder, batchSize, result, "DATE FROM SUBJECT", True)
         except Exception:
             result["complete"] = False
             result["issues"].append(
@@ -86,6 +86,7 @@ def messageParse(metadata: bytes, header: bytes, folder: str, uidValidity: str) 
     uid = re.search(rb"\bUID\s+(\d+)\b", metadata)
     if not uid:
         raise ValueError("Missing UID in FETCH response")
+    flags = _flagsRead(metadata)
     result = dict(
         folder=folder,
         uid=uid[1].decode(),
@@ -94,6 +95,9 @@ def messageParse(metadata: bytes, header: bytes, folder: str, uidValidity: str) 
         sender=None,
         senderName="",
         subject="",
+        flags=flags or [],
+        # None means FLAGS were not fetched, so the message is not known to be read.
+        seen=None if flags is None else any(flag.lower() == "\\seen" for flag in flags),
     )
     parsed = BytesParser().parsebytes(header)
     dates = parsed.get_all("Date", [])
@@ -126,12 +130,21 @@ def messageParse(metadata: bytes, header: bytes, folder: str, uidValidity: str) 
 ## utilities
 
 
+def _flagsRead(metadata: bytes) -> list[str] | None:
+    """Return FLAGS when the FETCH metadata includes them."""
+    match = re.search(rb"\bFLAGS\s*\(([^)]*)\)", metadata)
+    if not match:
+        return None
+    return match.group(1).decode("ascii", "replace").split()
+
+
 def _folderInspect(
     client: Any,
     folder: dict,
     batchSize: int,
     result: dict,
     headerFields: str = "DATE FROM",
+    includeFlags: bool = False,
 ) -> None:
     path = folder["path"]
     quoted = '"' + path.replace("\\", "\\\\").replace('"', '\\"') + '"'
@@ -152,7 +165,9 @@ def _folderInspect(
         status, rows = client.uid(
             "FETCH",
             b",".join(batch).decode(),
-            f"(UID BODY.PEEK[HEADER.FIELDS ({headerFields})])",
+            "(UID "
+            + ("FLAGS " if includeFlags else "")
+            + f"BODY.PEEK[HEADER.FIELDS ({headerFields})])",
         )
         if status != "OK":
             raise ValueError("UID FETCH failed")

@@ -1,0 +1,89 @@
+/* Moving Mail layout only. Colour, borders and the two-row control
+   come from myStyles.css. */
+
+Screen > TabbedContent {
+    height: 1fr;
+}
+
+Screen > TabbedContent > ContentSwitcher {
+    height: 1fr;
+}
+
+#inboxInterest {
+    height: 1fr;
+}
+
+#digest-menu {
+    height: 1fr;
+}
+
+#digest-menu > ContentSwitcher {
+    height: 1fr;
+}
+
+#digestSenders,
+#digestReasons,
+#inboxFiling {
+    height: 1fr;
+}
+
+FilingView {
+    height: 1fr;
+    layout: vertical;
+    overflow: hidden;
+}
+
+FilingView #filing-summary {
+    height: 1;
+}
+
+FilingView #filing-table {
+    height: 1fr;
+    min-height: 8;
+    scrollbar-gutter: stable;
+    overflow-x: hidden;
+}
+
+FilingView #filing-empty {
+    height: 1;
+}
+
+FilingEditor {
+    height: auto;
+    max-height: 32;
+    layout: vertical;
+    padding: 0;
+}
+
+FilingEditor HorizontalGroup {
+    height: auto;
+    margin: 0;
+    padding: 0;
+    align: left middle;
+}
+
+FilingEditor .filing-label {
+    width: auto;
+    padding: 0 1 0 0;
+}
+
+FilingEditor .filing-lead {
+    width: 20;
+}
+
+FilingEditor .filing-value {
+    width: 1fr;
+}
+
+FilingEditor .filing-field {
+    width: 1fr;
+    max-width: 40;
+    margin: 0 1 0 0;
+}
+
+FilingEditor .filing-action {
+    width: 20;
+    min-width: 20;
+    max-width: 20;
+    margin: 0 1 0 0;
+}

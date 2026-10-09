@@ -223,6 +223,9 @@ filing rules for personal mailboxes.
   not create Thunderbird/local archive folders, create filters, or move mail.
 - A later execution requirement may use the approved mapping to create folders,
   suggest filters and move/archive mail safely.
+- Ignore and Junk are not folder mappings. [REQ-009](009-read-inbox-filing.md)
+  specifies them: Ignore leaves the mail in the Inbox, and Junk marks it for
+  Thunderbird's junk filter.
 
 
 ## Stored plan and refresh
@@ -241,3 +244,8 @@ mailboxes merely to review the previous plan.
   not require `--confirm`.
 - A malformed or unsupported stored-plan schema must fail safely rather than be
   silently interpreted.
+
+## Change history
+
+- 2026-10-08: Noted that Ignore and Junk are REQ-009 dispositions, not archive
+  folder mappings.

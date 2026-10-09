@@ -9,3 +9,4 @@ dependencies:
   - pip:
       - textual
       - organiseMyProjects
+      - publicsuffixlist>=1.0.2

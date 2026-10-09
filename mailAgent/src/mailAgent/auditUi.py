@@ -1,5 +1,6 @@
 """Presentation only for the core audit and planning models."""
 
+from importlib.resources import files
 from pathlib import Path
 
 from rich.text import Text
@@ -19,6 +20,7 @@ from textual.widgets import (
     TabPane,
 )
 
+from mailAgent.filingView import FILING_CSS, FilingView
 from mailAgent.interest import (
     interestEffective,
     interestLoad,
@@ -70,15 +72,27 @@ def auditAppBuild(snapshot: dict) -> App:
         }
         interestIssue = "Interesting-sender preferences could not be loaded"
     senderRows = _interestRows(snapshot, interestData)
+    try:
+        from mailAgent.filing import filingPath, filingRulesLoad
+
+        filingRulesLoad(filingPath())
+        filingIssue = None
+    except (OSError, ValueError):
+        filingIssue = "Filing rules could not be loaded"
 
     class MailboxAudit(App):
         TITLE = "Mailbox Audit"
         BINDINGS = [("q", "quit", "Quit")]
+        # Textual opens CSS_PATH directly. The installed resource is a filesystem path.
+        CSS_PATH = files("organiseMyProjects").joinpath("myStyles.css")
+        # Widget DEFAULT_CSS loses to this shared sheet. Applying the filing
+        # sheet here lets one-row fields stay readable.
+        CSS = FILING_CSS
 
         def compose(self) -> ComposeResult:
             yield Header()
             yield Static(
-                "Read-only audit · Migration execution disabled",
+                "Read-only audit · Filing and migration execution disabled",
                 id="safety",
                 markup=False,
             )
@@ -86,6 +100,8 @@ def auditAppBuild(snapshot: dict) -> App:
                 with TabPane("Folders", id="folders"):
                     yield from _foldersPane(snapshot)
                 yield from _interestPane(senderRows, interestData, interestIssue)
+                with TabPane("Moving Mail", id="inboxFiling"):
+                    yield FilingView(snapshot, filingIssue)
                 yield from _auditPanes(snapshot)
                 yield from _planPane(snapshot.get("migrationPlan"))
             yield Footer()
@@ -136,7 +152,7 @@ def auditAppBuild(snapshot: dict) -> App:
             _interestTableRowUpdate(table, row, entry)
 
         def _digestSenderRowsRefresh(self) -> None:
-            table = self.query_one("#interest-table", DataTable)
+            table = self.query_one("#interest-table", DataTable)  # type: ignore
             for index, entry in enumerate(senderRows):
                 _interestEntryRefresh(entry, interestData)
                 _interestTableRowUpdate(table, index, entry)
@@ -158,7 +174,7 @@ def auditAppBuild(snapshot: dict) -> App:
             )
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
-            """Handle planning refresh and explicit review decisions."""
+            """Handle planning refresh and review decisions."""
             if event.button.id == "resolve-sender":
                 self._senderResolutionSave(snapshot.get("migrationPlan"))
                 return
@@ -180,7 +196,9 @@ def auditAppBuild(snapshot: dict) -> App:
             sender = source.get("sender")
             targetMailbox = entry.get("targetMailbox")
             if not sender or not targetMailbox:
-                status.update("This review item is not a sender-classification decision.")
+                status.update(
+                    "This review item is not a sender-classification decision."
+                )
                 return
             selection = chooser.value
             if not isinstance(selection, tuple) or len(selection) != 2:
@@ -200,6 +218,10 @@ def auditAppBuild(snapshot: dict) -> App:
             )
             self.exit("runPlanning")
 
+        def _filingRefresh(self) -> None:
+            """Reload the filing table after an external plan refresh."""
+            self.query_one(FilingView).planShow()
+
     return MailboxAudit()
 
 
@@ -209,7 +231,9 @@ def auditShow(snapshot: dict) -> str | None:
 
 
 def _interestPane(
-    senderRows: list[dict], interestData: dict, issue: str | None
+    senderRows: list[dict],
+    interestData: dict,
+    issue: str | None,
 ) -> ComposeResult:
     with TabPane("Inbox Digest", id="inboxInterest"):
         with TabbedContent(id="digest-menu"):
@@ -554,10 +578,7 @@ def _proposalRows(plan: dict) -> list[tuple]:
         row = _proposalRow(entry, stores)
         key = row[:2] + row[3:]
         grouped[key] = grouped.get(key, 0) + 1
-    return [
-        (key[0], key[1], count, *key[2:])
-        for key, count in sorted(grouped.items())
-    ]
+    return [(key[0], key[1], count, *key[2:]) for key, count in sorted(grouped.items())]
 
 
 def _proposalRowsFiltered(plan: dict, value: str) -> list[tuple]:
@@ -569,10 +590,7 @@ def _proposalRowsFiltered(plan: dict, value: str) -> list[tuple]:
     return [
         row
         for row in rows
-        if all(
-            term in " ".join(str(cell).lower() for cell in row)
-            for term in terms
-        )
+        if all(term in " ".join(str(cell).lower() for cell in row) for term in terms)
     ]
 
 
@@ -707,8 +725,7 @@ def _filtersPane(snapshot: dict) -> ComposeResult:
         for rule in source.get("filters", []):
             rows += 1
             actions = ", ".join(
-                action["type"]
-                + (f': {action["value"]}' if action.get("value") else "")
+                action["type"] + (f': {action["value"]}' if action.get("value") else "")
                 for action in rule.get("actions", [])
             )
             destinations = ", ".join(
@@ -757,9 +774,7 @@ def _conflictRows(snapshot: dict) -> list[tuple[str, str, str, str, str]]:
     for entry in snapshot.get("conflicts", []):
         metadata = identityMap.get(entry.get("filter", ""), {})
         name = (
-            entry.get("filterName")
-            or metadata.get("filterName")
-            or "Multiple filters"
+            entry.get("filterName") or metadata.get("filterName") or "Multiple filters"
         )
         mailboxes = entry.get("mailboxes") or metadata.get("mailboxes") or []
         mailbox = ", ".join(mailboxes) if mailboxes else "Thunderbird"

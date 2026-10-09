@@ -246,3 +246,14 @@ including partial inventories), `proposals`, `reviewItems`,
 and `systemFoldersWithUnknownCounts`. Excluded system-folder dates are not
 inspected. Existing snapshots with system-folder headers still aggregate their
 review items. All migration execution remains disabled, including with `--confirm`.
+
+## Inbox filing
+
+REQ-009 plans filing for read `INBOX` mail into the same canonical taxonomy.
+Unread Inbox mail is not a filing action. Andy and Kathy use their own
+archives. The legacy mailbox reuses its personal target's rules and the
+live-year or local destination above. Shared and support mailboxes are
+excluded. A decision may instead Ignore the mail, leaving it in the Inbox, or
+Junk it so Thunderbird's junk filter can use the mark. Neither of those is a
+folder move. Proposals do not create folders, mark junk, or move mail in this
+phase. See [Inbox filing](inboxFiling.md).

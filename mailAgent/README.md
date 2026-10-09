@@ -30,6 +30,9 @@ The example configuration declares five independent mailboxes: Andy and Kathy
 - [REQ-006](project/requirements/features/006-inbox-interest-daily-digest.md)
 - [REQ-007](project/requirements/features/007-unsubscribe-discovery-action.md)
 - [REQ-008](project/requirements/features/008-plan-resolution-approval.md)
+- [REQ-009](project/requirements/features/009-read-inbox-filing.md)
+- [Inbox filing](documentation/inboxFiling.md)
+- [Requirements](project/requirements/requirementsIndex.md)
 
 ## Install
 
@@ -158,6 +161,22 @@ the mailbox-specific decision in
 The decision applies to subsequent messages from that sender in the same source
 mailbox and is identified in proposals as an explicit user sender decision.
 Saving a resolution never moves or modifies mail.
+
+## Inbox filing
+
+Read Inbox mail can be matched to the personal archive taxonomy. Unread Inbox
+mail stays in the Inbox. Andy and Kathy keep separate rules, stored in
+`~/.config/mailAgent/filing-rules.json`.
+
+The **Moving Mail** tab groups the current Inbox by registrable domain. When
+the Public Suffix List does not identify one organisation domain, the panel
+asks you to confirm it. You can choose or propose a parent folder.
+**Ignore** leaves that mail in the Inbox. **Junk** marks it for Thunderbird's
+junk filter instead of filing it to a folder in a future execution phase.
+Both choices can be saved now without choosing a folder.
+Saving a rule or proposing a parent does not create folders, move mail, mark
+junk, or create Thunderbird filters. Filing execution remains disabled. See
+[Inbox filing](documentation/inboxFiling.md).
 
 Sent/system-folder policy decisions and approval of demand-driven IMAP mirror
 folders remain the following increments of REQ-008. Migration execution remains
