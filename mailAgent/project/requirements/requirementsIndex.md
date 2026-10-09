@@ -1,6 +1,6 @@
 # Requirements
 
-Next available number: 010
+Next available number: 011
 
 ## Requirement index
 
@@ -13,3 +13,4 @@ Next available number: 010
 | 007 | [Unsubscribe discovery and action](features/007-unsubscribe-discovery-action.md) | Find unsubscribe actions and let the user run one explicitly. | ToDo | Not recorded | Not required |
 | 008 | [Plan resolution and approval](features/008-plan-resolution-approval.md) | Record review decisions before any mailbox mutation. Later increments remain. | InProgress | Not recorded | Not required |
 | 009 | [Read Inbox filing](features/009-read-inbox-filing.md) | Review where read Inbox mail belongs. Ignore leaves it in the Inbox. Junk marks it for Thunderbird's junk filter. | InProgress | Not recorded | Not required |
+| 010 | [Approved mailbox change execution](features/010-approved-mailbox-change-execution.md) | Execute approved personal-mail changes with revalidation, verification, journaling and retry safety. | InProgress | Not recorded | Not required |
