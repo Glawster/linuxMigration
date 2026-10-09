@@ -152,7 +152,7 @@ def auditAppBuild(snapshot: dict) -> App:
             _interestTableRowUpdate(table, row, entry)
 
         def _digestSenderRowsRefresh(self) -> None:
-            table = self.query_one("#interest-table", DataTable) # type: ignore
+            table = self.query_one("#interest-table", DataTable)  # type: ignore
             for index, entry in enumerate(senderRows):
                 _interestEntryRefresh(entry, interestData)
                 _interestTableRowUpdate(table, index, entry)

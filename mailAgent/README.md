@@ -172,8 +172,8 @@ The **Moving Mail** tab groups the current Inbox by registrable domain. When
 the Public Suffix List does not identify one organisation domain, the panel
 asks you to confirm it. You can choose or propose a parent folder.
 **Ignore** leaves that mail in the Inbox. **Junk** marks it for Thunderbird's
-junk filter instead of filing it to a folder. Neither choice is offered on
-the screen yet.
+junk filter instead of filing it to a folder in a future execution phase.
+Both choices can be saved now without choosing a folder.
 Saving a rule or proposing a parent does not create folders, move mail, mark
 junk, or create Thunderbird filters. Filing execution remains disabled. See
 [Inbox filing](documentation/inboxFiling.md).

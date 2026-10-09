@@ -822,3 +822,133 @@ def _tree(root: Path) -> dict:
         for path in sorted(root.rglob("*"))
         if path.is_file()
     }
+
+
+@pytest.mark.parametrize("disposition", ["ignore", "junk"])
+def testDispositionsPersistOverrideHistoryAndNeverMove(world, tmp_path, disposition):
+    from mailAgent.filing import filingDispositionSet
+
+    path = tmp_path / "rules.json"
+    filingDomainSet("andy", "amazon.co.uk", "Shopping", "Amazon", False, path)
+    filingDispositionSet("andy", "domains", "amazon.co.uk", disposition, path)
+    filingDispositionSet("andy", "senders", "service@paypal.com", disposition, path)
+    filingSenderSet("andy", "news@amazon.co.uk", "Finance", "PayPal", False, path)
+    snapshot = _snapshot(world)
+    before = json.dumps(snapshot, sort_keys=True)
+    archive = _tree(world["andy"])
+    rules = filingRulesLoad(path)
+    assert rules["mailboxes"]["andy"]["domains"]["amazon.co.uk"] == {
+        "disposition": disposition
+    }
+    plan = filingPlanBuild(filingContextBuild(world["config"]), snapshot, rules)
+    records = plan["dispositions"]
+    assert records
+    assert all(item["disposition"] == disposition for item in records)
+    assert all(
+        "destination" not in item and "canonical" not in item for item in records
+    )
+    assert all(
+        not item["executionPermitted"] and not item["sourceRemovalAllowed"]
+        for item in records
+    )
+    assert all(
+        item["source"]["uid"] not in ("unread", "unknown", "outside")
+        for item in records
+    )
+    assert (
+        _proposal(plan["proposals"], "andy", "reused-amazon")["decisionSource"]
+        == "sender"
+    )
+    assert any(item["source"]["uid"] == "history-paypal" for item in records)
+    row = next(
+        row
+        for row in plan["rows"]
+        if row["mailbox"] == "andy" and row["domain"] == "amazon.co.uk"
+    )
+    assert row["status"] == disposition.title()
+    assert row["canonical"] == row["parent"] == row["folder"] == ""
+    assert json.dumps(snapshot, sort_keys=True) == before
+    assert _tree(world["andy"]) == archive
+    assert path.stat().st_mode & 0o077 == 0
+
+
+@pytest.mark.parametrize(
+    "decision",
+    [
+        {"disposition": "delete"},
+        {"disposition": "ignore", "canonical": "Shopping/Amazon"},
+        {"disposition": "junk", "parent": "Shopping"},
+    ],
+)
+def testInvalidDispositionsRejected(tmp_path, decision):
+    path = tmp_path / "rules.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "mailboxes": {"andy": {"domains": {"amazon.co.uk": decision}}},
+            }
+        )
+    )
+    with pytest.raises(ValueError):
+        filingRulesLoad(path)
+
+
+@pytest.mark.parametrize("disposition", ["ignore", "junk"])
+def testEditorSavesDispositionWithoutFolder(world, tmp_path, monkeypatch, disposition):
+    from mailAgent.auditUi import auditAppBuild
+    from textual.widgets import Button, DataTable, Select, TabbedContent
+
+    path = tmp_path / "rules.json"
+    monkeypatch.setattr("mailAgent.filing.filingPath", lambda: path)
+    snapshot = _snapshot(world)
+    snapshot["filingContext"] = filingContextBuild(world["config"])
+    snapshot["filingPlan"] = filingPlanBuild(snapshot["filingContext"], snapshot)
+
+    async def inspect():
+        app = auditAppBuild(snapshot)
+        async with app.run_test(size=(140, 42)) as pilot:
+            app.query_one(TabbedContent).active = "inboxFiling"
+            await pilot.pause()
+            table = app.query_one("#filing-table", DataTable)
+            index = next(
+                i
+                for i, row in enumerate(snapshot["filingPlan"]["rows"])
+                if row["mailbox"] == "andy" and row["domain"] == "amazon.co.uk"
+            )
+            table.move_cursor(row=index)
+            await pilot.pause()
+            app.query_one("#filing-disposition", Select).value = disposition
+            await pilot.pause()
+            assert not app.query_one("#filing-choice-row").display
+            await pilot.resize_terminal(110, 42)
+            await pilot.pause()
+            assert app.query_one("#filing-disposition", Select).value == disposition
+            assert table.virtual_size.width <= table.scrollable_content_region.width
+            app.query_one("#filing-save-domain", Button).press()
+            await pilot.pause()
+            assert filingRulesLoad(path)["mailboxes"]["andy"]["domains"][
+                "amazon.co.uk"
+            ] == {"disposition": disposition}
+
+    asyncio.run(inspect())
+
+
+@pytest.mark.parametrize("disposition", ["ignore", "junk"])
+def testSenderDispositionWinsOverFileDomain(world, tmp_path, disposition):
+    from mailAgent.filing import filingDispositionSet
+
+    path = tmp_path / "rules.json"
+    filingDomainSet("andy", "amazon.co.uk", "Shopping", "Amazon", False, path)
+    filingDispositionSet("andy", "senders", "orders@amazon.co.uk", disposition, path)
+    rules = filingRulesLoad(path)
+    # Older Phase-1 File rules remain valid without an explicit disposition.
+    rules["mailboxes"]["andy"]["domains"]["amazon.co.uk"].pop("disposition")
+    plan = filingPlanBuild(filingContextBuild(world["config"]), _snapshot(world), rules)
+    record = _proposal(plan["dispositions"], "andy", "live-amazon")
+    assert record["decisionSource"] == "sender"
+    assert record["disposition"] == disposition
+    assert (
+        _proposal(plan["proposals"], "andy", "reused-amazon")["disposition"] == "file"
+    )
+    assert not any(item["source"]["uid"] == "live-amazon" for item in plan["proposals"])

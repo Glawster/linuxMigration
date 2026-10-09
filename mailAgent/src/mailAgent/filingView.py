@@ -110,13 +110,16 @@ class FilingView(Widget):
         self._fitting = True
         try:
             self._widths = widths
-            for name, columnKey in self._columnKeys.items():
-                column = table.columns[columnKey]
-                column.width = widths[name]
-                column.auto_width = False
-            # Fixed widths do not ellipsize or shrink the virtual size on their own.
-            table._update_dimensions(())
-            table._require_update_dimensions = False
+            previous = self._selectedIdentity()
+            with table.prevent(DataTable.RowHighlighted):
+                table.clear(columns=True)
+                for name, label, _width in _columnSpecs():
+                    self._columnKeys[name] = table.add_column(
+                        label, width=widths[name], key=name
+                    )
+                for row in self.rows:
+                    table.add_row(*_tableCells(row, widths["destination"]))
+                self._cursorRestore(previous)
             self._destinationsClip()
         finally:
             self._fitting = False
@@ -259,7 +262,15 @@ class FilingEditor(Widget):
                 classes="filing-field",
             )
         with HorizontalGroup(id="filing-status-row"):
-            yield Static("Status", classes="filing-label filing-lead")
+            yield Select(
+                [("File", "file"), ("Ignore", "ignore"), ("Junk", "junk")],
+                value="file",
+                allow_blank=False,
+                id="filing-disposition",
+                compact=True,
+                classes="filing-lead",
+            )
+
             yield Static(
                 "",
                 id="filing-row-status",
@@ -313,6 +324,9 @@ class FilingEditor(Widget):
             self.query_one("#filing-domain-row").display = False
             self.query_one("#filing-child", Input).value = ""
             return
+        self.query_one("#filing-disposition", Select).value = row.get(
+            "disposition", "file"
+        )
         heading.update(_headingText(row))
         status.update(str(row.get("status") or ""))
         uncertain = bool(row.get("domainUncertain"))
@@ -330,6 +344,16 @@ class FilingEditor(Widget):
         self.query_one("#filing-child", Input).value = (
             row.get("folder") or row.get("suggestion") or ""
         )
+
+    @on(Select.Changed, "#filing-disposition")
+    def dispositionChanged(self, event: Select.Changed) -> None:
+        """Only File needs a parent and folder."""
+        event.stop()
+        isFile = event.value == "file"
+        self.query_one("#filing-choice-row").display = isFile
+        self.query_one("#filing-add-parent", Button).disabled = not isFile
+        if not isFile:
+            self._parentNameHide()
 
     @on(Select.Changed, "#filing-parent")
     def parentChanged(self, event: Select.Changed) -> None:
@@ -364,7 +388,7 @@ class FilingEditor(Widget):
                 return
             filing.filingParentAdd(row["mailbox"], parent, filing.filingPath())
             self._view().planRecompute()
-        except ValueError as error:
+        except (OSError, ValueError) as error:
             self._status(str(error))
             return
         self._status(f"Proposed parent {parent}. No folder was created.")
@@ -396,6 +420,33 @@ class FilingEditor(Widget):
             self._status("Select a filing domain first.")
             return
         try:
+            disposition = self.query_one("#filing-disposition", Select).value
+            if disposition in ("ignore", "junk"):
+                identity = (
+                    self._confirmedDomain(row)
+                    if kind == "domain"
+                    else senderNormalize(self.query_one("#filing-sender", Input).value)
+                )
+                rules = filing.filingRulesLoad(filing.filingPath())
+                if kind == "sender" and (
+                    not identity
+                    or not filing.filingDomainMatch(
+                        identity, row["domain"], rules, row["mailbox"]
+                    )
+                ):
+                    raise ValueError("Enter a sender in the selected domain")
+                filing.filingDispositionSet(
+                    row["mailbox"],
+                    "domains" if kind == "domain" else "senders",
+                    identity,
+                    disposition,
+                    filing.filingPath(),
+                )
+                self._view().planRecompute()
+                self._status(
+                    f"Saved {identity}: {disposition.title()}. Mail was not changed."
+                )
+                return
             parent, child, proposed = self._choiceRead(row)
             saved = (
                 self._domainStore(row, parent, child, proposed)
@@ -403,7 +454,7 @@ class FilingEditor(Widget):
                 else self._senderStore(row, parent, child, proposed)
             )
             self._view().planRecompute()
-        except ValueError as error:
+        except (OSError, ValueError) as error:
             self._status(str(error))
             return
         self._status(f"Saved {saved} -> {parent}/{child}. Mail was not changed.")
@@ -585,7 +636,7 @@ def _headingText(row: dict) -> str:
 def _overrideText(plan: dict) -> str:
     """Return the sender-override line, or nothing when there are none."""
     lines = [
-        f'{item["sender"]} -> {item["canonical"]} ({item["mailbox"]})'
+        f'{item["sender"]} -> {item.get("canonical") or item.get("disposition", "file").title()} ({item["mailbox"]})'
         for item in plan.get("senderOverrides", [])
     ]
     if not lines:

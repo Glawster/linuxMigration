@@ -66,6 +66,7 @@ def filingPlanBuild(context: dict, snapshot: dict, rules: dict | None = None) ->
     _rowsBuild(grouped, rules, prepared, plan)
     _overridesCollect(plan, rules)
     plan["proposals"].sort(key=_proposalSort)
+    plan["dispositions"].sort(key=_proposalSort)
     plan["reviews"].sort(key=_reviewSort)
     plan["rows"].sort(key=lambda row: (row["archive"].casefold(), row["domain"]))
     logger.done("inbox filing plan")
@@ -74,6 +75,8 @@ def filingPlanBuild(context: dict, snapshot: dict, rules: dict | None = None) ->
 
 def filingStatus(decision: dict | None, parents: list[str], folders: list[dict]) -> str:
     """Describe whether a destination already exists in the local archive."""
+    if decision and decision.get("disposition") in ("ignore", "junk"):
+        return decision["disposition"].title()
     if not decision or not decision.get("canonical"):
         return "Needs choice"
     parent = decision.get("parent", "")
@@ -91,6 +94,23 @@ def filingStatus(decision: dict | None, parents: list[str], folders: list[dict])
 
 
 ## rules
+
+
+def filingDispositionSet(
+    mailbox: str,
+    kind: str,
+    identity: str,
+    disposition: str,
+    path: Path | None = None,
+) -> dict:
+    """Record Ignore or Junk for a domain or sender without changing mail."""
+    _mailboxCheck(mailbox)
+    if disposition not in ("ignore", "junk") or kind not in ("domains", "senders"):
+        raise ValueError("Invalid filing disposition or rule kind")
+    key = _domainKey(identity) if kind == "domains" else senderNormalize(identity)
+    if not key or (kind == "senders" and not _senderHost(key)):
+        raise ValueError("Invalid filing sender")
+    return _decisionStore(mailbox, kind, key, dict(disposition=disposition), path)
 
 
 def filingDomainClarify(
@@ -348,6 +368,7 @@ def _decisionBuild(parent: str, child: str, parentProposed: bool) -> dict:
     if type(parentProposed) is not bool:
         raise ValueError("Invalid proposed-parent flag")
     return dict(
+        disposition="file",
         parent=parent,
         child=child,
         canonical=f"{parent}/{child}",
@@ -363,7 +384,7 @@ def _decisionStore(
     entry = _mailboxEntry(data, mailbox)
     entry[kind][key] = decision
     if (
-        decision["parentProposed"]
+        decision.get("parentProposed", False)
         and decision["parent"] not in entry["proposedParents"]
     ):
         entry["proposedParents"].append(decision["parent"])
@@ -372,6 +393,18 @@ def _decisionStore(
 
 
 def _decisionValidate(decision: dict) -> None:
+    if not isinstance(decision, dict):
+        raise ValueError("Invalid filing decision")
+    disposition = decision.get("disposition", "file")
+    if disposition not in ("file", "ignore", "junk"):
+        raise ValueError("Invalid filing disposition")
+    if disposition != "file":
+        if any(
+            key in decision
+            for key in ("parent", "child", "canonical", "parentProposed")
+        ):
+            raise ValueError("Non-file disposition must not contain a folder")
+        return
     if (
         not isinstance(decision, dict)
         or type(decision.get("parentProposed")) is not bool
@@ -729,6 +762,20 @@ def _messagePropose(
         )
         bucket["eligible"].append(dict(message=message, decision=None, source=""))
         return
+    disposition = decision.get("disposition", "file")
+    if disposition != "file":
+        bucket["eligible"].append(
+            dict(message=message, decision=decision, source=source)
+        )
+        record = _proposalBuild(
+            account, message, domain, decision, source, evidence, {}, False
+        )
+        record.pop("canonical")
+        record.pop("destination")
+        record["removalPolicy"] = "none"
+        record["action"] = "leave-inbox" if disposition == "ignore" else "mark-junk"
+        plan["dispositions"].append(record)
+        return
     try:
         observed = _observed(prepared["snapshot"], owner["id"])
         mappings = prepared["history"][owner["id"]][0]
@@ -809,10 +856,11 @@ def _overridesCollect(plan: dict, rules: dict) -> None:
                 dict(
                     mailbox=mailbox,
                     sender=sender,
-                    parent=decision["parent"],
-                    folder=decision["child"],
-                    canonical=decision["canonical"],
-                    parentProposed=decision["parentProposed"],
+                    parent=decision.get("parent", ""),
+                    folder=decision.get("child", ""),
+                    canonical=decision.get("canonical", ""),
+                    parentProposed=decision.get("parentProposed", False),
+                    disposition=decision.get("disposition", "file"),
                 )
             )
 
@@ -849,6 +897,7 @@ def _planEmpty(context: dict, snapshot: dict) -> dict:
         parents={},
         proposedParents={},
         proposals=[],
+        dispositions=[],
         reviews=[],
         excluded=[],
         senderOverrides=[],
@@ -877,8 +926,9 @@ def _proposalBuild(
             seen=True,
         ),
         readState="read",
+        disposition=decision.get("disposition", "file"),
         year=message.get("year"),
-        canonical=decision["canonical"],
+        canonical=decision.get("canonical", ""),
         destination=destination,
         decisionSource=source,
         evidence=evidence,
@@ -1004,6 +1054,7 @@ def _rowsBuild(grouped: dict, rules: dict, prepared: dict, plan: dict) -> None:
                 parent=parent,
                 folder=folder if decision else "",
                 canonical=canonical if decision else "",
+                disposition=decision.get("disposition", "file") if decision else "file",
                 status=filingStatus(decision, parents, folders),
                 decisionSource=source,
                 suggestion=filingChildSuggest(domain, folders),
@@ -1021,7 +1072,10 @@ def _rowDecision(
     decided = [item for item in eligible if item.get("decision")]
     if not eligible or len(decided) != len(eligible):
         return None, ""
-    canonicals = {item["decision"]["canonical"] for item in decided}
+    canonicals = {
+        (item["decision"].get("disposition", "file"), item["decision"].get("canonical"))
+        for item in decided
+    }
     sources = {item["source"] for item in decided}
     if len(canonicals) != 1:
         return None, ""

@@ -66,6 +66,8 @@ a Thunderbird or local folder. The plan status distinguishes:
 | Proposed child | The parent exists and the child folder does not |
 | Proposed parent + child | The parent itself is not in the archive yet |
 | Needs choice | No safe destination has been resolved |
+| Ignore | Leave matching read mail in Inbox |
+| Junk | Record a future junk mark; no folder move |
 
 Archive history is used only when one canonical folder is a strong match for
 that exact sender. A folder-name guess is not sufficient, and the plan keeps
@@ -120,11 +122,12 @@ name, and save a domain rule. **Add parent** records a filing decision only;
 the folder is not created. The new-parent name is asked for only when you add
 a parent.
 
-Two further dispositions are specified and are not folder moves. **Ignore**
-leaves the messages in the Inbox. **Junk** marks them as junk so Thunderbird's
-junk filter can recognise them; mailAgent does not move them to a folder and
-does not create a Thunderbird filter. The current screen does not offer those
-dispositions yet, and this phase still does not change flags or mail.
+Choose **File**, **Ignore**, or **Junk** in the editor and save a domain rule
+or sender override. Ignore and Junk need no folder. Ignore leaves mail in the
+Inbox; Junk records a future mark for Thunderbird's junk filter. Phase 1 only
+records these decisions and status: it changes no flags, folders, or mail.
+The plan's `dispositions` list is separate from its folder-move `proposals`.
+Existing rules without a disposition remain File rules.
 
 The organisation domain is shown in the heading. An editable organisation
 domain appears only when the Public Suffix List does not identify one. Leave
