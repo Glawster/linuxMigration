@@ -641,7 +641,8 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             assert parent.region.y < child.region.y
             assert parent.content_region.height == 1
             assert child.content_region.height == 1
-            assert child.styles.border
+            assert not parent.styles.border
+            assert not child.styles.border
             assert child.value.strip()
             _coloursContrast(child.styles.color, child.styles.background)
             chooser = app.query_one("#filing-parent-options", Select)
