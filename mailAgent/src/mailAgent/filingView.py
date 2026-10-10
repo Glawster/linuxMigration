@@ -14,7 +14,7 @@ from textual.containers import HorizontalGroup
 from textual.coordinate import Coordinate
 from textual.events import DescendantBlur, Mount, Resize
 from textual.widget import Widget
-from textual.widgets import Button, DataTable, Input, Select, Static
+from textual.widgets import DataTable, Input, Select, Static
 from textual.widgets.data_table import ColumnKey
 
 import mailAgent.filing as filing
@@ -36,6 +36,7 @@ class FilingTable(DataTable):
         Binding("i", "ignore", "Ignore"),
         Binding("j", "junk", "Junk"),
         Binding("f", "file", "File"),
+        Binding("s", "sender_override", "Sender override"),
     ]
 
     def action_ignore(self) -> None:
@@ -49,6 +50,12 @@ class FilingTable(DataTable):
     def action_file(self) -> None:
         """Open folder choices; File requires a destination before saving."""
         self._dispositionChoose("file")
+
+    def action_sender_override(self) -> None:
+        """Reveal the exact-sender editor for the selected domain."""
+        view = self.parent
+        if isinstance(view, FilingView) and view._selectedRow() is not None:
+            view.query_one(FilingEditor).senderOverrideStart()
 
     def _dispositionChoose(self, disposition: str) -> None:
         view = self.parent
@@ -122,7 +129,7 @@ class FilingView(Widget):
             if row.get("domainUncertain")
             else (
                 "#filing-parent"
-                if row.get("status") == "Needs choice"
+                if _rowNeedsChoice(row)
                 else "#filing-child"
             )
         )
@@ -294,28 +301,32 @@ class FilingEditor(Widget):
         self._shownChoice = ("", "", "")
 
     def compose(self) -> ComposeResult:
-        """Rows for the choice, with the rare fields hidden until needed."""
+        """Rows for the choice, with exceptional fields hidden until needed."""
         yield Static(
-            "Filing: select a domain",
+            "Selected: choose a domain",
             id="filing-heading",
             classes="heading",
             markup=False,
         )
-        with HorizontalGroup(id="filing-choice-row"):
+        with HorizontalGroup(id="filing-action-row"):
+            yield Static("Action", classes="filing-label filing-lead")
+            yield Static("Choose", id="filing-disposition", classes="filing-value")
+        with HorizontalGroup(id="filing-parent-row"):
             yield Static("Parent", classes="filing-label filing-lead")
             yield Input(
                 placeholder="Choose or type parent",
                 id="filing-parent",
                 compact=True,
-                classes="filing-field",
+                classes="filing-field filing-parent-field",
             )
-            yield Select([], prompt="Choose", id="filing-parent-options", compact=True)
-            yield Static("Folder", classes="filing-label")
+            yield Select([], prompt="▼", id="filing-parent-options", compact=True)
+        with HorizontalGroup(id="filing-folder-row"):
+            yield Static("Folder", classes="filing-label filing-lead")
             yield Input(
                 placeholder="Folder",
                 id="filing-child",
                 compact=True,
-                classes="filing-field",
+                classes="filing-field filing-folder-field",
             )
         with HorizontalGroup(id="filing-domain-row") as domainRow:
             domainRow.display = False
@@ -327,13 +338,7 @@ class FilingEditor(Widget):
                 classes="filing-field",
             )
         with HorizontalGroup(id="filing-status-row"):
-            yield Static(
-                "File · i Ignore · j Junk · f File",
-                id="filing-disposition",
-                classes="filing-label",
-                markup=False,
-            )
-
+            yield Static("Status", classes="filing-label filing-lead")
             yield Static(
                 "",
                 id="filing-row-status",
@@ -349,17 +354,16 @@ class FilingEditor(Widget):
                 compact=True,
                 classes="filing-field",
             )
-        with HorizontalGroup(id="filing-actions"):
-            yield Button(
-                "Sender override",
-                id="filing-save-sender",
-                compact=True,
-                classes="filing-action",
-            )
-        yield Static("", id="filing-status", markup=False)
+        yield Static("", id="filing-status", classes="muted", markup=False)
+        yield Static(
+            "i Ignore   j Junk   f File   s Sender override",
+            id="filing-shortcuts",
+            classes="muted",
+            markup=False,
+        )
 
     def rowShow(self, row: dict | None, plan: dict) -> None:
-        """Show the selected domain. Hide the rare fields again."""
+        """Show the selected domain. Hide exceptional fields again."""
         if not self.query("#filing-parent"):
             return
         self._row = row
@@ -370,17 +374,26 @@ class FilingEditor(Widget):
         status = self.query_one("#filing-row-status", Static)
         status.set_class(bool(row and _rowNeedsAction(row)), "warning")
         status.set_class(bool(row and _rowNeedsAction(row)), "action-needed")
+        self.query_one("#filing-status", Static).update("")
         if not row:
-            heading.update("Filing: select a domain")
+            heading.update("Selected: choose a domain")
+            self._actionShow("Choose")
             status.update("")
             self.query_one("#filing-domain-row").display = False
             self.query_one("#filing-child", Input).value = ""
             self.query_one("#filing-parent", Input).value = ""
+            self._fileFieldsShow(True)
             self._shownChoice = self._choiceValues()
             return
-        self.dispositionSet(row.get("disposition", "file"))
+        action = _rowAction(row)
+        if action == "Choose":
+            self._disposition = "file"
+            self._actionShow("Choose")
+            self._fileFieldsShow(True)
+        else:
+            self.dispositionSet(action.lower())
         heading.update(_headingText(row))
-        status.update(str(row.get("status") or ""))
+        status.update(_rowStatus(row))
         uncertain = bool(row.get("domainUncertain"))
         domainRow = self.query_one("#filing-domain-row")
         domainRow.display = uncertain
@@ -418,11 +431,17 @@ class FilingEditor(Widget):
         if disposition not in ("file", "ignore", "junk"):
             raise ValueError("Invalid filing disposition")
         self._disposition = disposition
-        self.query_one("#filing-disposition", Static).update(
-            f"{disposition.title()} · i Ignore · j Junk · f File"
-        )
-        isFile = disposition == "file"
-        self.query_one("#filing-choice-row").display = isFile
+        self._actionShow(disposition.title())
+        self._fileFieldsShow(disposition == "file")
+
+    def _actionShow(self, action: str) -> None:
+        """Display the selected action separately from destination status."""
+        self.query_one("#filing-disposition", Static).update(action)
+
+    def _fileFieldsShow(self, show: bool) -> None:
+        """Show destination controls only when File is available/selected."""
+        self.query_one("#filing-parent-row").display = show
+        self.query_one("#filing-folder-row").display = show
 
     @on(Select.Changed, "#filing-parent-options")
     def parentChanged(self, event: Select.Changed) -> None:
@@ -434,14 +453,17 @@ class FilingEditor(Widget):
 
     @on(Input.Submitted)
     def fieldSubmitted(self, event: Input.Submitted) -> None:
-        """Commit a destination or organisation-domain edit with Enter."""
+        """Commit a destination, organisation-domain or sender edit with Enter."""
         if event.input.id in ("filing-parent", "filing-child", "filing-domain"):
             event.stop()
             self._ruleSave("domain")
+        elif event.input.id == "filing-sender":
+            event.stop()
+            self._ruleSave("sender")
 
     @on(DescendantBlur)
     def fieldBlurred(self, event: DescendantBlur) -> None:
-        """Commit a completed edit when focus leaves its field."""
+        """Commit a completed destination edit when focus leaves its field."""
         if event.widget.id in ("filing-parent", "filing-child", "filing-domain"):
             self._choiceSave()
 
@@ -458,19 +480,14 @@ class FilingEditor(Widget):
             return
         self._ruleSave("domain")
 
-    @on(Button.Pressed, "#filing-save-sender")
-    def senderSave(self, event: Button.Pressed) -> None:
-        """Reveal the sender field, then save an exact override on the next press."""
-        event.stop()
+    def senderOverrideStart(self) -> None:
+        """Reveal the exact sender field without making a mailbox change."""
         if not self._row:
             self._status("Select a filing domain first.")
             return
         senderRow = self.query_one("#filing-sender-row")
-        if not senderRow.display:
-            senderRow.display = True
-            self.query_one("#filing-sender", Input).focus()
-            return
-        self._ruleSave("sender")
+        senderRow.display = True
+        self.query_one("#filing-sender", Input).focus()
 
     def _ruleSave(self, kind: str) -> None:
         """Persist one domain rule or sender override and refresh the plan."""
@@ -502,21 +519,18 @@ class FilingEditor(Widget):
                     filing.filingPath(),
                 )
                 self._view().planRecompute()
-                self._status(
-                    f"Saved {identity}: {disposition.title()}. Mail was not changed."
-                )
+                self._status(f"Saved: {disposition.title()}")
                 return
             parent, child, proposed = self._choiceRead(row)
-            saved = (
+            if kind == "domain":
                 self._domainStore(row, parent, child, proposed)
-                if kind == "domain"
-                else self._senderStore(row, parent, child, proposed)
-            )
+            else:
+                self._senderStore(row, parent, child, proposed)
             self._view().planRecompute()
         except (OSError, ValueError) as error:
             self._status(str(error))
             return
-        self._status(f"Saved {saved} -> {parent}/{child}. Mail was not changed.")
+        self._status(f"Saved: {parent}/{child}")
 
     def _choiceRead(self, row: dict) -> tuple[str, str, bool]:
         """Read the editable destination, proposing unknown parents."""
@@ -593,7 +607,8 @@ def _columnSpecs() -> tuple[tuple[str, str, int], ...]:
         ("parent", "Parent", 14),
         ("folder", "Folder", 16),
         ("destination", "Destination", 16),
-        ("status", "Status", 22),
+        ("action", "Action", 10),
+        ("status", "Status", 20),
     )
 
 
@@ -604,13 +619,15 @@ def _columnWidths(available: int, padding: int) -> dict[str, int]:
         "inbox": 6,
         "parent": 14,
         "folder": 16,
-        "status": 22,
+        "action": 10,
+        "status": 20,
     }
     floors = {
         "archive": 8,
         "inbox": 3,
         "parent": 8,
         "folder": 8,
+        "action": 6,
         "status": 8,
     }
     domainMin = 12
@@ -621,7 +638,7 @@ def _columnWidths(available: int, padding: int) -> dict[str, int]:
     def used(domain: int, destination: int) -> int:
         return sum(fixed.values()) + domain + destination + pad * columnCount
 
-    for key in ("status", "folder", "parent", "archive", "inbox"):
+    for key in ("status", "folder", "parent", "archive", "action", "inbox"):
         while fixed[key] > floors[key] and used(domainMin, destinationMin) > available:
             fixed[key] -= 1
     leftover = available - used(0, 0)
@@ -643,7 +660,9 @@ def _columnWidths(available: int, padding: int) -> dict[str, int]:
 
 
 def _tableCells(row: dict, destinationWidth: int) -> tuple:
-    """Return one table row, with Destination clipped to its column."""
+    """Return one table row, with Action distinct from destination status."""
+    action = _rowAction(row)
+    status = _rowStatus(row)
     return (
         Text(str(row.get("domain", ""))),
         Text(str(row.get("archive", ""))),
@@ -651,10 +670,8 @@ def _tableCells(row: dict, destinationWidth: int) -> tuple:
         Text(str(row.get("parent", ""))),
         Text(str(row.get("folder", ""))),
         Text(_textClip(str(row.get("canonical", "")), destinationWidth)),
-        Text(
-            str(row.get("status", "")),
-            style="bold #f0c76a" if _rowNeedsAction(row) else "",
-        ),
+        Text(action, style="bold #f0c76a" if action == "Choose" else ""),
+        Text(status),
     )
 
 
@@ -679,11 +696,33 @@ def _actionText(rows: list[dict]) -> str:
     prompts = []
     if choices:
         prompts.append(
-            f"{choices} domains need a choice: select a row, then edit its destination or press i/j"
+            f"{choices} domains need an action · enter a destination to File · i Ignore · j Junk"
         )
     if proposed:
         prompts.append(f"review proposed folders for {proposed} domains")
     return "⚠ ACTION NEEDED: " + "; ".join(prompts) + "." if prompts else ""
+
+
+def _rowAction(row: dict) -> str:
+    """Return the user-facing action independently from destination status."""
+    disposition = str(row.get("disposition") or "").lower()
+    if disposition == "ignore":
+        return "Ignore"
+    if disposition == "junk":
+        return "Junk"
+    if _rowNeedsChoice(row):
+        return "Choose"
+    if row.get("canonical") or (row.get("parent") and row.get("folder")):
+        return "File"
+    return "Choose"
+
+
+def _rowStatus(row: dict) -> str:
+    """Return only destination state; actions live in their own column."""
+    status = str(row.get("status") or "")
+    if status in ("Needs choice", "Ignore", "Junk"):
+        return ""
+    return status
 
 
 def _rowNeedsAction(row: dict) -> bool:
@@ -713,7 +752,7 @@ def _headingText(row: dict) -> str:
     noun = "message" if count == 1 else "messages"
     domain = row.get("domain", "")
     archive = row.get("archive", "")
-    return f"Filing: {domain} · {archive} · {count} {noun}"
+    return f"Selected: {domain} · {archive} · {count} {noun}"
 
 
 def _overrideText(plan: dict) -> str:
