@@ -221,13 +221,19 @@ Mutation primitives should be small and testable. Tests must use fakes/fixtures 
 - full project tests and checks pass before integration.
 
 
-## Initial implementation increment
+## Delivered increments
 
-The first increment covers plan validation and durable execution journaling only.
-It does not connect to the CLI/TUI execution path or introduce mutation primitives.
-See [Execution boundary](../../../documentation/executionBoundary.md) for its
-schema, API contracts, verification requirements and restart policy.
+The first increment delivered pure plan validation and durable execution
+journaling. The next narrow increment adds exact approved IMAP destination
+creation and one explicitly confirmed live-year File action using copy ->
+verify destination -> remove source, with durable partial-outcome reconciliation
+and fake-mailbox interruption tests. It is a core API only; normal CLI/TUI
+workflows remain read-only.
 
-Next implement approved IMAP folder creation and one live-year File primitive
-before extending mutation to local archival and Junk. Keep orchestration and
-TUI presentation separate from the core modules.
+See [Execution boundary](../../../documentation/executionBoundary.md) for API
+contracts, verification requirements, connection ownership and restart policy.
+An uncertain COPY without a verifiable destination blocks rather than copying
+again. No real mailbox has been changed to validate this increment.
+
+Next broaden proven single-message execution to batches, then local archive,
+then Junk. Keep orchestration and TUI presentation separate from core modules.

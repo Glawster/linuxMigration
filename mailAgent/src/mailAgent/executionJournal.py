@@ -297,3 +297,67 @@ def _json(value: dict | list) -> str:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+## copy proof
+
+
+def executionJournalCopyProof(
+    actionId: str, proof: dict | None = None, path: Path | None = None
+) -> dict | None:
+    """Read or durably checkpoint IMAP copy intent and source-removal intent.
+
+    Only hashes and UID boundaries are stored. Copy intent is never cleared:
+    an uncertain COPY must be reconciled, never blindly repeated.
+    """
+    with _database(path or executionJournalPath()) as db:
+        row = _recordGet(db, actionId)
+        db.execute(
+            "CREATE TABLE IF NOT EXISTS copy_proofs (action_id TEXT PRIMARY KEY, payload TEXT NOT NULL)"
+        )
+        prior = db.execute(
+            "SELECT payload FROM copy_proofs WHERE action_id=?", (actionId,)
+        ).fetchone()
+        existing = json.loads(prior[0]) if prior else None
+        if existing is not None:
+            _copyProofValidate(existing)
+        if proof is None:
+            return existing
+        if row["state"] != "pending" or row["started_at"] is None:
+            raise ValueError("Copy checkpoint requires a started action")
+        _copyProofValidate(proof)
+        if existing and (
+            any(existing[key] != proof[key] for key in proof if key != "removing")
+            or (existing["removing"] and not proof["removing"])
+        ):
+            raise ValueError("Copy proof is immutable")
+        db.execute(
+            "INSERT OR REPLACE INTO copy_proofs VALUES (?, ?)", (actionId, _json(proof))
+        )
+        _event(
+            db,
+            actionId,
+            "removal-intent" if proof["removing"] else "copy-intent",
+            None,
+            None,
+        )
+        return proof
+
+
+def _copyProofValidate(proof: dict) -> None:
+    if set(proof) != {"digest", "uidValidity", "uidNext", "removing"}:
+        raise ValueError("Invalid copy proof")
+    if (
+        not isinstance(proof["digest"], str)
+        or len(proof["digest"]) != 64
+        or any(c not in "0123456789abcdef" for c in proof["digest"])
+        or type(proof["removing"]) is not bool
+        or any(
+            not isinstance(proof[key], str)
+            or not proof[key].isascii()
+            or not proof[key].isdigit()
+            or not 0 < int(proof[key]) <= 4294967295
+            for key in ("uidValidity", "uidNext")
+        )
+    ):
+        raise ValueError("Invalid copy proof")

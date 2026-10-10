@@ -63,7 +63,9 @@ Use `mailAgent --confirm` to persist the audit snapshot. JSON is an optional
 machine-readable export and is always written to a file rather than stdout.
 Mailbox operations remain read-only.
 
-The first version never deletes, moves, flags, or sends mail.
+Normal CLI/TUI workflows never delete, move, flag, or send mail. REQ-010 now
+provides a separately invoked, fake-tested core API for one approved IMAP File
+action; see [Execution boundary](documentation/executionBoundary.md).
 
 ## Archive and migration planning
 

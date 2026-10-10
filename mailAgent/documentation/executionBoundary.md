@@ -1,10 +1,10 @@
 # Execution boundary
 
 [REQ-010](../project/requirements/features/010-approved-mailbox-change-execution.md)
-starts with two core modules: `executionPlan` and `executionJournal`. Neither
-imports Textual or IMAP clients. They do not create archive folders, write
-messages, move mail, or change flags. The normal CLI and audit UI do not call
-them. Execution remains disabled.
+uses `executionPlan` and `executionJournal` for validation and durable state,
+and `imapExecution` for one explicitly invoked live-year IMAP File action.
+These modules are independent of Textual. The normal CLI and audit UI remain
+read-only and do not call the mutation primitive.
 
 ## Approval envelope
 
@@ -117,8 +117,8 @@ Completion requires a matching verification result code:
 | Ignore | `ignore-honoured` |
 | Junk | `junk-state-verified` |
 
-These codes record a future primitive's verified result; this increment does
-not verify messages itself. Local-copy verification alone cannot complete the
+These codes record the primitive's verified result. The single-message IMAP
+primitive now verifies message content and source removal itself. Local-copy verification alone cannot complete the
 whole archival action. The future engine must record source-removal outcome
 only after a verified local copy, and preserve intermediate proof before any
 removal. The IMAP primitive must verify both the intended destination message
@@ -128,8 +128,56 @@ The journal retains ordered attempt history, start/finish timestamps, status,
 verification and fixed error codes. Use `executionJournalHistory` to read the
 history. Arbitrary exception messages are not accepted as persisted error text.
 
-## Next increment
+## Single-message IMAP increment
 
-Implement small fake-tested IMAP folder-creation and one live-year File
-primitive, including partial-outcome reconciliation. Local archive writes,
-junk marking, orchestration and the TUI Execute screen remain later steps.
+`imapFileExecute(client, approved, config, currentObserve, actionId,
+confirm=True, path=None)` executes exactly one approved personal live-year File
+action. Confirmation defaults to false. The caller must supply an authenticated
+connection bound to the configured source mailbox, exclusively owned for the
+operation, and a callback that rebuilds the current execution envelope from
+fresh read-only discovery and current filing rules. Approval must come from a
+trusted user approval workflow. There is no CLI/TUI integration yet.
+
+The primitive revalidates the envelope/configuration and immediately probes
+source UIDVALIDITY, exact UID, read state, Date year and deletion state. Full
+message bytes are read with BODY.PEEK and held only in memory. Folder creation
+uses the exact approved wire path; it never infers parents. Existing selectable
+folders succeed; missing folders require separate creation permission.
+
+Before COPY, `executionJournalCopyProof` commits a SHA-256 content digest,
+destination UIDVALIDITY and UIDNEXT boundary. Destination verification searches
+only UIDs at or above that boundary and requires exactly one complete message
+with the same digest. Identical older destination messages are excluded.
+The proof contains no headers or message bodies and is never cleared on retry.
+
+After verifying the destination, the primitive rechecks source identity and
+content, commits removal intent, sets only that UID's Deleted flag, and issues
+UID EXPUNGE for that UID. It verifies source absence and destination content
+again before completion. UIDPLUS is required; there is no global EXPUNGE or
+CLOSE fallback. See [RFC 4315](https://www.rfc-editor.org/rfc/rfc4315.html).
+
+An interrupted COPY is reconciled using the durable UID boundary and content
+proof. A single verified destination copy allows removal to resume without
+COPY. No matching copy, multiple matching copies, changed UIDVALIDITY or
+unread/changed source content blocks the action. An uncertain COPY is never
+sent again, including a crash between committing intent and sending COPY;
+that conservative case requires manual reconciliation. Missing source mail
+can complete only when removal intent was already committed and the destination
+is verified. Completed actions cause no further IMAP calls.
+
+A nonblocking user-only lock beside the journal serializes executor runs using
+the same state path, including reconciliation. All executors for an account
+must share that journal path; the connection must not be shared concurrently.
+The journal schema remains version 1 with an additive copy_proofs table.
+Fixed failure codes and copy/removal checkpoints retain safe audit history.
+
+Tests use fake mailboxes, including crashes after CREATE, COPY, STORE and UID
+EXPUNGE, lost COPY responses, corrupt/ambiguous copies, stale eligibility and
+UIDVALIDITY, unapproved creation and concurrent executor exclusion. No real
+mailbox has been mutated to validate this increment.
+
+## Next increments
+
+Broaden to batches only after this single-action boundary is proven. Then add
+local Thunderbird archive copy/verify/removal, followed by Junk. Approval and
+the explicit TUI Execute screen remain separate integration dependencies.
