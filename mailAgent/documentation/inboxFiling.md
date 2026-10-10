@@ -57,8 +57,8 @@ history is not used to choose a destination for that host.
 Parents are the first level of the local archive only. `Shopping/Amazon/Orders`
 contributes the parent `Shopping`. Deeper names are not extra parents.
 
-`Add parent` records a proposed parent in the filing rules. It does not create
-a Thunderbird or local folder. The plan status distinguishes:
+Typing a new name in Parent records a proposed parent when the edit is committed.
+It does not create a Thunderbird, IMAP or local folder. The plan status distinguishes:
 
 | Status | Meaning |
 | --- | --- |
@@ -85,7 +85,9 @@ The file is mailbox-specific and can store domain rules, exact sender
 overrides, a confirmed organisation domain for a host the suffix list left
 uncertain, proposed parent names and the canonical `Parent/Child` path. It is
 written atomically with user-only permissions. It has a schema version and it
-must not contain passwords, tokens or message content.
+must not contain passwords, tokens or message content. Loading rejects symlinks,
+non-regular files, files owned by another user and group/world permissions.
+An existing rules file must have mode `600`.
 
 Saving a rule is preference data. It still does not change the mailbox.
 
@@ -135,15 +137,23 @@ status but no longer asks for the same decision. The banner clears when no
 decisions remain; navigating to a field alone does not resolve its action.
 
 The selected row is the heading of the editor under the table, for example
-`Filing: dpd.co.uk · kathyMail · 2 messages`. Choose a parent, edit the folder
-name, and save a domain rule. **Add parent** records a filing decision only;
-the folder is not created. The new-parent name is asked for only when you add
-a parent.
+`Filing: dpd.co.uk · kathyMail · 2 messages`. Parent accepts typed names and
+has a dropdown for discovered and proposed parents. Edit Parent, Folder or an
+uncertain organisation domain; Enter or leaving the field saves a complete
+rule. Choosing a parent from the dropdown also saves. An unfamiliar parent is
+recorded as a proposal. Invalid or incomplete entries show an error and retain
+the previous decision. Selecting a row and resizing never save a rule.
 
-Choose **File**, **Ignore**, or **Junk** in the editor and save a domain rule
-or sender override. Ignore and Junk need no folder. Ignore leaves mail in the
-Inbox; Junk records a future mark for Thunderbird's junk filter. Phase 1 only
-records these decisions and status: it changes no flags, folders, or mail.
+With the table focused, press **i** to save Ignore, **j** to save Junk, or **f**
+to choose File and focus Parent. Ignore and Junk need no folder. These keys
+remain ordinary text while editing fields. To choose a disposition for an
+exact sender override, use **Alt+i**, **Alt+j** or **Alt+f** in the editor,
+then save with **Sender override**. There is no disposition dropdown or
+Add parent / Save domain button.
+
+Ignore leaves mail in Inbox; Junk records a future mark for Thunderbird's
+junk filter. Phase 1 records these decisions and status: it changes no flags,
+folders or mail.
 The plan's `dispositions` list is separate from its folder-move `proposals`.
 Existing rules without a disposition remain File rules.
 

@@ -98,7 +98,12 @@ async def _planRefresh(
 
 def _planWidgetsUpdate(app, plan: dict) -> None:
     """Refresh existing Plan widgets without replacing tabs or filter controls."""
-    app.query_one("#plan-action", Static).update(_planActionText(plan))
+    guidance = app.query_one("#plan-action", Static)
+    text = _planActionText(plan)
+    guidance.update(text)
+    needed = text.startswith("⚠")
+    guidance.set_class(needed, "warning")
+    guidance.set_class(needed, "action-needed")
     app.query_one("#plan-summary", Static).update("\n".join(planSummaryLines(plan)))
 
     proposalFilter = app.query_one("#proposal-filter", Input).value

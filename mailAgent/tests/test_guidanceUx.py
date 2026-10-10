@@ -71,7 +71,7 @@ def testActionNeededGuidanceUsesWarningColourAndExplainsExecution():
         dict(domain="shop.example", status="Proposed child"),
     ]
     text = _actionText(rows)
-    assert "select a row, then Save domain" in text
+    assert "edit its destination or press i/j" in text
     assert "review proposed folders" in text
     assert _actionText([dict(status="Existing")]) == ""
     assert _tableCells(rows[0], 16)[-1].style == "bold #f0c76a"

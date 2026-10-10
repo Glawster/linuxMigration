@@ -86,6 +86,11 @@ FilingEditor .filing-field {
     margin: 0 1 0 0;
 }
 
+FilingEditor #filing-parent-options {
+    width: 16;
+    margin: 0 1 0 0;
+}
+
 FilingEditor .filing-action {
     width: 20;
     min-width: 20;

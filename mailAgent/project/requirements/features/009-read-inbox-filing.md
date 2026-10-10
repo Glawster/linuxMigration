@@ -320,6 +320,12 @@ legacy Thunderbird filters into mailAgent filing rules or identify conflicts.
 
 ### Phase 1 - filing policy and review
 
+Completed and reviewed on 2026-10-10. Editing Parent or Folder saves the
+domain decision on Enter or focus change; new parents are proposed automatically.
+The parent dropdown remains available. Table shortcuts i/j save Ignore/Junk;
+f opens File destination editing. The disposition dropdown and Add parent /
+Save domain buttons have been removed.
+
 - discover parents from `myMail` and `kathyMail`;
 - group Inbox senders by domain;
 - create/edit durable sender/domain filing mappings;
@@ -329,6 +335,11 @@ legacy Thunderbird filters into mailAgent filing rules or identify conflicts.
 - record Ignore and Junk without changing flags or mail.
 
 ### Phase 2 - safe execution
+
+In progress under REQ-010. The next increment remains one approved live-year
+File action, creating its approved IMAP destination if necessary, then
+copy -> verify destination -> remove source with retry-safe checkpoints.
+Batches, local archive and Junk execution follow only after that is proven.
 
 - identify read Inbox messages eligible for filing;
 - create approved destination folders where required;

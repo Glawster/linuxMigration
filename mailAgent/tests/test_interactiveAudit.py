@@ -77,7 +77,9 @@ def _snapshotBuild(plan: dict) -> dict:
 
 
 def testPlanRefreshKeepsTuiMountedAndUpdatesWidgets():
-    snapshot = _snapshotBuild(_planBuild("2026-10-06T09:00:00+00:00", "old@example.com"))
+    snapshot = _snapshotBuild(
+        _planBuild("2026-10-06T09:00:00+00:00", "old@example.com")
+    )
     calls = []
 
     def refreshPlan():
@@ -116,7 +118,9 @@ def testPlanRefreshKeepsTuiMountedAndUpdatesWidgets():
 
 
 def testPlanRefreshFailureKeepsExistingPlanVisible():
-    snapshot = _snapshotBuild(_planBuild("2026-10-06T09:00:00+00:00", "old@example.com"))
+    snapshot = _snapshotBuild(
+        _planBuild("2026-10-06T09:00:00+00:00", "old@example.com")
+    )
 
     def refreshPlan():
         raise ValueError("scan unavailable")
@@ -141,3 +145,27 @@ def testPlanRefreshFailureKeepsExistingPlanVisible():
             )
 
     asyncio.run(uiInspect())
+
+
+def testPlanRefreshClearsAndRestoresActionHighlight():
+    from mailAgent.interactiveAudit import _planWidgetsUpdate
+
+    plan = _planBuild("2026-10-10", "sender@example.com")
+    plan["reviewQueue"] = [dict(mailbox="andy", reason="Choose destination")]
+    snapshot = _snapshotBuild(plan)
+
+    async def inspect():
+        app = auditAppBuild(snapshot)
+        async with app.run_test(size=(120, 40)) as pilot:
+            guidance = app.query_one("#plan-action", Static)
+            assert guidance.has_class("warning", "action-needed")
+            clear = _planBuild("2026-10-10", "sender@example.com")
+            _planWidgetsUpdate(app, clear)
+            await pilot.pause()
+            assert not guidance.has_class("warning")
+            assert not guidance.has_class("action-needed")
+            _planWidgetsUpdate(app, plan)
+            await pilot.pause()
+            assert guidance.has_class("warning", "action-needed")
+
+    asyncio.run(inspect())

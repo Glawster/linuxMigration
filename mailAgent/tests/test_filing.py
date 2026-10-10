@@ -331,6 +331,7 @@ def testOlderProposedMailKeepsSourceUntilVerified(world, tmp_path):
 def testFilingRulesRejectSecretsAndBadSchema(tmp_path):
     path = tmp_path / "filing-rules.json"
     path.write_text(json.dumps({"schemaVersion": 2, "mailboxes": {}}))
+    path.chmod(0o600)
     with pytest.raises(ValueError):
         filingRulesLoad(path)
     path.write_text(
@@ -600,14 +601,9 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             assert app.query_one("#filing-summary", Static).has_class("warning")
             view = app.query_one(FilingView)
             editor = app.query_one(FilingEditor)
-            actions = [
-                app.query_one("#filing-add-parent", Button),
-                app.query_one("#filing-save-domain", Button),
-                app.query_one("#filing-save-sender", Button),
-            ]
-            assert all("filing-action" in button.classes for button in actions)
-            assert len({button.size.width for button in actions}) == 1
-            assert len({button.size.height for button in actions}) == 1
+            actions = [app.query_one("#filing-save-sender", Button)]
+            assert not app.query("#filing-add-parent")
+            assert not app.query("#filing-save-domain")
             assert all(button.region.bottom <= app.size.height for button in actions)
             assert table.size.height > editor.size.height
             assert table.size.height * 10 >= view.size.height * 6
@@ -641,7 +637,7 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
                 app.query_one("#filing-row-status", Static).render()
             )
             assert app.query_one("#filing-sender-row").display is False
-            parent = app.query_one("#filing-parent", Select)
+            parent = app.query_one("#filing-parent", Input)
             child = app.query_one("#filing-child", Input)
             assert parent.region.y == child.region.y
             assert parent.content_region.height == 1
@@ -649,8 +645,9 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             assert child.styles.border
             assert child.value.strip()
             _coloursContrast(child.styles.color, child.styles.background)
-            label = parent.query_one("#label", Static)
-            current = parent.query_one("SelectCurrent")
+            chooser = app.query_one("#filing-parent-options", Select)
+            label = chooser.query_one("#label", Static)
+            current = chooser.query_one("SelectCurrent")
             _coloursContrast(label.styles.color, current.styles.background)
             assert str(label.render()).strip()
             for button in actions:
@@ -659,8 +656,8 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
                 assert str(button.label).strip()
                 _coloursContrast(button.styles.color, button.styles.background)
             painted = _screenText(app)
-            assert "Add parent" in painted
-            assert "Save domain" in painted
+            assert "Add parent" not in painted
+            assert "Save domain" not in painted
             assert "Sender override" in painted
             assert child.value in painted
             assert "▼" in painted
@@ -671,29 +668,14 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             assert app.query_one("#filing-sender-row").display is True
             assert all(button.region.bottom <= app.size.height for button in actions)
 
-            app.query_one("#filing-add-parent", Button).focus()
+            parent.focus()
+            parent.value = "Medical"
+            child.value = "NHS"
             await pilot.press("enter")
             await pilot.pause()
-            name = app.query_one("#filing-parent-name", Input)
-            assert app.query_one("#filing-parent-name-row").display is True
-            assert name.region.x == parent.region.x
-            assert name.content_region.height == 1
-            assert name.styles.border
-            name.value = "Medical"
-            # Enter ignores a button while its previous press animation is active.
-            await pilot.wait_for_scheduled_animations()
-            app.query_one("#filing-add-parent", Button).focus()
-            await pilot.press("enter")
-            await pilot.pause()
-            assert "No folder was created" in str(
+            assert "Mail was not changed" in str(
                 app.query_one("#filing-status", Static).render()
             )
-            parent = app.query_one("#filing-parent", Select)
-            parent.value = "Medical"
-            app.query_one("#filing-child", Input).value = "NHS"
-            app.query_one("#filing-save-domain", Button).focus()
-            await pilot.press("enter")
-            await pilot.pause()
             savedRow = next(row for row in view.rows if row["domain"] == "nhs.uk")
             from mailAgent.filingView import _rowNeedsAction, _tableCells
 
@@ -897,6 +879,7 @@ def testInvalidDispositionsRejected(tmp_path, decision):
             }
         )
     )
+    path.chmod(0o600)
     with pytest.raises(ValueError):
         filingRulesLoad(path)
 
@@ -904,7 +887,7 @@ def testInvalidDispositionsRejected(tmp_path, decision):
 @pytest.mark.parametrize("disposition", ["ignore", "junk"])
 def testEditorSavesDispositionWithoutFolder(world, tmp_path, monkeypatch, disposition):
     from mailAgent.auditUi import auditAppBuild
-    from textual.widgets import Button, DataTable, Select, TabbedContent
+    from textual.widgets import DataTable, Static, TabbedContent
 
     path = tmp_path / "rules.json"
     monkeypatch.setattr("mailAgent.filing.filingPath", lambda: path)
@@ -925,15 +908,16 @@ def testEditorSavesDispositionWithoutFolder(world, tmp_path, monkeypatch, dispos
             )
             table.move_cursor(row=index)
             await pilot.pause()
-            app.query_one("#filing-disposition", Select).value = disposition
+            table.focus()
+            await pilot.press("i" if disposition == "ignore" else "j")
             await pilot.pause()
             assert not app.query_one("#filing-choice-row").display
             await pilot.resize_terminal(110, 42)
             await pilot.pause()
-            assert app.query_one("#filing-disposition", Select).value == disposition
+            assert disposition.title() in str(
+                app.query_one("#filing-disposition", Static).render()
+            )
             assert table.virtual_size.width <= table.scrollable_content_region.width
-            app.query_one("#filing-save-domain", Button).press()
-            await pilot.pause()
             assert filingRulesLoad(path)["mailboxes"]["andy"]["domains"][
                 "amazon.co.uk"
             ] == {"disposition": disposition}
@@ -959,3 +943,171 @@ def testSenderDispositionWinsOverFileDomain(world, tmp_path, disposition):
         _proposal(plan["proposals"], "andy", "reused-amazon")["disposition"] == "file"
     )
     assert not any(item["source"]["uid"] == "live-amazon" for item in plan["proposals"])
+
+
+def testRulesRejectSymlinksAndNonRegularFiles(tmp_path):
+    import os
+
+    target = tmp_path / "target.json"
+    target.write_text(json.dumps(dict(schemaVersion=1, mailboxes={})))
+    target.chmod(0o600)
+    link = tmp_path / "rules.json"
+    link.symlink_to(target)
+    for destination in (target, tmp_path / "missing.json"):
+        link.unlink()
+        link.symlink_to(destination)
+        with pytest.raises(ValueError, match="symlink"):
+            filingRulesLoad(link)
+        with pytest.raises(ValueError, match="symlink"):
+            filingParentAdd("andy", "Medical", link)
+        assert link.is_symlink()
+    assert json.loads(target.read_text())["mailboxes"] == {}
+    directory = tmp_path / "directory"
+    directory.mkdir()
+    fifo = tmp_path / "pipe"
+    os.mkfifo(fifo)
+    for path in (directory, fifo):
+        with pytest.raises(ValueError, match="regular"):
+            filingRulesLoad(path)
+
+
+def testRulesRequireUserOnlyPermissions(tmp_path):
+    path = tmp_path / "rules.json"
+    path.write_text(json.dumps(dict(schemaVersion=1, mailboxes={})))
+    path.chmod(0o644)
+    with pytest.raises(ValueError, match="chmod 600"):
+        filingRulesLoad(path)
+    path.chmod(0o600)
+    assert filingRulesLoad(path)["mailboxes"] == {}
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        dict(schemaVersion=True, mailboxes={}),
+        dict(
+            schemaVersion=1,
+            mailboxes=dict(
+                andy=dict(senders={"not-an-address": dict(disposition="ignore")})
+            ),
+        ),
+    ],
+)
+def testRulesRejectBooleanSchemaAndInvalidSender(tmp_path, payload):
+    path = tmp_path / "rules.json"
+    path.write_text(json.dumps(payload))
+    path.chmod(0o600)
+    with pytest.raises(ValueError):
+        filingRulesLoad(path)
+
+
+def testInterruptedRuleWritePreservesPriorDecisionAndCleansTemporary(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "rules.json"
+    filingDomainSet("andy", "amazon.co.uk", "Shopping", "Amazon", False, path)
+    before = path.read_bytes()
+
+    def fail(descriptor):
+        raise OSError("simulated sync failure")
+
+    monkeypatch.setattr("mailAgent.filing.os.fsync", fail)
+    with pytest.raises(OSError):
+        filingDomainSet("andy", "amazon.co.uk", "Finance", "Amazon", False, path)
+    assert path.read_bytes() == before
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def testDestinationEditsSaveOnCommitAndKeepTypingLocal(world, tmp_path, monkeypatch):
+    from mailAgent.auditUi import auditAppBuild
+    from mailAgent.filingView import FilingEditor
+    from textual.widgets import Button, DataTable, Input, Select, Static, TabbedContent
+
+    path = tmp_path / "rules.json"
+    monkeypatch.setattr("mailAgent.filing.filingPath", lambda: path)
+    snapshot = _snapshot(world)
+    snapshot["filingContext"] = filingContextBuild(world["config"])
+    snapshot["filingPlan"] = filingPlanBuild(snapshot["filingContext"], snapshot)
+    before = _tree(world["andy"])
+
+    async def inspect():
+        app = auditAppBuild(snapshot)
+        async with app.run_test(size=(140, 42)) as pilot:
+            app.query_one(TabbedContent).active = "inboxFiling"
+            await pilot.pause()
+            table = app.query_one("#filing-table", DataTable)
+            index = next(
+                i
+                for i, row in enumerate(snapshot["filingPlan"]["rows"])
+                if row["mailbox"] == "andy" and row["domain"] == "amazon.co.uk"
+            )
+            table.move_cursor(row=index)
+            await pilot.pause()
+            await pilot.resize_terminal(110, 42)
+            await pilot.pause()
+            assert not path.exists(), "selection and resize must not save rules"
+            parent = app.query_one("#filing-parent", Input)
+            child = app.query_one("#filing-child", Input)
+            parent.focus()
+            parent.value = "Medical"
+            await pilot.press("enter")
+            await pilot.pause()
+
+            def decision():
+                return filingRulesLoad(path)["mailboxes"]["andy"]["domains"][
+                    "amazon.co.uk"
+                ]
+
+            assert decision()["parent"] == "Medical"
+            assert not app.query_one("#filing-row-status", Static).has_class("warning")
+            child.focus()
+            child.value = ""
+            await pilot.press("i", "j", "f")
+            await pilot.pause()
+            assert child.value == "ijf"
+            assert decision()["child"] != "ijf", "do not save each keystroke"
+            parent.focus()
+            await pilot.pause()
+            assert decision()["canonical"] == "Medical/ijf"
+            child.focus()
+            child.value = "../unsafe"
+            await pilot.press("enter")
+            await pilot.pause()
+            assert decision()["canonical"] == "Medical/ijf"
+            child.value = "Amazon"
+            await pilot.press("enter")
+            await pilot.pause()
+            chooser = app.query_one("#filing-parent-options", Select)
+            chooser.value = "Shopping"
+            await pilot.pause()
+            assert parent.value == "Shopping"
+            assert decision()["canonical"] == "Shopping/Amazon"
+            table.focus()
+            await pilot.press("j")
+            await pilot.pause()
+            assert decision() == {"disposition": "junk"}
+            await pilot.press("f")
+            await pilot.pause()
+            assert app.focused.id == "filing-parent"
+            assert app.query_one(FilingEditor)._disposition == "file"
+            parent.value = "Shopping"
+            child.value = "Amazon"
+            await pilot.press("enter")
+            await pilot.pause()
+            assert decision()["disposition"] == "file"
+            button = app.query_one("#filing-save-sender", Button)
+            button.press()
+            await pilot.pause()
+            sender = app.query_one("#filing-sender", Input)
+            sender.value = "orders@amazon.co.uk"
+            sender.focus()
+            await pilot.press("alt+j")
+            await pilot.pause()
+            button.press()
+            await pilot.pause()
+            rules = filingRulesLoad(path)["mailboxes"]["andy"]
+            assert rules["senders"]["orders@amazon.co.uk"] == {"disposition": "junk"}
+            assert rules["domains"]["amazon.co.uk"]["disposition"] == "file"
+
+    asyncio.run(inspect())
+    assert _tree(world["andy"]) == before
