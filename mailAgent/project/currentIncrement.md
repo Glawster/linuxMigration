@@ -11,6 +11,10 @@ Active requirement: [REQ-010](requirements/features/010-approved-mailbox-change-
 - Durable copy/removal intent and conservative restart reconciliation without
   duplicate COPY, with executor exclusion for concurrent runs.
 - Fake-mailbox tests for interruptions, failures and stale/unapproved actions.
+- Moving Mail review now separates Action from destination Status, uses a compact
+  selected-domain editor, keeps Parent and Folder on separate rows, and exposes
+  `i` Ignore, `j` Junk, `f` File and `s` Sender override shortcuts without an
+  action dropdown.
 
 See [Execution boundary](../documentation/executionBoundary.md) for the API,
 connection ownership, fresh-observation contract and uncertain-copy policy.
