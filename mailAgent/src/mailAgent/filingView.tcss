@@ -55,13 +55,13 @@ FilingView #filing-empty {
 
 FilingEditor {
     height: auto;
-    max-height: 32;
+    max-height: 16;
     layout: vertical;
     padding: 0;
 }
 
 FilingEditor HorizontalGroup {
-    height: auto;
+    height: 1;
     margin: 0;
     padding: 0;
     align: left middle;
@@ -69,6 +69,7 @@ FilingEditor HorizontalGroup {
 
 FilingEditor .filing-label {
     width: auto;
+    height: 1;
     padding: 0 1 0 0;
 }
 
@@ -78,12 +79,29 @@ FilingEditor .filing-lead {
 
 FilingEditor .filing-value {
     width: 1fr;
+    height: 1;
+}
+
+/* Moving Mail is intentionally denser than the shared form default. */
+FilingEditor Input,
+FilingEditor Select {
+    height: 1;
+    min-height: 1;
+    border: none;
+    padding: 0;
+    margin: 0 1 0 0;
+}
+
+FilingEditor SelectCurrent {
+    height: 1;
+    min-height: 1;
+    border: none;
+    padding: 0;
 }
 
 FilingEditor .filing-field {
     width: 1fr;
     max-width: 54;
-    margin: 0 1 0 0;
 }
 
 FilingEditor .filing-parent-field {
@@ -96,11 +114,16 @@ FilingEditor .filing-folder-field {
 
 FilingEditor #filing-parent-options {
     width: 12;
-    margin: 0 1 0 0;
+}
+
+/* Shortcut help is already shown in the Footer; do not duplicate it here. */
+FilingEditor #filing-shortcuts {
+    display: none;
 }
 
 FilingEditor #filing-status,
-FilingEditor #filing-shortcuts {
+FilingEditor #filing-row-status,
+FilingEditor #filing-heading {
     height: 1;
     margin: 0;
     padding: 0;
