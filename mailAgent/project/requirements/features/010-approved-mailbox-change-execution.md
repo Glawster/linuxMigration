@@ -22,6 +22,42 @@ Supported actions are:
 
 Shared and support mailboxes remain outside this execution requirement unless a later requirement explicitly adds mutation policy for them.
 
+## Authoritative local archive topology
+
+There is one authoritative local mail archive store for the personal mailboxes. It is hosted on the local PC where mailAgent manages the Thunderbird Local Folders archive.
+
+For the current installation:
+
+- Andy's authoritative local archive is `myMail`;
+- Kathy's authoritative local archive is `kathyMail`.
+
+These are not per-device archives and must not be treated as data that is replicated automatically to every mail client.
+
+IMAP is the shared/live mail view. Its folder structure is visible to any device connected to the corresponding mailbox. For example, Kathy can use her MacBook to access her account and see the IMAP folder structure, but that MacBook does not have access to the authoritative local `kathyMail` archive hosted on the local PC.
+
+The practical visibility model is therefore:
+
+```text
+current/live mail
+    -> IMAP
+    -> visible to all connected clients
+
+older/archive mail
+    -> myMail or kathyMail on the authoritative local PC
+    -> no longer visible to other IMAP-only clients once removed from the server
+```
+
+Archiving old mail locally is therefore an intentional change in availability. For Kathy, mail moved from IMAP into `kathyMail` remains available from the machine hosting that local archive, but is no longer expected to be visible from her MacBook or another IMAP-only client.
+
+Execution must not:
+
+- assume that `myMail` or `kathyMail` exists on another client machine;
+- create a second local archive copy merely because the same mailbox is used from another device;
+- attempt to synchronise the local archive to Kathy's MacBook or any other client;
+- treat absence of the local archive on another device as an error.
+
+The canonical local archive remains the single destination for pre-live-year personal mail unless a later requirement explicitly introduces replication or remote archive access.
+
 ## Safety boundary
 
 Mutation remains disabled unless every action is explicitly executable in the stored plan.
@@ -76,6 +112,8 @@ A retry must not create a duplicate destination message.
 ### Local archive filing
 
 For an approved old-mail File action, removal from IMAP must follow copy -> verify -> remove.
+
+The destination is the single authoritative local archive for that personal mailbox (`myMail` for Andy or `kathyMail` for Kathy) on the local PC. No second per-device local archive is created for other clients.
 
 1. copy the complete source message into the canonical local Thunderbird archive;
 2. verify that the local copy is readable and corresponds to the intended source message;
@@ -212,6 +250,10 @@ Mutation primitives should be small and testable. Tests must use fakes/fixtures 
 - approved IMAP folder creation is exact and idempotent;
 - live-year File actions reach the approved IMAP destination and are verified;
 - old-mail File actions use copy -> verify -> remove and preserve the source on verification failure;
+- `myMail` and `kathyMail` are treated as the single authoritative local archives on the local PC rather than per-device stores;
+- IMAP remains the shared/live view available to other connected devices;
+- archiving old mail locally may intentionally make it unavailable to IMAP-only clients such as Kathy's MacBook;
+- execution does not create or synchronise additional local archive copies on other client devices;
 - Ignore performs no mailbox mutation and can be completed idempotently;
 - Junk applies and verifies the account's supported junk state without a direct mailAgent move;
 - completed actions are not duplicated on retry;
