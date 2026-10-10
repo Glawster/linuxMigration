@@ -151,6 +151,8 @@ def _snapshotBuild(args: argparse.Namespace, config: dict, logger: Any) -> dict:
     }
     if config["general"].get("credentialsFile"):
         options["credentialsFile"] = Path(config["general"]["credentialsFile"])
+    if config["general"].get("credentialsSessionCache"):
+        options["credentialsSessionCache"] = True
     snapshot = discoveryRun(
         config["mailboxes"], _thunderbirdRoot(args.thunderbird), **options
     )

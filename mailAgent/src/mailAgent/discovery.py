@@ -24,6 +24,7 @@ def discoveryRun(
     includeMessages: bool = False,
     includeInbox: bool = False,
     credentialsFile: Path | None = None,
+    credentialsSessionCache: bool = False,
 ) -> dict:
     """Audit configured accounts independently with TLS authentication."""
     logger = getLogger()
@@ -40,7 +41,11 @@ def discoveryRun(
     try:
         if any("credentialId" in account for account in accounts):
             try:
-                credentials = credentialsLoad(credentialsFile)
+                credentials = (
+                    credentialsLoad(credentialsFile, sessionCache=True)
+                    if credentialsSessionCache
+                    else credentialsLoad(credentialsFile)
+                )
             except CredentialError as error:
                 credentialIssue = str(error)
         for account in accounts:

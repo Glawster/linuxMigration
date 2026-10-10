@@ -16,6 +16,8 @@ def configValidate(config: dict, base: Path) -> dict:
     general = result.setdefault("general", {})
     if not isinstance(general, dict):
         raise ValueError("general must be an object")
+    if type(general.setdefault("credentialsSessionCache", False)) is not bool:
+        raise ValueError("credentialsSessionCache must be true or false")
     year = general.setdefault("liveYear", 2026)
     if type(year) is not int or not 1900 <= year <= 9999:
         raise ValueError("liveYear must be a year between 1900 and 9999")

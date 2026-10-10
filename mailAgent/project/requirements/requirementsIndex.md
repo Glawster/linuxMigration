@@ -1,6 +1,9 @@
 # Requirements
 
-Next available number: 011
+New requirement records use the stable project prefix `MA`. Existing numeric
+records retain their allocated paths.
+
+Next available number: 012
 
 ## Requirement index
 
@@ -14,3 +17,4 @@ Next available number: 011
 | 008 | [Plan resolution and approval](features/008-plan-resolution-approval.md) | Record review decisions before any mailbox mutation. Later increments remain. | InProgress | Not recorded | Not required |
 | 009 | [Read Inbox filing](features/009-read-inbox-filing.md) | Review where read Inbox mail belongs. Ignore leaves it in the Inbox. Junk marks it for Thunderbird's junk filter. | InProgress | Not recorded | Not required |
 | 010 | [Approved mailbox change execution](features/010-approved-mailbox-change-execution.md) | Execute approved personal-mail changes with revalidation, verification, journaling and retry safety. | InProgress | Not recorded | Not required |
+| MA-011 | [Login-session mailbox password cache](features/MA-011-sessionCredentialCache.md) | Reuse mailbox passwords across launches, until login-session logout or shutdown. | Completed | Not recorded | Not required |

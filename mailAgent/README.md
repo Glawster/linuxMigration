@@ -24,6 +24,7 @@ The example configuration declares five independent mailboxes: Andy and Kathy
 - [Discovery phase and usage](documentation/discoveryPhase.md)
 - [Mailbox roles and migration planning](documentation/mailboxModel.md)
 - [Encrypted credentials setup](documentation/credentials.md)
+- [MA-011 Login-session password cache](project/requirements/features/MA-011-sessionCredentialCache.md)
 - [REQ-003](project/requirements/features/003-mailbox-discovery.md)
 - [REQ-004](project/requirements/features/004-archive-taxonomy-migration.md)
 - [REQ-005](project/requirements/features/005-encrypted-credentials-store.md)
