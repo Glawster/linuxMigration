@@ -564,7 +564,6 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
     from mailAgent.auditUi import auditAppBuild
     from mailAgent.filingView import FilingEditor, FilingView
     from textual.widgets import (
-        Button,
         DataTable,
         Input,
         Select,
@@ -601,10 +600,9 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             assert app.query_one("#filing-summary", Static).has_class("warning")
             view = app.query_one(FilingView)
             editor = app.query_one(FilingEditor)
-            actions = [app.query_one("#filing-save-sender", Button)]
+            assert not app.query("#filing-save-sender")
             assert not app.query("#filing-add-parent")
             assert not app.query("#filing-save-domain")
-            assert all(button.region.bottom <= app.size.height for button in actions)
             assert table.size.height > editor.size.height
             assert table.size.height * 10 >= view.size.height * 6
             assert 0 < table.virtual_size.width <= table.scrollable_content_region.width
@@ -650,23 +648,17 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             current = chooser.query_one("SelectCurrent")
             _coloursContrast(label.styles.color, current.styles.background)
             assert str(label.render()).strip()
-            for button in actions:
-                assert button.content_region.height == 1
-                assert button.styles.border
-                assert str(button.label).strip()
-                _coloursContrast(button.styles.color, button.styles.background)
             painted = _screenText(app)
             assert "Add parent" not in painted
             assert "Save domain" not in painted
-            assert "Sender override" in painted
+            assert "Sender override" not in painted
             assert child.value in painted
             assert "▼" in painted
 
-            app.query_one("#filing-save-sender", Button).focus()
-            await pilot.press("enter")
+            table.focus()
+            await pilot.press("s")
             await pilot.pause()
             assert app.query_one("#filing-sender-row").display is True
-            assert all(button.region.bottom <= app.size.height for button in actions)
 
             parent.focus()
             parent.value = "Medical"
@@ -1021,7 +1013,7 @@ def testInterruptedRuleWritePreservesPriorDecisionAndCleansTemporary(
 def testDestinationEditsSaveOnCommitAndKeepTypingLocal(world, tmp_path, monkeypatch):
     from mailAgent.auditUi import auditAppBuild
     from mailAgent.filingView import FilingEditor
-    from textual.widgets import Button, DataTable, Input, Select, Static, TabbedContent
+    from textual.widgets import DataTable, Input, Select, Static, TabbedContent
 
     path = tmp_path / "rules.json"
     monkeypatch.setattr("mailAgent.filing.filingPath", lambda: path)
@@ -1095,15 +1087,15 @@ def testDestinationEditsSaveOnCommitAndKeepTypingLocal(world, tmp_path, monkeypa
             await pilot.press("enter")
             await pilot.pause()
             assert decision()["disposition"] == "file"
-            button = app.query_one("#filing-save-sender", Button)
-            button.press()
+            table.focus()
+            await pilot.press("s")
             await pilot.pause()
             sender = app.query_one("#filing-sender", Input)
             sender.value = "orders@amazon.co.uk"
             sender.focus()
             await pilot.press("alt+j")
             await pilot.pause()
-            button.press()
+            await pilot.press("enter")
             await pilot.pause()
             rules = filingRulesLoad(path)["mailboxes"]["andy"]
             assert rules["senders"]["orders@amazon.co.uk"] == {"disposition": "junk"}

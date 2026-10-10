@@ -148,8 +148,9 @@ With the table focused, press **i** to save Ignore, **j** to save Junk, or **f**
 to choose File and focus Parent. Ignore and Junk need no folder. These keys
 remain ordinary text while editing fields. To choose a disposition for an
 exact sender override, use **Alt+i**, **Alt+j** or **Alt+f** in the editor,
-then save with **Sender override**. There is no disposition dropdown or
-Add parent / Save domain button.
+then press Enter in Sender to save. Press **s** with the table focused (or
+**Alt+s** in the editor) to reveal the Sender field. There is no disposition dropdown or
+Add parent, Save domain or Sender override button.
 
 Ignore leaves mail in Inbox; Junk records a future mark for Thunderbird's
 junk filter. Phase 1 records these decisions and status: it changes no flags,

@@ -17,7 +17,9 @@ The integration adds editable Parent with a retained dropdown, automatic domain
 saving on Enter/focus change, and proposal of unfamiliar parents. Add parent,
 Save domain and disposition dropdown controls are removed. Focused-table i/j
 save Ignore/Junk and f opens destination editing. Input typing remains local;
-Alt+i/j/f allows an exact sender disposition before saving its override.
+The Sender override button is also removed: s in the table or Alt+s in the
+editor reveals Sender; Enter saves the exact sender rule. Alt+i/j/f chooses
+its disposition.
 
 Focused UI checks cover selection/resize without writes, Enter and blur saves,
 invalid-edit preservation, dropdown choices, new parent proposals, Junk-to-File

@@ -14,7 +14,7 @@ from textual.containers import HorizontalGroup
 from textual.coordinate import Coordinate
 from textual.events import DescendantBlur, Mount, Resize
 from textual.widget import Widget
-from textual.widgets import Button, DataTable, Input, Select, Static
+from textual.widgets import DataTable, Input, Select, Static
 from textual.widgets.data_table import ColumnKey
 
 import mailAgent.filing as filing
@@ -36,6 +36,7 @@ class FilingTable(DataTable):
         Binding("i", "ignore", "Ignore"),
         Binding("j", "junk", "Junk"),
         Binding("f", "file", "File"),
+        Binding("s", "sender_edit", "Sender"),
     ]
 
     def action_ignore(self) -> None:
@@ -49,6 +50,11 @@ class FilingTable(DataTable):
     def action_file(self) -> None:
         """Open folder choices; File requires a destination before saving."""
         self._dispositionChoose("file")
+
+    def action_sender_edit(self) -> None:
+        """Reveal exact sender editing for the selected domain."""
+        if isinstance(self.parent, FilingView):
+            self.parent.query_one(FilingEditor).action_sender_edit()
 
     def _dispositionChoose(self, disposition: str) -> None:
         view = self.parent
@@ -284,6 +290,7 @@ class FilingEditor(Widget):
         Binding("alt+i", "disposition_ignore", "Ignore", show=False),
         Binding("alt+j", "disposition_junk", "Junk", show=False),
         Binding("alt+f", "disposition_file", "File", show=False),
+        Binding("alt+s", "sender_edit", "Sender", show=False),
     ]
 
     def __init__(self, **kwargs) -> None:
@@ -328,7 +335,7 @@ class FilingEditor(Widget):
             )
         with HorizontalGroup(id="filing-status-row"):
             yield Static(
-                "File · i Ignore · j Junk · f File",
+                "File · i Ignore · j Junk · f File · s Sender",
                 id="filing-disposition",
                 classes="filing-label",
                 markup=False,
@@ -348,13 +355,6 @@ class FilingEditor(Widget):
                 id="filing-sender",
                 compact=True,
                 classes="filing-field",
-            )
-        with HorizontalGroup(id="filing-actions"):
-            yield Button(
-                "Sender override",
-                id="filing-save-sender",
-                compact=True,
-                classes="filing-action",
             )
         yield Static("", id="filing-status", markup=False)
 
@@ -419,7 +419,7 @@ class FilingEditor(Widget):
             raise ValueError("Invalid filing disposition")
         self._disposition = disposition
         self.query_one("#filing-disposition", Static).update(
-            f"{disposition.title()} · i Ignore · j Junk · f File"
+            f"{disposition.title()} · i Ignore · j Junk · f File · s Sender"
         )
         isFile = disposition == "file"
         self.query_one("#filing-choice-row").display = isFile
@@ -438,6 +438,9 @@ class FilingEditor(Widget):
         if event.input.id in ("filing-parent", "filing-child", "filing-domain"):
             event.stop()
             self._ruleSave("domain")
+        elif event.input.id == "filing-sender":
+            event.stop()
+            self._ruleSave("sender")
 
     @on(DescendantBlur)
     def fieldBlurred(self, event: DescendantBlur) -> None:
@@ -458,19 +461,13 @@ class FilingEditor(Widget):
             return
         self._ruleSave("domain")
 
-    @on(Button.Pressed, "#filing-save-sender")
-    def senderSave(self, event: Button.Pressed) -> None:
-        """Reveal the sender field, then save an exact override on the next press."""
-        event.stop()
+    def action_sender_edit(self) -> None:
+        """Reveal and focus a sender field; Enter saves the override."""
         if not self._row:
             self._status("Select a filing domain first.")
             return
-        senderRow = self.query_one("#filing-sender-row")
-        if not senderRow.display:
-            senderRow.display = True
-            self.query_one("#filing-sender", Input).focus()
-            return
-        self._ruleSave("sender")
+        self.query_one("#filing-sender-row").display = True
+        self.query_one("#filing-sender", Input).focus()
 
     def _ruleSave(self, kind: str) -> None:
         """Persist one domain rule or sender override and refresh the plan."""
