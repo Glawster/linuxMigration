@@ -126,11 +126,7 @@ class FilingView(Widget):
         target = (
             "#filing-domain"
             if row.get("domainUncertain")
-            else (
-                "#filing-parent"
-                if _rowNeedsChoice(row)
-                else "#filing-child"
-            )
+            else ("#filing-parent" if _rowNeedsChoice(row) else "#filing-child")
         )
         self.query_one(target).focus()
 
@@ -140,11 +136,12 @@ class FilingView(Widget):
         plan = self._plan()
         self.rows = list(plan.get("rows") or [])
         table = self.query_one("#filing-table", DataTable)
-        table.clear(columns=False)
         destinationWidth = self._widths.get("destination", 16)
-        for row in self.rows:
-            table.add_row(*_tableCells(row, destinationWidth))
-        self._cursorRestore(previous)
+        with table.prevent(DataTable.RowHighlighted):
+            table.clear(columns=False)
+            for row in self.rows:
+                table.add_row(*_tableCells(row, destinationWidth))
+            self._cursorRestore(previous)
         action = self.query_one("#filing-summary", Static)
         action.update(_actionText(self.rows) or _summaryText())
         action.set_class(bool(_actionText(self.rows)), "warning")
@@ -339,8 +336,8 @@ class FilingEditor(Widget):
             )
         with HorizontalGroup(id="filing-status-row"):
             yield Static(
-                "File · i Ignore · j Junk · f File · s Sender",
-                id="filing-disposition",
+                "i Ignore · j Junk · f File · s Sender",
+                id="filing-shortcuts",
                 classes="filing-label",
                 markup=False,
             )
@@ -431,11 +428,17 @@ class FilingEditor(Widget):
         if disposition not in ("file", "ignore", "junk"):
             raise ValueError("Invalid filing disposition")
         self._disposition = disposition
-        self.query_one("#filing-disposition", Static).update(
-            f"{disposition.title()} · i Ignore · j Junk · f File · s Sender"
-        )
-        isFile = disposition == "file"
-        self.query_one("#filing-choice-row").display = isFile
+        self._actionShow(disposition.title())
+        self._fileFieldsShow(disposition == "file")
+
+    def _actionShow(self, action: str) -> None:
+        """Update the selected action without duplicating shortcut hints."""
+        self.query_one("#filing-disposition", Static).update(action)
+
+    def _fileFieldsShow(self, visible: bool) -> None:
+        """Show destination fields only for File or an unresolved choice."""
+        self.query_one("#filing-parent-row").display = visible
+        self.query_one("#filing-folder-row").display = visible
 
     @on(Select.Changed, "#filing-parent-options")
     def parentChanged(self, event: Select.Changed) -> None:
@@ -479,12 +482,8 @@ class FilingEditor(Widget):
         if not self._row:
             self._status("Select a filing domain first.")
             return
-        senderRow = self.query_one("#filing-sender-row")
-        if not senderRow.display:
-            senderRow.display = True
-            self.query_one("#filing-sender", Input).focus()
-            return
-        self._ruleSave("sender")
+        self.query_one("#filing-sender-row").display = True
+        self.query_one("#filing-sender", Input).focus()
 
     def _ruleSave(self, kind: str) -> None:
         """Persist one domain rule or sender override and refresh the plan."""

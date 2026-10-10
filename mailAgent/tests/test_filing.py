@@ -628,16 +628,17 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             table.move_cursor(row=nhsRow)
             await pilot.pause()
             heading = str(app.query_one("#filing-heading", Static).render())
-            assert heading.startswith("Filing:")
+            assert heading.startswith("Selected:")
             assert "nhs.uk" in heading
             assert app.query_one("#filing-domain-row").display is True
-            assert "Needs choice" in str(
-                app.query_one("#filing-row-status", Static).render()
+            assert (
+                str(app.query_one("#filing-disposition", Static).render()) == "Choose"
             )
+            assert not str(app.query_one("#filing-row-status", Static).render())
             assert app.query_one("#filing-sender-row").display is False
             parent = app.query_one("#filing-parent", Input)
             child = app.query_one("#filing-child", Input)
-            assert parent.region.y == child.region.y
+            assert parent.region.y < child.region.y
             assert parent.content_region.height == 1
             assert child.content_region.height == 1
             assert child.styles.border
@@ -665,7 +666,7 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             child.value = "NHS"
             await pilot.press("enter")
             await pilot.pause()
-            assert "Mail was not changed" in str(
+            assert "Saved: Medical/NHS" in str(
                 app.query_one("#filing-status", Static).render()
             )
             savedRow = next(row for row in view.rows if row["domain"] == "nhs.uk")
@@ -903,7 +904,8 @@ def testEditorSavesDispositionWithoutFolder(world, tmp_path, monkeypatch, dispos
             table.focus()
             await pilot.press("i" if disposition == "ignore" else "j")
             await pilot.pause()
-            assert not app.query_one("#filing-choice-row").display
+            assert not app.query_one("#filing-parent-row").display
+            assert not app.query_one("#filing-folder-row").display
             await pilot.resize_terminal(110, 42)
             await pilot.pause()
             assert disposition.title() in str(

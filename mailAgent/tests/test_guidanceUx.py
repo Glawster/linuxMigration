@@ -71,10 +71,10 @@ def testActionNeededGuidanceUsesWarningColourAndExplainsExecution():
         dict(domain="shop.example", status="Proposed child"),
     ]
     text = _actionText(rows)
-    assert "edit its destination or press i/j" in text
+    assert "enter a destination to File · i Ignore · j Junk" in text
     assert "review proposed folders" in text
     assert _actionText([dict(status="Existing")]) == ""
-    assert _tableCells(rows[0], 16)[-1].style == "bold #f0c76a"
+    assert _tableCells(rows[0], 16)[-2].style == "bold #f0c76a"
 
     async def inspect():
         app = auditAppBuild(dict(mailboxes=[], localArchives=[], sources=[]))
