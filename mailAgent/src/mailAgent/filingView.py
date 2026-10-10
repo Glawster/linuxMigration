@@ -17,6 +17,7 @@ from textual.widgets import Button, DataTable, Input, Select, Static
 from textual.widgets.data_table import ColumnKey
 
 import mailAgent.filing as filing
+from mailAgent.actionGuidance import ActionNeeded
 from mailAgent.senderAddress import senderNormalize
 
 # Loaded as application CSS. Widget DEFAULT_CSS cannot override the shared sheet.
@@ -44,7 +45,12 @@ class FilingView(Widget):
     def compose(self) -> ComposeResult:
         """One summary line, a scrolling table, then the editor."""
         plan = self._plan()
-        yield Static(_summaryText(), id="filing-summary", markup=False)
+        yield ActionNeeded(
+            _actionText(self.rows) or _summaryText(),
+            id="filing-summary",
+            classes="warning action-needed" if _actionText(self.rows) else "",
+            markup=False,
+        )
         if self.issue:
             yield Static(self.issue, id="filing-issue", markup=False)
         table = DataTable(id="filing-table", cursor_type="row")
@@ -65,6 +71,29 @@ class FilingView(Widget):
         overrides.display = bool(plan.get("senderOverrides"))
         yield overrides
 
+    def actionNavigate(self) -> None:
+        """Select the first unresolved domain and focus its decision field."""
+        choices = [index for index, row in enumerate(self.rows) if _rowNeedsChoice(row)]
+        pending = choices or [
+            index for index, row in enumerate(self.rows) if _rowNeedsAction(row)
+        ]
+        if not pending:
+            return
+        index = pending[0]
+        row = self.rows[index]
+        self.query_one("#filing-table", DataTable).move_cursor(row=index)
+        self.query_one(FilingEditor).rowShow(row, self._plan())
+        target = (
+            "#filing-domain"
+            if row.get("domainUncertain")
+            else (
+                "#filing-parent"
+                if row.get("status") == "Needs choice"
+                else "#filing-child"
+            )
+        )
+        self.query_one(target).focus()
+
     def planShow(self) -> None:
         """Reload the table from the snapshot, keeping the selected domain."""
         previous = self._selectedIdentity()
@@ -76,7 +105,10 @@ class FilingView(Widget):
         for row in self.rows:
             table.add_row(*_tableCells(row, destinationWidth))
         self._cursorRestore(previous)
-        self.query_one("#filing-summary", Static).update(_summaryText())
+        action = self.query_one("#filing-summary", Static)
+        action.update(_actionText(self.rows) or _summaryText())
+        action.set_class(bool(_actionText(self.rows)), "warning")
+        action.set_class(bool(_actionText(self.rows)), "action-needed")
         self._overridesShow(plan)
         empty = self.query_one("#filing-empty", Static)
         empty.update("" if self.rows else "No Inbox domains to file")
@@ -318,6 +350,8 @@ class FilingEditor(Widget):
         domainInput.value = ""
         heading = self.query_one("#filing-heading", Static)
         status = self.query_one("#filing-row-status", Static)
+        status.set_class(bool(row and _rowNeedsAction(row)), "warning")
+        status.set_class(bool(row and _rowNeedsAction(row)), "action-needed")
         if not row:
             heading.update("Filing: select a domain")
             status.update("")
@@ -601,7 +635,10 @@ def _tableCells(row: dict, destinationWidth: int) -> tuple:
         Text(str(row.get("parent", ""))),
         Text(str(row.get("folder", ""))),
         Text(_textClip(str(row.get("canonical", "")), destinationWidth)),
-        Text(str(row.get("status", ""))),
+        Text(
+            str(row.get("status", "")),
+            style="bold #f0c76a" if _rowNeedsAction(row) else "",
+        ),
     )
 
 
@@ -617,6 +654,36 @@ def _textClip(value: str, width: int) -> str:
 
 
 ## text
+
+
+def _actionText(rows: list[dict]) -> str:
+    """Explain the next available user action without implying execution exists."""
+    choices = sum(_rowNeedsChoice(row) for row in rows)
+    proposed = sum(_rowNeedsAction(row) and not _rowNeedsChoice(row) for row in rows)
+    prompts = []
+    if choices:
+        prompts.append(
+            f"{choices} domains need a choice: select a row, then Save domain"
+        )
+    if proposed:
+        prompts.append(f"review proposed folders for {proposed} domains")
+    return "⚠ ACTION NEEDED: " + "; ".join(prompts) + "." if prompts else ""
+
+
+def _rowNeedsAction(row: dict) -> bool:
+    """Identify domain decisions or proposed folders requiring user review."""
+    return _rowNeedsChoice(row) or (
+        str(row.get("status", "")).startswith("Proposed")
+        and row.get("decisionSource") not in ("domain", "sender")
+    )
+
+
+def _rowNeedsChoice(row: dict) -> bool:
+    """A saved complete rule resolves a choice even for a proposed folder."""
+    return row.get("status") == "Needs choice" or (
+        bool(row.get("domainUncertain"))
+        and row.get("decisionSource") not in ("domain", "sender")
+    )
 
 
 def _summaryText() -> str:

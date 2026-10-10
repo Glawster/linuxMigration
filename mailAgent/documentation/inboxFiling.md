@@ -109,12 +109,30 @@ or require them.
 
 ## Review in the TUI
 
-Open **Moving Mail** on the main menu. One line says that read mail may be
-filed and that this phase changes neither folders nor mail. The table takes
+Open **Moving Mail** on the main menu. When decisions are needed, the summary
+uses amber **ACTION NEEDED** text with the next step. Status cells and the
+selected row's status use the same amber highlight for missing choices,
+uncertain domains and proposed folders. Otherwise the summary explains that
+read mail may be filed and this phase changes neither folders nor mail.
+The top banner explicitly says Execute is not available in the TUI yet.
+Plan also highlights required review or refresh actions in amber. Text labels
+identify the action as well as colour. The table takes
 most of the panel and scrolls on its own. Each row is one organisation domain
 and shows the archive (`myMail` or `kathyMail`), how many current Inbox
 messages it represents, the parent, the folder, the canonical destination and
 the status.
+
+Right-click **ACTION NEEDED**, or focus it with Tab and press Enter, to go
+to the relevant controls. Moving Mail selects the first domain needing a
+decision and focuses its domain or folder field. Proposed folders open their
+folder field for review. In Plan, the shortcut opens Review Queue or Proposed
+Moves; when no plan exists, it focuses Refresh Plan. Navigation never saves a
+decision, starts a refresh or executes mailbox changes.
+
+Saving a complete domain or sender decision clears that row's amber highlight
+and updates the action count. A saved proposed folder keeps its descriptive
+status but no longer asks for the same decision. The banner clears when no
+decisions remain; navigating to a field alone does not resolve its action.
 
 The selected row is the heading of the editor under the table, for example
 `Filing: dpd.co.uk · kathyMail · 2 messages`. Choose a parent, edit the folder

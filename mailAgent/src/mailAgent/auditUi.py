@@ -21,6 +21,7 @@ from textual.widgets import (
 )
 
 from mailAgent.filingView import FILING_CSS, FilingView
+from mailAgent.actionGuidance import ActionNeeded
 from mailAgent.interest import (
     interestEffective,
     interestLoad,
@@ -92,7 +93,7 @@ def auditAppBuild(snapshot: dict) -> App:
         def compose(self) -> ComposeResult:
             yield Header()
             yield Static(
-                "Read-only audit · Filing and migration execution disabled",
+                "Read-only audit · Execute is not available in this TUI yet",
                 id="safety",
                 markup=False,
             )
@@ -105,6 +106,22 @@ def auditAppBuild(snapshot: dict) -> App:
                 yield from _auditPanes(snapshot)
                 yield from _planPane(snapshot.get("migrationPlan"))
             yield Footer()
+
+        def on_action_needed_navigate(self, event: ActionNeeded.Navigate) -> None:
+            """Open the review controls without saving rules or executing mail."""
+            event.stop()
+            if event.widget.id == "filing-summary":
+                self.query_one(FilingView).actionNavigate()
+                return
+            self.query_one(TabbedContent).active = "plan"
+            plan = snapshot.get("migrationPlan")
+            if plan is None:
+                self.query_one("#run-planning", Button).focus()
+                return
+            target = "reviewQueue" if plan.get("reviewQueue") else "proposals"
+            self.query_one("#plan-menu", TabbedContent).active = target
+            table = "#review-table" if target == "reviewQueue" else "#proposal-table"
+            self.query_one(table, DataTable).focus()
 
         def _digestPolicyShift(self, table: DataTable, direction: int) -> None:
             row = table.cursor_coordinate.row
@@ -385,9 +402,10 @@ def _planPane(plan: dict | None) -> ComposeResult:
     with TabPane("Plan", id="plan"):
         if plan is None:
             with VerticalScroll():
-                yield Static(
+                yield ActionNeeded(
                     "⚠ ACTION NEEDED: Refresh Plan to prepare the migration review.",
                     id="plan-summary",
+                    classes="warning action-needed",
                     markup=False,
                 )
                 yield Button(
@@ -407,9 +425,14 @@ def _planPane(plan: dict | None) -> ComposeResult:
                             id="plan-generated",
                             markup=False,
                         )
-                    yield Static(
+                    yield ActionNeeded(
                         _planActionText(plan),
                         id="plan-action",
+                        classes=(
+                            "warning action-needed"
+                            if _planActionText(plan).startswith("⚠")
+                            else ""
+                        ),
                         markup=False,
                     )
                     yield Button(

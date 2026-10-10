@@ -596,10 +596,8 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             table = app.query_one("#filing-table", DataTable)
             assert table.row_count >= 1
             summary = str(app.query_one("#filing-summary", Static).render())
-            assert summary == (
-                "Read mail may be filed. "
-                "No folders or mail are changed in this phase."
-            )
+            assert "ACTION NEEDED" in summary
+            assert app.query_one("#filing-summary", Static).has_class("warning")
             view = app.query_one(FilingView)
             editor = app.query_one(FilingEditor)
             actions = [
@@ -682,6 +680,8 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             assert name.content_region.height == 1
             assert name.styles.border
             name.value = "Medical"
+            # Enter ignores a button while its previous press animation is active.
+            await pilot.wait_for_scheduled_animations()
             app.query_one("#filing-add-parent", Button).focus()
             await pilot.press("enter")
             await pilot.pause()
@@ -694,6 +694,13 @@ def testFilingPanelCanProposeParentWithoutCreatingFolder(world, tmp_path, monkey
             app.query_one("#filing-save-domain", Button).focus()
             await pilot.press("enter")
             await pilot.pause()
+            savedRow = next(row for row in view.rows if row["domain"] == "nhs.uk")
+            from mailAgent.filingView import _rowNeedsAction, _tableCells
+
+            assert savedRow["status"].startswith("Proposed")
+            assert savedRow["decisionSource"] == "domain"
+            assert not _rowNeedsAction(savedRow)
+            assert _tableCells(savedRow, 16)[-1].style == ""
 
     asyncio.run(uiInspect())
     assert before == _tree(world["andy"])

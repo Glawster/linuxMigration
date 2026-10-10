@@ -1,5 +1,10 @@
-/* Moving Mail layout only. Colour, borders and the two-row control
-   come from myStyles.css. */
+/* Colour roles come from myStyles.css, including the warning palette. */
+
+.action-needed {
+    height: auto;
+    border: none;
+    text-style: bold;
+}
 
 Screen > TabbedContent {
     height: 1fr;
