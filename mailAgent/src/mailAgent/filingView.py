@@ -12,7 +12,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import HorizontalGroup
 from textual.coordinate import Coordinate
-from textual.events import DescendantBlur, Mount, Resize
+from textual.events import DescendantBlur, Mount, MouseUp, Resize
 from textual.widget import Widget
 from textual.widgets import DataTable, Input, Select, Static
 from textual.widgets.data_table import ColumnKey
@@ -33,11 +33,17 @@ class FilingTable(DataTable):
     """Save domain dispositions with keys scoped to the focused filing table."""
 
     BINDINGS = [
+        Binding("c", "choose_filter", "Choose/All"),
         Binding("i", "ignore", "Ignore"),
         Binding("j", "junk", "Junk"),
         Binding("f", "file", "File"),
         Binding("s", "sender_edit", "Sender"),
     ]
+
+    def action_choose_filter(self) -> None:
+        """Toggle between every filing row and only rows that still need Choose."""
+        if isinstance(self.parent, FilingView):
+            self.parent.chooseToggle()
 
     def action_ignore(self) -> None:
         """Save Ignore for the selected domain, without changing mail."""
@@ -61,10 +67,11 @@ class FilingTable(DataTable):
         if isinstance(view, FilingView) and view._selectedRow() is not None:
             editor = view.query_one(FilingEditor)
             if disposition == "file":
-                row = view._selectedRow()
-                if row and str(row.get("disposition") or "").lower() in (
-                    "ignore",
-                    "junk",
+                targets = view.selectedRows() or [view._selectedRow()]
+                if any(
+                    str(row.get("disposition") or "").lower() in ("ignore", "junk")
+                    for row in targets
+                    if row
                 ):
                     editor.dispositionClear()
                 else:
@@ -85,7 +92,11 @@ class FilingView(Widget):
         self.snapshot = snapshot
         self.issue = issue
         plan = snapshot.get("filingPlan") or {}
-        self.rows: list[dict] = list(plan.get("rows") or [])
+        self._allRows: list[dict] = list(plan.get("rows") or [])
+        self._chooseOnly = False
+        self._marked: set[tuple[str, str]] = set()
+        self._selectionAnchor: tuple[str, str] | None = None
+        self.rows: list[dict] = self._rowsVisible()
         self._widths: dict[str, int] = {}
         self._columnKeys: dict[str, ColumnKey] = {}
         self._fitting = False
@@ -93,10 +104,11 @@ class FilingView(Widget):
     def compose(self) -> ComposeResult:
         """One summary line, a scrolling table, then the editor."""
         plan = self._plan()
+        actionText = _actionText(self._allRows)
         yield ActionNeeded(
-            _actionText(self.rows) or _summaryText(),
+            self._summaryDisplay(),
             id="filing-summary",
-            classes="warning action-needed" if _actionText(self.rows) else "",
+            classes="warning action-needed" if actionText else "",
             markup=False,
         )
         if self.issue:
@@ -105,7 +117,7 @@ class FilingView(Widget):
         for key, label, width in _columnSpecs():
             self._columnKeys[key] = table.add_column(label, width=width, key=key)
         for row in self.rows:
-            table.add_row(*_tableCells(row, 16))
+            table.add_row(*_tableCells(row, 16, self._identity(row) in self._marked))
         yield table
         empty = Static(
             "" if self.rows else "No Inbox domains to file",
@@ -138,27 +150,58 @@ class FilingView(Widget):
         )
         self.query_one(target).focus()
 
+    def chooseToggle(self) -> None:
+        """Toggle the table between all rows and only unresolved Choose rows."""
+        table = self.query_one("#filing-table", DataTable)
+        previous = self._selectedIdentity()
+        previousScroll = table.scroll_y
+        self._chooseOnly = not self._chooseOnly
+        self.rows = self._rowsVisible()
+        destinationWidth = self._widths.get("destination", 16)
+        with table.prevent(DataTable.RowHighlighted):
+            table.clear(columns=False)
+            for row in self.rows:
+                table.add_row(
+                    *_tableCells(
+                        row,
+                        destinationWidth,
+                        self._identity(row) in self._marked,
+                    )
+                )
+            self._cursorRestore(previous)
+        self._summaryUpdate()
+        self._emptyUpdate()
+        self._editorSync()
+        self.columnsFit()
+        self._viewportRestore(previousScroll)
+
     def planShow(self) -> None:
         """Reload the table while keeping the selected domain and viewport."""
         table = self.query_one("#filing-table", DataTable)
         previous = self._selectedIdentity()
         previousScroll = table.scroll_y
         plan = self._plan()
-        self.rows = list(plan.get("rows") or [])
+        self._allRows = list(plan.get("rows") or [])
+        valid = {self._identity(row) for row in self._allRows}
+        self._marked.intersection_update(valid)
+        if self._selectionAnchor not in valid:
+            self._selectionAnchor = None
+        self.rows = self._rowsVisible()
         destinationWidth = self._widths.get("destination", 16)
         with table.prevent(DataTable.RowHighlighted):
             table.clear(columns=False)
             for row in self.rows:
-                table.add_row(*_tableCells(row, destinationWidth))
+                table.add_row(
+                    *_tableCells(
+                        row,
+                        destinationWidth,
+                        self._identity(row) in self._marked,
+                    )
+                )
             self._cursorRestore(previous)
-        action = self.query_one("#filing-summary", Static)
-        action.update(_actionText(self.rows) or _summaryText())
-        action.set_class(bool(_actionText(self.rows)), "warning")
-        action.set_class(bool(_actionText(self.rows)), "action-needed")
+        self._summaryUpdate()
         self._overridesShow(plan)
-        empty = self.query_one("#filing-empty", Static)
-        empty.update("" if self.rows else "No Inbox domains to file")
-        empty.display = not self.rows
+        self._emptyUpdate()
         self._editorSync()
         self.columnsFit()
         self._viewportRestore(previousScroll)
@@ -198,7 +241,13 @@ class FilingView(Widget):
                         label, width=widths[name], key=name
                     )
                 for row in self.rows:
-                    table.add_row(*_tableCells(row, widths["destination"]))
+                    table.add_row(
+                        *_tableCells(
+                            row,
+                            widths["destination"],
+                            self._identity(row) in self._marked,
+                        )
+                    )
                 self._cursorRestore(previous)
             self._destinationsClip()
             self._viewportRestore(previousScroll)
@@ -218,26 +267,126 @@ class FilingView(Widget):
         del event
         self.call_after_refresh(self.columnsFit)
 
+    @on(MouseUp, "#filing-table")
+    def tableMouseUp(self, event: MouseUp) -> None:
+        """Apply desktop-style Ctrl/Shift selection after the table moves its cursor."""
+        if getattr(event, "button", 1) != 1:
+            return
+        row = self._selectedRow()
+        if not row:
+            return
+        identity = self._identity(row)
+        control = bool(getattr(event, "ctrl", False))
+        shift = bool(getattr(event, "shift", False))
+        if shift:
+            self._rangeMark(identity, additive=control)
+        elif control:
+            if identity in self._marked:
+                self._marked.remove(identity)
+            else:
+                self._marked.add(identity)
+            self._selectionAnchor = identity
+        else:
+            self._marked.clear()
+            self._selectionAnchor = identity
+        self._selectionRender()
+
     @on(DataTable.RowHighlighted, "#filing-table")
     def rowHighlighted(self, event: DataTable.RowHighlighted) -> None:
-        """Keep the editor on the highlighted domain."""
+        """Keep the editor on the highlighted domain or active multi-selection."""
         event.stop()
         if not self.query("#filing-editor"):
+            return
+        if self._marked:
+            self._editorSync()
             return
         row = None
         if 0 <= event.cursor_row < len(self.rows):
             row = self.rows[event.cursor_row]
         self.query_one(FilingEditor).rowShow(row, self._plan())
 
+    def selectedRows(self) -> list[dict]:
+        """Return explicitly Ctrl/Shift-selected rows in stable plan order."""
+        if not self._marked:
+            return []
+        return [row for row in self._allRows if self._identity(row) in self._marked]
+
+    def _rangeMark(self, identity: tuple[str, str], additive: bool) -> None:
+        """Mark the visible range from the anchor through the clicked row."""
+        identities = [self._identity(row) for row in self.rows]
+        anchor = self._selectionAnchor
+        if anchor not in identities:
+            anchor = identity
+        start = identities.index(anchor)
+        end = identities.index(identity)
+        low, high = sorted((start, end))
+        selected = set(identities[low : high + 1])
+        if additive:
+            self._marked.update(selected)
+        else:
+            self._marked = selected
+        self._selectionAnchor = anchor
+
+    def _selectionRender(self) -> None:
+        """Refresh visible selection marks and the editor without rebuilding rows."""
+        table = self.query_one("#filing-table", DataTable)
+        for index, row in enumerate(self.rows):
+            if index >= table.row_count:
+                break
+            table.update_cell_at(
+                Coordinate(index, 0),
+                _domainCell(row, self._identity(row) in self._marked),
+                update_width=False,
+            )
+        self._editorSync()
+
     def _plan(self) -> dict:
         """Return the filing plan currently stored on the snapshot."""
         return self.snapshot.get("filingPlan") or {}
 
+    def _rowsVisible(self) -> list[dict]:
+        """Return either all plan rows or only rows whose action is Choose."""
+        if not self._chooseOnly:
+            return list(self._allRows)
+        return [row for row in self._allRows if _rowAction(row) == "Choose"]
+
+    def _summaryDisplay(self) -> str:
+        """Describe outstanding work plus the current table filter."""
+        base = _actionText(self._allRows) or _summaryText()
+        view = "Choose only" if self._chooseOnly else "All"
+        return f"{base} · View: {view} ({len(self.rows)}/{len(self._allRows)})"
+
+    def _summaryUpdate(self) -> None:
+        """Refresh the top guidance and warning styling."""
+        actionText = _actionText(self._allRows)
+        action = self.query_one("#filing-summary", Static)
+        action.update(self._summaryDisplay())
+        action.set_class(bool(actionText), "warning")
+        action.set_class(bool(actionText), "action-needed")
+
+    def _emptyUpdate(self) -> None:
+        """Show the empty message for the active filter."""
+        empty = self.query_one("#filing-empty", Static)
+        message = ""
+        if not self.rows:
+            message = (
+                "No domains need Choose"
+                if self._chooseOnly
+                else "No Inbox domains to file"
+            )
+        empty.update(message)
+        empty.display = not self.rows
+
     def _editorSync(self) -> None:
-        """Show whichever domain the table cursor is on."""
+        """Show the active multi-selection or whichever domain the cursor is on."""
         if not self.query("#filing-editor"):
             return
-        self.query_one(FilingEditor).rowShow(self._selectedRow(), self._plan())
+        editor = self.query_one(FilingEditor)
+        marked = self.selectedRows()
+        if marked:
+            editor.rowsShow(marked, self._plan())
+        else:
+            editor.rowShow(self._selectedRow(), self._plan())
 
     def _overridesShow(self, plan: dict) -> None:
         """Show exact sender overrides only when at least one exists."""
@@ -247,7 +396,7 @@ class FilingView(Widget):
         widget.display = bool(text)
 
     def _selectedRow(self) -> dict | None:
-        """Return the domain under the cursor, or the first domain."""
+        """Return the domain under the cursor, or the first visible domain."""
         if not self.rows or not self.query("#filing-table"):
             return None
         table = self.query_one("#filing-table", DataTable)
@@ -256,12 +405,15 @@ class FilingView(Widget):
             row = 0
         return self.rows[row]
 
+    @staticmethod
+    def _identity(row: dict) -> tuple[str, str]:
+        """Return the stable mailbox/domain identity for one filing row."""
+        return str(row.get("mailbox") or ""), str(row.get("domain") or "")
+
     def _selectedIdentity(self) -> tuple[str, str] | None:
         """Return the selected mailbox and domain, if a row is selected."""
         row = self._selectedRow()
-        if not row:
-            return None
-        return row["mailbox"], row["domain"]
+        return self._identity(row) if row else None
 
     def _cursorRestore(self, previous: tuple[str, str] | None) -> None:
         """Move the cursor back to the domain that was selected before a reload."""
@@ -269,7 +421,7 @@ class FilingView(Widget):
             return
         table = self.query_one("#filing-table", DataTable)
         for index, row in enumerate(self.rows):
-            if (row["mailbox"], row["domain"]) == previous:
+            if self._identity(row) == previous:
                 table.move_cursor(row=index)
                 return
 
@@ -312,6 +464,7 @@ class FilingEditor(Widget):
         """Start with no domain selected."""
         super().__init__(**kwargs)
         self._row: dict | None = None
+        self._rows: list[dict] = []
         self._disposition = "file"
         self._shownChoice = ("", "", "")
 
@@ -359,7 +512,6 @@ class FilingEditor(Widget):
                 classes="filing-label",
                 markup=False,
             )
-
             yield Static(
                 "",
                 id="filing-row-status",
@@ -382,6 +534,7 @@ class FilingEditor(Widget):
         if not self.query("#filing-parent"):
             return
         self._row = row
+        self._rows = [row] if row else []
         self._senderHide()
         domainInput = self.query_one("#filing-domain", Input)
         domainInput.value = ""
@@ -423,10 +576,52 @@ class FilingEditor(Widget):
             chooser.value = (
                 parent if isinstance(parent, str) and parent in legal else Select.NULL
             )
-        self.query_one("#filing-parent", Input).value = str(parent or "")
-        self.query_one("#filing-child", Input).value = (
-            row.get("folder") or row.get("suggestion") or ""
+        parentInput = self.query_one("#filing-parent", Input)
+        childInput = self.query_one("#filing-child", Input)
+        parentInput.placeholder = "Choose or type parent"
+        childInput.placeholder = "Folder"
+        parentInput.value = str(parent or "")
+        childInput.value = row.get("folder") or row.get("suggestion") or ""
+        self._shownChoice = self._choiceValues()
+
+    def rowsShow(self, rows: list[dict], plan: dict) -> None:
+        """Show a desktop-style multi-selection for one bulk filing destination."""
+        if len(rows) <= 1:
+            self.rowShow(rows[0] if rows else None, plan)
+            return
+        self._rows = list(rows)
+        self._row = rows[0]
+        self._senderHide()
+        self._disposition = "file"
+        self._actionShow("File")
+        self._fileFieldsShow(True)
+        self.query_one("#filing-domain-row").display = False
+        self.query_one("#filing-domain", Input).value = ""
+        total = sum(int(row.get("inboxCount") or 0) for row in rows)
+        self.query_one("#filing-heading", Static).update(
+            f"Selected: {len(rows)} domains · {total} messages"
         )
+        status = self.query_one("#filing-row-status", Static)
+        status.set_class(False, "warning")
+        status.set_class(False, "action-needed")
+        status.update(f"Apply one destination to {len(rows)} selected domains")
+        self.query_one("#filing-status", Static).update("")
+        options = _parentOptionsMany(rows, plan)
+        chooser = self.query_one("#filing-parent-options", Select)
+        chooser.set_options(options)
+        parents = {str(row.get("parent") or "") for row in rows}
+        folders = {str(row.get("folder") or "") for row in rows}
+        parent = next(iter(parents)) if len(parents) == 1 else ""
+        child = next(iter(folders)) if len(folders) == 1 else ""
+        legal = {value for _prompt, value in options}
+        with chooser.prevent(Select.Changed):
+            chooser.value = parent if parent and parent in legal else Select.NULL
+        parentInput = self.query_one("#filing-parent", Input)
+        childInput = self.query_one("#filing-child", Input)
+        parentInput.placeholder = "Mixed parents" if len(parents) > 1 else "Choose or type parent"
+        childInput.placeholder = "Mixed folders" if len(folders) > 1 else "Folder"
+        parentInput.value = parent
+        childInput.value = child
         self._shownChoice = self._choiceValues()
 
     def action_disposition_ignore(self) -> None:
@@ -450,21 +645,25 @@ class FilingEditor(Widget):
         self._fileFieldsShow(disposition == "file")
 
     def dispositionClear(self) -> None:
-        """Reset a saved Ignore/Junk domain decision back to Choose."""
-        row = self._row
-        if not row:
+        """Reset selected saved Ignore/Junk domain decisions back to Choose."""
+        targets = self._view().selectedRows() or ([self._row] if self._row else [])
+        if not targets:
             return
         path = filing.filingPath()
         rules = filing.filingRulesLoad(path)
-        entry = rules.get("mailboxes", {}).get(row["mailbox"], {})
-        host = str(row.get("domain") or "").strip().lower().rstrip(".")
-        domain = entry.get("clarifications", {}).get(host, host)
-        decision = entry.get("domains", {}).get(domain)
-        if isinstance(decision, dict) and decision.get("disposition") in (
-            "ignore",
-            "junk",
-        ):
-            entry["domains"].pop(domain, None)
+        changed = False
+        for row in targets:
+            entry = rules.get("mailboxes", {}).get(row["mailbox"], {})
+            host = str(row.get("domain") or "").strip().lower().rstrip(".")
+            domain = entry.get("clarifications", {}).get(host, host)
+            decision = entry.get("domains", {}).get(domain)
+            if isinstance(decision, dict) and decision.get("disposition") in (
+                "ignore",
+                "junk",
+            ):
+                entry["domains"].pop(domain, None)
+                changed = True
+        if changed:
             filing._filingWrite(rules, path)
             self._view().planRecompute()
         self._disposition = "file"
@@ -522,6 +721,9 @@ class FilingEditor(Widget):
 
     def action_sender_edit(self) -> None:
         """Reveal and focus a sender field; Enter saves the override."""
+        if len(self._view().selectedRows()) > 1:
+            self._status("Sender override requires one selected domain.")
+            return
         if not self._row:
             self._status("Select a filing domain first.")
             return
@@ -529,36 +731,75 @@ class FilingEditor(Widget):
         self.query_one("#filing-sender", Input).focus()
 
     def _ruleSave(self, kind: str) -> None:
-        """Persist one domain rule or sender override and refresh the plan."""
+        """Persist one rule or one bulk domain decision and refresh the plan."""
         row = self._row
         if not row:
             self._status("Select a filing domain first.")
             return
+        targets = self._view().selectedRows() or [row]
         try:
+            if kind == "sender" and len(targets) > 1:
+                raise ValueError("Sender override requires one selected domain")
+            if len(targets) > 1 and any(target.get("domainUncertain") for target in targets):
+                raise ValueError("Resolve uncertain organisation domains individually first")
             disposition = self._disposition
             if disposition in ("ignore", "junk"):
-                identity = (
-                    self._confirmedDomain(row)
-                    if kind == "domain"
-                    else senderNormalize(self.query_one("#filing-sender", Input).value)
-                )
-                rules = filing.filingRulesLoad(filing.filingPath())
-                if kind == "sender" and (
-                    not identity
-                    or not filing.filingDomainMatch(
-                        identity, row["domain"], rules, row["mailbox"]
+                for target in targets:
+                    identity = (
+                        self._confirmedDomain(target)
+                        if len(targets) == 1 and kind == "domain"
+                        else (
+                            target["domain"]
+                            if kind == "domain"
+                            else senderNormalize(
+                                self.query_one("#filing-sender", Input).value
+                            )
+                        )
                     )
-                ):
-                    raise ValueError("Enter a sender in the selected domain")
-                filing.filingDispositionSet(
-                    row["mailbox"],
-                    "domains" if kind == "domain" else "senders",
-                    identity,
-                    disposition,
-                    filing.filingPath(),
-                )
+                    rules = filing.filingRulesLoad(filing.filingPath())
+                    if kind == "sender" and (
+                        not identity
+                        or not filing.filingDomainMatch(
+                            identity,
+                            target["domain"],
+                            rules,
+                            target["mailbox"],
+                        )
+                    ):
+                        raise ValueError("Enter a sender in the selected domain")
+                    filing.filingDispositionSet(
+                        target["mailbox"],
+                        "domains" if kind == "domain" else "senders",
+                        identity,
+                        disposition,
+                        filing.filingPath(),
+                    )
                 self._view().planRecompute()
-                self._status(f"Saved: {disposition.title()}")
+                suffix = f" for {len(targets)} domains" if len(targets) > 1 else ""
+                self._status(f"Saved: {disposition.title()}{suffix}")
+                return
+            if len(targets) > 1:
+                parent = filing.filingNameNormalize(
+                    self.query_one("#filing-parent", Input).value
+                )
+                child = filing.filingNameNormalize(
+                    self.query_one("#filing-child", Input).value
+                )
+                plan = self._view()._plan()
+                for target in targets:
+                    discovered = set(
+                        plan.get("parents", {}).get(target["mailbox"], [])
+                    )
+                    filing.filingDomainSet(
+                        target["mailbox"],
+                        target["domain"],
+                        parent,
+                        child,
+                        parent not in discovered,
+                        filing.filingPath(),
+                    )
+                self._view().planRecompute()
+                self._status(f"Saved {len(targets)} domains: {parent}/{child}")
                 return
             parent, child, proposed = self._choiceRead(row)
             if kind == "domain":
@@ -698,12 +939,19 @@ def _columnWidths(available: int, padding: int) -> dict[str, int]:
     return fixed
 
 
-def _tableCells(row: dict, destinationWidth: int) -> tuple:
+def _domainCell(row: dict, marked: bool) -> Text:
+    """Render a visible multi-selection mark without adding another column."""
+    prefix = "✓ " if marked else "  "
+    style = "bold #5bd1b9" if marked else ""
+    return Text(prefix + str(row.get("domain", "")), style=style)
+
+
+def _tableCells(row: dict, destinationWidth: int, marked: bool = False) -> tuple:
     """Return one table row, with Action distinct from destination status."""
     action = _rowAction(row)
     status = _rowStatus(row)
     return (
-        Text(str(row.get("domain", ""))),
+        _domainCell(row, marked),
         Text(str(row.get("archive", ""))),
         Text(str(row.get("inboxCount", ""))),
         Text(str(row.get("parent", ""))),
@@ -816,3 +1064,14 @@ def _parentOptions(mailbox: str, plan: dict) -> list[tuple[str, str]]:
     options = [(name, name) for name in discovered]
     options.extend((f"{name} (proposed)", name) for name in proposed)
     return options
+
+
+def _parentOptionsMany(rows: list[dict], plan: dict) -> list[tuple[str, str]]:
+    """Return the union of parent choices represented by selected mailboxes."""
+    found: dict[str, str] = {}
+    for mailbox in dict.fromkeys(str(row.get("mailbox") or "") for row in rows):
+        for prompt, value in _parentOptions(mailbox, plan):
+            current = found.get(value)
+            if current is None or "(proposed)" not in prompt:
+                found[value] = prompt
+    return [(found[value], value) for value in sorted(found, key=str.casefold)]
