@@ -107,7 +107,7 @@ parent, not `Amazon` or `Orders`.
 
 The user may propose a new parent when no existing category is appropriate.
 
-- the UI must offer an `Add parent...` action;
+- the UI must allow a new parent to be typed directly;
 - the proposed parent name must be validated and normalised consistently with
   the archive taxonomy;
 - proposing a parent records a filing decision only;
@@ -163,8 +163,8 @@ Thunderbird's own junk filter already uses. Thunderbird account settings may
 still move mail after they see that mark; that move is Thunderbird's, not a
 mailAgent filing action.
 
-Phase 1 records Ignore and Junk and shows them as status. It does not change
-message flags, junk state, or mailbox contents.
+Phase 1 records Ignore and Junk as actions. It does not change message flags,
+junk state, or mailbox contents.
 
 ## Moving Mail
 
@@ -176,22 +176,74 @@ The view is domain-oriented and shows at least:
 - mailbox/archive (`myMail` or `kathyMail`);
 - domain;
 - number of current Inbox messages represented;
-- discovered or selected Parent, when the disposition is File;
-- child/domain folder name, when the disposition is File;
-- resulting canonical destination, when the disposition is File;
-- status: `Existing`, `Proposed child`, `Proposed parent + child`,
-  `Needs choice`, `Ignore`, or `Junk`.
+- discovered or selected Parent, when the action is File;
+- child/domain folder name, when the action is File;
+- resulting canonical destination, when the action is File;
+- **Action**: `Choose`, `File`, `Ignore`, or `Junk`;
+- **Status**: destination state such as `Existing`, `Proposed child`, or
+  `Proposed parent + child`.
+
+Action and Status are deliberately separate. An unresolved domain displays
+`Action = Choose`; `Needs choice` is not shown as a destination status.
 
 A representative view is:
 
 ```text
-Domain          Archive    Parent     Folder    Status
-amazon.co.uk    myMail     Shopping   Amazon    Existing
-bmw.com         myMail     Cars       BMW       Proposed child
-nhs.uk          myMail     Medical    NHS       Proposed parent + child
+Domain          Archive    Parent     Folder    Action   Status
+amazon.co.uk    myMail     Shopping   Amazon    File     Existing
+bmw.com         myMail     Cars       BMW       File     Proposed child
+nhs.uk          myMail     Medical    NHS       File     Proposed parent + child
 news.example    myMail                          Ignore
 offers.example  kathyMail                       Junk
+unknown.example myMail                          Choose
 ```
+
+The lower editor is intentionally compact. Parent and Folder are editable
+one-row controls, the parent dropdown remains available beside Parent, and
+pressing Enter after Folder saves the decision then returns focus to the main
+list while preserving the selected row and viewport.
+
+The table provides these fast-path controls while it has focus:
+
+- `i` records Ignore;
+- `j` records Junk;
+- `f` selects File editing; when the existing action is Ignore or Junk, `f`
+  clears that saved disposition back to Choose before opening the destination
+  editor;
+- `s` opens an exact sender override for a single domain;
+- `c` toggles between **All** rows and **Choose only** rows.
+
+The current filter must be visible in the screen summary. Filtering changes only
+presentation; it does not change filing rules or the underlying plan.
+
+### Multi-selection and bulk filing
+
+Moving Mail supports desktop-style mouse selection for applying one destination
+to several domains:
+
+- normal click selects one row and clears an existing multi-selection;
+- Ctrl+click adds or removes an individual row from the selection;
+- Shift+click selects a contiguous visible range from the selection anchor;
+- Ctrl+Shift+click extends the existing selection with that range when the
+  terminal/mouse event supplies both modifiers.
+
+Selected rows remain distinct domain rules internally. Bulk filing never creates
+a shared alias rule that would later prevent one domain being edited separately.
+
+A multi-selection is visibly marked in the table. The editor shows the number
+of selected domains and messages and allows one Parent/Folder combination to be
+applied to all selected domains. If the selected rows currently contain mixed
+Parent or Folder values, the corresponding editor field is shown as mixed/blank
+until the user enters the bulk value.
+
+Sender overrides remain a single-domain operation. Organisation-domain entries
+that still require Public Suffix clarification must be resolved individually
+before bulk filing.
+
+Selection identities are based on mailbox plus domain and should survive plan
+recomputation and table filtering while those domains still exist. Hiding a
+selected row with the Choose-only filter must not silently delete its selection
+state.
 
 The user must be able to select an existing discovered parent or propose a new
 one without changing mail during that interaction. Choosing Ignore or Junk
@@ -305,6 +357,12 @@ legacy Thunderbird filters into mailAgent filing rules or identify conflicts.
 - a resolved older message targets the canonical local archive;
 - unresolved or ambiguous messages remain in Inbox and appear for review;
 - **Moving Mail** is a main-menu tab, and Inbox Digest does not contain it;
+- Moving Mail separates Action from destination Status and unresolved rows show
+  `Action = Choose`;
+- the user can toggle between All and Choose-only rows without changing rules;
+- Ctrl+click and Shift+click support multi-selection and one Parent/Folder can be
+  applied to all selected domains as separate persisted domain rules;
+- table rebuilds preserve the selected domain and viewport where possible;
 - Ignore produces no folder proposal and leaves the messages in `INBOX`;
 - Junk produces no archive-folder proposal and records a junk mark for
   Thunderbird's junk filter;
@@ -320,17 +378,22 @@ legacy Thunderbird filters into mailAgent filing rules or identify conflicts.
 
 ### Phase 1 - filing policy and review
 
-Completed and reviewed on 2026-10-10. Editing Parent or Folder saves the
-domain decision on Enter or focus change; new parents are proposed automatically.
-The parent dropdown remains available. Table shortcuts i/j save Ignore/Junk;
-f opens File destination editing. The disposition dropdown and Add parent /
-Save domain buttons have been removed.
+Completed and reviewed on 2026-10-10, with subsequent Moving Mail interaction
+refinement. Editing Parent or Folder saves the domain decision on Enter or focus
+change; new parents are proposed automatically. The parent dropdown remains
+available. Table shortcuts i/j save Ignore/Junk; f opens File destination
+editing and resets a saved Ignore/Junk decision back to Choose first. The
+disposition dropdown and Add parent / Save domain buttons have been removed.
+Choose-only filtering and Ctrl/Shift multi-selection support rapid review and
+bulk destination assignment without changing mail.
 
 - discover parents from `myMail` and `kathyMail`;
 - group Inbox senders by domain;
 - create/edit durable sender/domain filing mappings;
 - support proposed parents and child folders;
-- show Moving Mail status in the TUI, including Ignore and Junk;
+- show Moving Mail Action and destination Status separately in the TUI;
+- filter the workspace to unresolved Choose rows when requested;
+- support desktop-style multi-selection and bulk domain filing decisions;
 - produce read-only filing proposals;
 - record Ignore and Junk without changing flags or mail.
 
@@ -358,3 +421,6 @@ Phase 2 must not be enabled merely by completing Phase 1.
 - 2026-10-08: Moving Mail is a main-menu tab rather than an Inbox Digest
   Filing sub-panel. Ignore leaves read Inbox mail in the Inbox. Junk marks it
   for Thunderbird's junk filter instead of filing it to a folder.
+- 2026-10-11: Separate Action from Status; add compact destination editing,
+  Choose-only filtering, viewport preservation and desktop-style Ctrl/Shift
+  multi-selection for bulk Parent/Folder assignment.
