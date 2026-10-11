@@ -125,8 +125,8 @@ FilingEditor .filing-folder-field {
 }
 
 FilingEditor #filing-parent-options {
-    width: 20;
-    min-width: 20;
+    width: 30;
+    min-width: 30;
 }
 
 /* Shortcut help is already shown in the Footer; do not duplicate it here. */
