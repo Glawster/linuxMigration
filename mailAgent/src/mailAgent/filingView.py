@@ -60,10 +60,18 @@ class FilingTable(DataTable):
         view = self.parent
         if isinstance(view, FilingView) and view._selectedRow() is not None:
             editor = view.query_one(FilingEditor)
-            editor.dispositionSet(disposition)
             if disposition == "file":
+                row = view._selectedRow()
+                if row and str(row.get("disposition") or "").lower() in (
+                    "ignore",
+                    "junk",
+                ):
+                    editor.dispositionClear()
+                else:
+                    editor.dispositionSet("file")
                 view.query_one("#filing-parent").focus()
             else:
+                editor.dispositionSet(disposition)
                 editor._ruleSave("domain")
                 self.focus()
 
@@ -131,11 +139,12 @@ class FilingView(Widget):
         self.query_one(target).focus()
 
     def planShow(self) -> None:
-        """Reload the table from the snapshot, keeping the selected domain."""
+        """Reload the table while keeping the selected domain and viewport."""
+        table = self.query_one("#filing-table", DataTable)
         previous = self._selectedIdentity()
+        previousScroll = table.scroll_y
         plan = self._plan()
         self.rows = list(plan.get("rows") or [])
-        table = self.query_one("#filing-table", DataTable)
         destinationWidth = self._widths.get("destination", 16)
         with table.prevent(DataTable.RowHighlighted):
             table.clear(columns=False)
@@ -152,6 +161,7 @@ class FilingView(Widget):
         empty.display = not self.rows
         self._editorSync()
         self.columnsFit()
+        self._viewportRestore(previousScroll)
 
     def planRecompute(self) -> None:
         """Rebuild the plan from saved rules. This does not rescan mail."""
@@ -180,6 +190,7 @@ class FilingView(Widget):
         try:
             self._widths = widths
             previous = self._selectedIdentity()
+            previousScroll = table.scroll_y
             with table.prevent(DataTable.RowHighlighted):
                 table.clear(columns=True)
                 for name, label, _width in _columnSpecs():
@@ -190,6 +201,7 @@ class FilingView(Widget):
                     table.add_row(*_tableCells(row, widths["destination"]))
                 self._cursorRestore(previous)
             self._destinationsClip()
+            self._viewportRestore(previousScroll)
         finally:
             self._fitting = False
 
@@ -260,6 +272,12 @@ class FilingView(Widget):
             if (row["mailbox"], row["domain"]) == previous:
                 table.move_cursor(row=index)
                 return
+
+    def _viewportRestore(self, scrollY: float) -> None:
+        """Keep the selected row at the same visible position after a rebuild."""
+        table = self.query_one("#filing-table", DataTable)
+        table.scroll_y = scrollY
+        self.call_after_refresh(lambda: setattr(table, "scroll_y", scrollY))
 
     def _destinationsClip(self) -> None:
         """Ellipsize Destination cells to the fitted column. Leave the editor alone."""
@@ -431,6 +449,29 @@ class FilingEditor(Widget):
         self._actionShow(disposition.title())
         self._fileFieldsShow(disposition == "file")
 
+    def dispositionClear(self) -> None:
+        """Reset a saved Ignore/Junk domain decision back to Choose."""
+        row = self._row
+        if not row:
+            return
+        path = filing.filingPath()
+        rules = filing.filingRulesLoad(path)
+        entry = rules.get("mailboxes", {}).get(row["mailbox"], {})
+        host = str(row.get("domain") or "").strip().lower().rstrip(".")
+        domain = entry.get("clarifications", {}).get(host, host)
+        decision = entry.get("domains", {}).get(domain)
+        if isinstance(decision, dict) and decision.get("disposition") in (
+            "ignore",
+            "junk",
+        ):
+            entry["domains"].pop(domain, None)
+            filing._filingWrite(rules, path)
+            self._view().planRecompute()
+        self._disposition = "file"
+        self._actionShow("Choose")
+        self._fileFieldsShow(True)
+        self._status("Choose a filing destination.")
+
     def _actionShow(self, action: str) -> None:
         """Update the selected action without duplicating shortcut hints."""
         self.query_one("#filing-disposition", Static).update(action)
@@ -450,10 +491,12 @@ class FilingEditor(Widget):
 
     @on(Input.Submitted)
     def fieldSubmitted(self, event: Input.Submitted) -> None:
-        """Commit a destination, organisation-domain or sender edit with Enter."""
+        """Commit an edit with Enter; Folder returns focus to the selected row."""
         if event.input.id in ("filing-parent", "filing-child", "filing-domain"):
             event.stop()
             self._ruleSave("domain")
+            if event.input.id == "filing-child":
+                self._view().query_one("#filing-table", DataTable).focus()
         elif event.input.id == "filing-sender":
             event.stop()
             self._ruleSave("sender")
