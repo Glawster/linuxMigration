@@ -88,8 +88,16 @@ FilingEditor Select {
     height: 1;
     min-height: 1;
     border: none;
-    padding: 0;
+    padding: 0 1;
     margin: 0 1 0 0;
+}
+
+/* A one-row control cannot spare a row for a focus border. Use a raised
+   surface instead so the active text-entry control remains obvious. */
+FilingEditor Input:focus {
+    border: none;
+    background: #243545;
+    color: #f5f8fb;
 }
 
 /* The shared focus border would consume the only row and hide the Select text/arrow. */
