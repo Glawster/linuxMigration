@@ -109,17 +109,16 @@ FilingEditor .filing-field {
     max-width: 54;
 }
 
-/* Parent input + picker occupy the same total width as the Folder input. */
-FilingEditor .filing-parent-field {
-    max-width: 51;
-}
-
+/* Parent and Folder entry fields use the same width; the picker is a separate wider control. */
+FilingEditor .filing-parent-field,
 FilingEditor .filing-folder-field {
-    max-width: 64;
+    width: 48;
+    max-width: 48;
 }
 
 FilingEditor #filing-parent-options {
-    width: 12;
+    width: 20;
+    min-width: 20;
 }
 
 /* Shortcut help is already shown in the Footer; do not duplicate it here. */
