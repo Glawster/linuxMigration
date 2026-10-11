@@ -92,11 +92,16 @@ FilingEditor Select {
     margin: 0 1 0 0;
 }
 
+/* The shared focus border would consume the only row and hide the Select text/arrow. */
+FilingEditor Select:focus {
+    border: none;
+}
+
 FilingEditor SelectCurrent {
     height: 1;
     min-height: 1;
     border: none;
-    padding: 0;
+    padding: 0 1;
 }
 
 FilingEditor .filing-field {
@@ -104,8 +109,9 @@ FilingEditor .filing-field {
     max-width: 54;
 }
 
+/* Parent input + picker occupy the same total width as the Folder input. */
 FilingEditor .filing-parent-field {
-    max-width: 42;
+    max-width: 51;
 }
 
 FilingEditor .filing-folder-field {
