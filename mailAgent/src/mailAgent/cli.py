@@ -42,7 +42,7 @@ def main() -> None:
         if _auditIssuesReport(snapshot, logger):
             logger.error("Audit finished with incomplete mailbox data")
             raise SystemExit(1)
-        logger.info("Audit complete: %d mailboxes", len(snapshot["mailboxes"]))
+        logger.value("Audit complete: %d mailboxes", len(snapshot["mailboxes"]))
     except (OSError, ValueError, KeyError):
         parser.exit(
             1,

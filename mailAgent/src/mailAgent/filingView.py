@@ -34,7 +34,7 @@ class FilingTable(DataTable):
 
     BINDINGS = [
         Binding("c", "choose_filter", "Toggle To do/All"),
-        Binding("ctrl+space", "selection_toggle", "Select", show=False),
+        Binding("space", "selection_toggle", "Select", show=False),
         Binding("shift+up", "selection_up", "", show=False, priority=True),
         Binding("shift+down", "selection_down", "", show=False, priority=True),
         Binding("escape", "selection_clear", "", show=False),
