@@ -1,20 +1,22 @@
 # linux-bootstrap
 
-Reusable, profile-driven configuration for Pop!_OS machines. Operations are
+Reusable, profile-driven configuration for Linux machines. Operations are
 idempotent and previewed by default, making the same configuration safe to run
 again after an installation or upgrade.
 
+The existing workstation profiles target Pop!_OS. Server profiles may target
+Debian where their documented package/configuration contract supports it.
+
 ## Documentation
 
-- [Design and architecture](docs/DESIGN.md)
 - [Network naming and static addresses](documentation/networking.md)
 - [NFS exports and mounts](documentation/nfs.md)
+- [raid-pc storage server](documentation/raidPc.md)
 - [User configuration and VS Code extensions](documentation/userConfiguration.md)
 - [DCS World standalone on Linux](documentation/dcsWorld.md)
 - [World of Warcraft through Battle.net](documentation/worldOfWarcraft.md)
 - [Media Center Master through Wine](documentation/mediaCenterMaster.md)
 - [DaVinci Resolve host-specific setup](documentation/davinciResolve.md)
-- [Roadmap](docs/ROADMAP.md)
 
 ## Command line
 
