@@ -104,6 +104,66 @@ mechanisms rather than introducing a second configuration system.
 Export policy and client permissions must be explicitly configured before the
 share is enabled.
 
+## Network and media placement
+
+`raid-pc` will connect by wired Ethernet directly to the LAN/router. The design
+assumes Gigabit Ethernet where available. A 1 Gb/s link normally delivers roughly
+100-115 MB/s for large sequential transfers; a true 100 Mb/s Ethernet link would
+be limited to roughly 11-12 MB/s and should be treated as insufficient for the
+intended bulk-media role.
+
+The router should reserve a stable DHCP address for `raid-pc`. The bootstrap
+should validate that expected address rather than forcing a local static address,
+matching the existing network-management model.
+
+The initial storage namespace will expose a dedicated media path, expected to be:
+
+```text
+raid-pc:/mnt/storage/video
+```
+
+On Linux media clients this should be mounted at a stable path such as:
+
+```text
+/mnt/raidVideo
+```
+
+The first consumers are expected to be:
+
+- organiseMyVideo (OMV), which should treat `/mnt/raidVideo` as another managed
+  media location rather than as a special network-only case;
+- Media Center Master (MCM), which should receive a Wine drive mapping for the
+  same Linux mount (provisionally `R:` -> `/mnt/raidVideo`).
+
+The NFS export should initially be restricted to the known media hosts. Client
+mounts should use the existing linux-bootstrap NFS mechanism and systemd
+automount behavior. The exact export addresses are deferred until `raid-pc` has
+its router reservation.
+
+### Initial migration strategy
+
+The first migration should move approximately half of the existing video library
+to `raid-pc`, while keeping the most frequently used material local to
+`andy-pc`. This is a placement/tiering decision rather than duplication: each
+media folder should have one authoritative location unless a separate backup
+policy says otherwise.
+
+The intended model is therefore:
+
+```text
+andy-pc local storage        raid-pc storage
+---------------------        ---------------
+frequently used media        less frequently used media
+active/recent content        older/archive-style content
+         \                         /
+          \---- OMV + MCM --------/
+```
+
+OMV and MCM must be able to see both locations at the same time so existing
+catalogue and organisation workflows can span local and remote media. Migration
+must be performed by complete media folders, not by splitting one title across
+multiple stores.
+
 ## Maintenance
 
 The eventual server configuration should provide systemd-managed maintenance
