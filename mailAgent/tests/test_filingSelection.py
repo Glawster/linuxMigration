@@ -83,7 +83,7 @@ def testSpaceSelectionAndEscapeNavigation() -> None:
 
 
 def testDefaultParentCanBeSetAndAppliedWithZ() -> None:
-    """Shift+Z learns a Parent from the row; z prefills it on another row."""
+    """Z learns a Parent from the row; z prefills it on another row."""
 
     class FilingApp(App):
         def compose(self) -> ComposeResult:
@@ -104,7 +104,7 @@ def testDefaultParentCanBeSetAndAppliedWithZ() -> None:
             editor = app.query_one(FilingEditor)
             table.focus()
             table.move_cursor(row=0)
-            await pilot.press("shift+z")
+            await pilot.press("Z")
             await pilot.pause()
             assert view._defaultParent == "Shopping"
 
@@ -121,7 +121,7 @@ def testDefaultParentCanBeSetAndAppliedWithZ() -> None:
 
 
 def testDefaultParentReportsMissingSourceParent() -> None:
-    """Shift+Z refuses to create a default from an unresolved row."""
+    """Z refuses to create a default from an unresolved row."""
 
     class FilingApp(App):
         def compose(self) -> ComposeResult:
@@ -133,7 +133,7 @@ def testDefaultParentReportsMissingSourceParent() -> None:
             view = app.query_one(FilingView)
             table = app.query_one("#filing-table", DataTable)
             table.focus()
-            await pilot.press("shift+z")
+            await pilot.press("Z")
             await pilot.pause()
             assert view._defaultParent is None
             assert "no Parent" in str(app.query_one("#filing-status").render())
