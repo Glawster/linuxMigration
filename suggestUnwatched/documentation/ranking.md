@@ -2,7 +2,9 @@
 
 `suggestUnwatched` scans the current directory, or the directory you pass as
 `root`. It finds directories that directly contain video files, then rolls
-those seasons and extras up to one row per show.
+those seasons and extras up to one row per show. The idea is that we identify
+shows or movies that are unlikely to be watched and remove them from disk to
+conserve space.
 
 A show is unwatched when none of its video files have a Plex view count, a
 last-viewed time, or a resume offset. One watched episode keeps the whole
