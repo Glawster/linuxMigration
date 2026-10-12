@@ -56,7 +56,32 @@ Execution must not:
 - attempt to synchronise the local archive to Kathy's MacBook or any other client;
 - treat absence of the local archive on another device as an error.
 
-The canonical local archive remains the single destination for pre-live-year personal mail unless a later requirement explicitly introduces replication or remote archive access.
+The canonical local archive remains the default destination for pre-live-year personal mail unless an approved filing rule explicitly selects the other authoritative personal archive as described below. No replication or remote archive access is implied by such an override.
+
+## Explicit cross-archive filing override
+
+REQ-009 may produce an explicit per-rule **archive store** override for personal mail. This separates the source mailbox from the local archive that owns the filed copy.
+
+The default remains:
+
+```text
+Andy source  -> myMail
+Kathy source -> kathyMail
+```
+
+A user may deliberately approve a cross-archive local destination, for example:
+
+```text
+source mailbox: Andy
+archive store:  kathyMail
+path:           Finance/Insurance
+```
+
+Execution must treat `source mailbox` and `archive store` as separate approved facts. It must never infer a cross-archive destination merely because an equivalent folder name exists in the other archive.
+
+For the initial implementation, a cross-archive override applies only to **local archive filing**. It does not authorise moving current/live-year Andy mail into Kathy's IMAP account, or vice versa. Live-year File actions continue to target the source mailbox's own approved IMAP taxonomy unless a later requirement explicitly introduces cross-account IMAP filing.
+
+A cross-archive action therefore requires all of the normal old-mail safeguards plus explicit approval of the destination archive store. The executor must verify that the selected archive store is one of the configured authoritative personal archives and that the approved Parent/Folder path belongs to that store's taxonomy or is explicitly approved for creation there.
 
 ## Safety boundary
 
@@ -86,6 +111,7 @@ At minimum record:
 - UID;
 - approved disposition;
 - approved destination kind when relevant;
+- approved archive store when the destination kind is local;
 - approved canonical destination when relevant;
 - whether folder creation was approved;
 - the decision source and approval state;
@@ -109,16 +135,19 @@ For an approved live-year File action:
 
 A retry must not create a duplicate destination message.
 
+Cross-archive overrides do not change this path: live-year execution remains within the source mailbox's own IMAP account.
+
 ### Local archive filing
 
 For an approved old-mail File action, removal from IMAP must follow copy -> verify -> remove.
 
-The destination is the single authoritative local archive for that personal mailbox (`myMail` for Andy or `kathyMail` for Kathy) on the local PC. No second per-device local archive is created for other clients.
+The destination is the explicitly approved authoritative local archive store. Normally this is `myMail` for Andy and `kathyMail` for Kathy; an approved REQ-009 cross-archive rule may instead target the other configured personal archive.
 
-1. copy the complete source message into the canonical local Thunderbird archive;
-2. verify that the local copy is readable and corresponds to the intended source message;
-3. only after verification, remove the source message from IMAP;
-4. record both the archive identity and source-removal result.
+1. verify the approved archive-store identity and canonical path;
+2. copy the complete source message into that canonical local Thunderbird archive;
+3. verify that the local copy is readable and corresponds to the intended source message;
+4. only after verification, remove the source message from IMAP;
+5. record the archive-store identity, archive identity and source-removal result.
 
 If local verification fails, the source message must remain in IMAP.
 
@@ -156,6 +185,8 @@ Folder creation must be a separately approved fact in the plan.
 
 mailAgent may create only the exact canonical path approved by the plan. It must not create additional inferred parents or siblings during execution.
 
+For a local cross-archive action, folder creation approval is scoped to the selected archive store; approval to create `Finance/Insurance` in `myMail` does not authorise creation of the same path in `kathyMail`.
+
 Creation must be idempotent: an already existing destination is success when it is the expected destination.
 
 ## Confirmation and execution control
@@ -177,6 +208,7 @@ For each action record at least:
 - timestamp completed or failed;
 - source identity;
 - disposition;
+- destination archive store where applicable;
 - destination where applicable;
 - result status;
 - verification result;
@@ -222,6 +254,8 @@ It should show:
 - completed/failed counts;
 - latest error summary.
 
+Cross-archive local actions must be visibly distinguishable before execution, including both source mailbox and destination archive store.
+
 The user must be able to review the pending summary before starting execution.
 
 Planning and review views remain non-mutating.
@@ -249,11 +283,14 @@ Mutation primitives should be small and testable. Tests must use fakes/fixtures 
 - stale UIDVALIDITY or missing source UIDs block an action without guessing;
 - approved IMAP folder creation is exact and idempotent;
 - live-year File actions reach the approved IMAP destination and are verified;
+- cross-archive overrides do not permit live-year cross-account IMAP filing;
 - old-mail File actions use copy -> verify -> remove and preserve the source on verification failure;
+- old-mail File actions default to the source mailbox's local archive but may target the other configured personal archive only when that archive store is explicitly approved in the plan;
 - `myMail` and `kathyMail` are treated as the single authoritative local archives on the local PC rather than per-device stores;
 - IMAP remains the shared/live view available to other connected devices;
 - archiving old mail locally may intentionally make it unavailable to IMAP-only clients such as Kathy's MacBook;
 - execution does not create or synchronise additional local archive copies on other client devices;
+- a cross-archive action records and verifies both source mailbox and destination archive-store identity;
 - Ignore performs no mailbox mutation and can be completed idempotently;
 - Junk applies and verifies the account's supported junk state without a direct mailAgent move;
 - completed actions are not duplicated on retry;
@@ -279,3 +316,7 @@ again. No real mailbox has been changed to validate this increment.
 
 Next broaden proven single-message execution to batches, then local archive,
 then Junk. Keep orchestration and TUI presentation separate from core modules.
+
+## Change history
+
+- 2026-10-12: Add explicit per-rule local archive-store overrides. Cross-archive filing is local-archive only; live-year mail remains within the source mailbox's IMAP account.
