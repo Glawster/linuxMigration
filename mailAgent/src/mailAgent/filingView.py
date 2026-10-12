@@ -322,7 +322,7 @@ class FilingView(Widget):
 
     @on(MouseUp, "#filing-table")
     def tableMouseUp(self, event: MouseUp) -> None:
-        """Apply desktop-style Ctrl/Shift selection after the table moves its cursor."""
+        """Keep plain clicks for navigation; modifiers may change selection."""
         if getattr(event, "button", 1) != 1:
             return
         row = self._selectedRow()
@@ -340,7 +340,6 @@ class FilingView(Widget):
                 self._marked.add(identity)
             self._selectionAnchor = identity
         else:
-            self._marked.clear()
             self._selectionAnchor = identity
         self._selectionRender()
 
@@ -359,7 +358,7 @@ class FilingView(Widget):
         self.query_one(FilingEditor).rowShow(row, self._plan())
 
     def selectedRows(self) -> list[dict]:
-        """Return explicitly Ctrl/Shift-selected rows in stable plan order."""
+        """Return explicitly selected rows in stable plan order."""
         if not self._marked:
             return []
         return [row for row in self._allRows if self._identity(row) in self._marked]
@@ -392,7 +391,7 @@ class FilingView(Widget):
         self._selectionRender()
 
     def selectionClear(self) -> None:
-        """Clear explicit Ctrl/Shift selection and keep the current row active."""
+        """Clear explicit selection and keep the current row active."""
         if not self._marked and self._selectionAnchor is None:
             return
         self._marked.clear()
@@ -608,6 +607,7 @@ class FilingEditor(Widget):
     """Compact destination editor for the selected filing domain."""
 
     BINDINGS = [
+        Binding("escape", "table_focus", "", show=False, priority=True),
         Binding("alt+i", "disposition_ignore", "Ignore", show=False),
         Binding("alt+j", "disposition_junk", "Junk", show=False),
         Binding("alt+f", "disposition_file", "File", show=False),
@@ -661,7 +661,7 @@ class FilingEditor(Widget):
             )
         with HorizontalGroup(id="filing-status-row"):
             yield Static(
-                "i Ignore · j Junk · f File · s Sender",
+                "Space Select · Esc Back/Clear · i Ignore · j Junk · f File · s Sender",
                 id="filing-shortcuts",
                 classes="filing-label",
                 markup=False,
@@ -779,6 +779,10 @@ class FilingEditor(Widget):
         parentInput.value = parent
         childInput.value = child
         self._shownChoice = self._choiceValues()
+
+    def action_table_focus(self) -> None:
+        """Return focus to the filing table without changing selected rows."""
+        self._view().query_one("#filing-table", DataTable).focus()
 
     def action_disposition_ignore(self) -> None:
         """Choose Ignore for an editor save, including a sender override."""
