@@ -236,8 +236,10 @@ The table provides these fast-path controls while it has focus:
 - `f` selects File editing; when the existing action is Ignore or Junk, `f`
   clears that saved disposition back to Choose before opening the destination
   editor;
-- `z` selects File using the current session default Parent and moves focus to
-  Folder so the suggested or typed child can be confirmed;
+- `z` is the single-row quick-file action: it selects File, applies the current
+  session default Parent, keeps the current/suggested Folder, saves the domain
+  rule immediately, then returns focus to the table and advances to the next
+  visible row;
 - `Shift+Z` sets the session default Parent from the Parent on the row currently
   highlighted in the filing table; it makes no filing decision itself;
 - `s` opens an exact sender override for a single domain;
@@ -246,8 +248,12 @@ The table provides these fast-path controls while it has focus:
 The default Parent is a session convenience only. It is not a persisted filing
 rule or configuration value. `Shift+Z` must refuse to set a default from a row
 with no Parent, and `z` must refuse cleanly when no session default has yet been
-set. `z` applies to the current row or to all explicitly marked rows and must not
-save a partial Parent-only rule merely because focus moves to Folder.
+set. `z` is deliberately a single-row fast path rather than a bulk action. It
+must refuse while an explicit multi-selection is active. If the selected row has
+no usable Folder/suggestion, `z` must apply the default Parent only in the editor,
+leave the rule unsaved, and focus Folder for completion. Rows whose organisation
+domain still requires clarification must also remain unsaved and enter the
+clarification workflow rather than being quick-filed.
 
 The current filter must be visible in the screen summary. Filtering changes only
 presentation; it does not change filing rules or the underlying plan.
@@ -414,8 +420,12 @@ legacy Thunderbird filters into mailAgent filing rules or identify conflicts.
 - `Esc` returns from the editor to the table before clearing selection on a
   subsequent table-level `Esc`;
 - `Shift+Z` can take a non-empty Parent from the highlighted table row as a
-  session default and `z` can prefill that Parent for the current or marked rows
-  without prematurely saving a partial rule;
+  session default;
+- `z` can use that default to save a complete single-row File decision and move
+  to the next visible table row without entering the editor when a usable Folder
+  is already present or suggested;
+- `z` does not quick-save a row with no usable Folder, an unresolved organisation
+  domain, or an active explicit multi-selection;
 - table rebuilds preserve the selected domain and viewport where possible;
 - Ignore produces no folder proposal and leaves the messages in `INBOX`;
 - Junk produces no archive-folder proposal and records a junk mark for
@@ -440,7 +450,9 @@ editing and resets a saved Ignore/Junk decision back to Choose first. The
 disposition dropdown and Add parent / Save domain buttons have been removed.
 Choose-only filtering, Space-based multi-selection, Esc focus navigation and a
 session default Parent shortcut support rapid review and bulk destination
-assignment without changing mail.
+assignment without changing mail. The `z` fast path saves a complete single-row
+File decision immediately and advances when the current/suggested Folder is
+usable; incomplete or uncertain rows fall back to explicit editing.
 
 - discover parents from `myMail` and `kathyMail`;
 - group Inbox senders by domain;
@@ -484,5 +496,5 @@ Phase 2 must not be enabled merely by completing Phase 1.
   multi-selection for bulk Parent/Folder assignment.
 - 2026-10-12: Replace terminal-sensitive Ctrl+Space selection with plain Space,
   make Esc return from editing before clearing marks, add the session default
-  Parent shortcuts (`Shift+Z` to set, `z` to use), and define explicit local
-  archive-store overrides for deliberate cross-archive filing.
+  Parent shortcuts (`Shift+Z` to set, `z` to quick-save and advance), and define
+  explicit local archive-store overrides for deliberate cross-archive filing.
