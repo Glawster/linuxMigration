@@ -297,7 +297,7 @@ def _accountFile(
     # Copy so the caller's configuration is not given a live-year field.
     owner = dict(found)
     owner["liveYear"] = plan["liveYear"]
-    observed = _observed(snapshot, account["id"])
+    observed = _mailboxObserved(snapshot, account["id"])
     inventory = observed.get("inboxInventory")
     if not isinstance(inventory, dict):
         return
@@ -784,7 +784,7 @@ def _messagePropose(
         plan["dispositions"].append(record)
         return
     try:
-        observed = _observed(prepared["snapshot"], owner["id"])
+        observed = _mailboxObserved(prepared["snapshot"], owner["id"])
         mappings = prepared["history"][owner["id"]][0]
         destination, create = _destinationBuild(
             decision, message, owner, observed, archive, mappings
@@ -810,7 +810,7 @@ def _messageResolve(
     archive: dict,
 ) -> tuple[dict | None, str, str]:
     if owner["id"] not in prepared["history"]:
-        observed = _observed(prepared["snapshot"], owner["id"])
+        observed = _mailboxObserved(prepared["snapshot"], owner["id"])
         prepared["history"][owner["id"]] = _mappingsFor(owner, observed, archive)
     senderRule = _senderRule(rules, owner["id"], sender)
     if senderRule:
@@ -848,7 +848,7 @@ def _organisationDomain(
     return host, True
 
 
-def _observed(snapshot: dict, mailbox: str) -> dict:
+def _mailboxObserved(snapshot: dict, mailbox: str) -> dict:
     for observed in snapshot.get("mailboxes", []):
         if observed.get("id") == mailbox:
             return observed
