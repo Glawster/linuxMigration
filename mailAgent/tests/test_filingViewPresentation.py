@@ -117,9 +117,12 @@ def testEditorMountAndActionTransitionsKeepFieldsConsistent(monkeypatch) -> None
                 assert editor.query_one("#filing-folder-row").display == (
                     disposition == "file"
                 )
-                assert str(
+                shortcuts = str(
                     editor.query_one("#filing-shortcuts", Static).render()
-                ).startswith("i Ignore")
+                )
+                assert "i Ignore" in shortcuts
+                assert "z Default" in shortcuts
+                assert "Z Set default" in shortcuts
             calls = []
             monkeypatch.setattr(editor, "_ruleSave", calls.append)
             editor.action_sender_edit()
