@@ -1,0 +1,11 @@
+name: suggestUnwatched
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pytest
+  - black
+  - pip:
+      - organiseMyProjects @ git+https://github.com/Glawster/organiseMyProjects.git@0.6
+      - textual>=0.50
