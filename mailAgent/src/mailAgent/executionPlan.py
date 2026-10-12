@@ -24,7 +24,7 @@ _ACCOUNT_FIELDS = (
 
 def executionActionId(action: dict) -> str:
     """Hash immutable action identity, including destination and creation approval."""
-    return sha256(_encoded(_actionIdentity(action))).hexdigest()
+    return sha256(_valueEncoded(_actionIdentity(action))).hexdigest()
 
 
 def executionActionValidate(action: dict) -> dict:
@@ -54,13 +54,13 @@ def executionConfigFingerprint(config: dict) -> str:
     identifiers = set()
     for account in accounts:
         for key in ("id", "host", "username", "role"):
-            _text(account.get(key))
+            _identityText(account.get(key))
         if account["id"] in identifiers:
             raise ValueError("Duplicate mailbox identity")
         identifiers.add(account["id"])
         projected.append({key: account.get(key) for key in _ACCOUNT_FIELDS})
     return sha256(
-        _encoded(
+        _valueEncoded(
             dict(
                 liveYear=config.get("general", {}).get("liveYear"),
                 mailboxes=sorted(projected, key=lambda entry: entry["id"]),
@@ -161,7 +161,7 @@ def _actionBuild(entry: dict, fingerprint: str) -> dict:
     source = entry["source"]
     identity = {key: source[key] for key in ("mailbox", "folder", "uidValidity", "uid")}
     for key in ("mailbox", "folder"):
-        _text(identity[key])
+        _identityText(identity[key])
     for key in ("uidValidity", "uid"):
         value = identity[key]
         if (
@@ -219,7 +219,7 @@ def _actionBuild(entry: dict, fingerprint: str) -> dict:
         ):
             raise ValueError("Invalid local archive identity")
         for key in ("mailbox", "folder"):
-            _text(destination[key])
+            _identityText(destination[key])
         action["canonical"] = entry["canonical"]
         create = entry.get("requiresFolderCreation")
         if type(create) is not bool:
@@ -263,7 +263,7 @@ def _approvalValidate(plan: dict, entry: dict, action: dict) -> None:
 
 
 def _canonicalValidate(value: str) -> None:
-    _text(value)
+    _identityText(value)
     if any(part in ("", ".", "..") or "\\" in part for part in value.split("/")):
         raise ValueError("Unsafe canonical destination")
 
@@ -326,7 +326,7 @@ def _scopeValidate(action: dict, accounts: dict, liveYear: int) -> None:
             raise ValueError("Account junk mechanism is not configured")
         if action["disposition"] == "junk":
             keyword = source["junkKeyword"]
-            _text(keyword)
+            _identityText(keyword)
             if any(char.isspace() or char in '(){%*"\\]' for char in keyword):
                 raise ValueError("Invalid account junk keyword")
         return
@@ -359,7 +359,7 @@ def _sourceKey(source: dict) -> tuple:
     return tuple(source[key] for key in ("mailbox", "folder", "uidValidity", "uid"))
 
 
-def _text(value: str) -> None:
+def _identityText(value: str) -> None:
     if (
         not isinstance(value, str)
         or not value.strip()
@@ -368,7 +368,7 @@ def _text(value: str) -> None:
         raise ValueError("Invalid identity text")
 
 
-def _encoded(value: dict) -> bytes:
+def _valueEncoded(value: dict) -> bytes:
     return json.dumps(
         value, sort_keys=True, separators=(",", ":"), allow_nan=False
     ).encode("utf-8")
