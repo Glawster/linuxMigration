@@ -42,7 +42,7 @@ class FilingTable(DataTable):
         Binding("j", "junk", "Junk"),
         Binding("f", "file", "File"),
         Binding("z", "file_default", "Default"),
-        Binding("shift+z", "default_set", "Set default", show=False),
+        Binding("Z", "default_set", "Set default", show=False),
         Binding("s", "sender_edit", "Sender"),
     ]
 
@@ -218,7 +218,7 @@ class FilingView(Widget):
         """Apply the session default Parent to the current or marked rows."""
         editor = self.query_one(FilingEditor)
         if not self._defaultParent:
-            editor._status("No default Parent set — use Shift+Z first.")
+            editor._status("No default Parent set — use Z first.")
             return
         if self._selectedRow() is None:
             editor._status("Select a filing domain first.")
