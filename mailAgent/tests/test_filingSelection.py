@@ -121,7 +121,7 @@ def testDefaultParentCanBeSetAndAppliedWithZ() -> None:
 
 
 def testDefaultParentReportsMissingSourceParent() -> None:
-    """Z refuses to create a default from an unresolved row."""
+    """An unresolved row cannot become the default Parent source."""
 
     class FilingApp(App):
         def compose(self) -> ComposeResult:
@@ -129,12 +129,11 @@ def testDefaultParentReportsMissingSourceParent() -> None:
 
     async def inspect() -> None:
         app = FilingApp()
-        async with app.run_test(size=(120, 30)) as pilot:
+        async with app.run_test(size=(120, 30)):
             view = app.query_one(FilingView)
             table = app.query_one("#filing-table", DataTable)
             table.focus()
-            await pilot.press("Z")
-            await pilot.pause()
+            view.defaultSet()
             assert view._defaultParent is None
             assert "no Parent" in str(app.query_one("#filing-status").render())
 
