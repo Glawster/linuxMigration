@@ -82,8 +82,8 @@ def testSpaceSelectionAndEscapeNavigation() -> None:
     asyncio.run(inspect())
 
 
-def testDefaultParentCanBeSetAndAppliedWithZ() -> None:
-    """Z learns a Parent from the row; z prefills it on another row."""
+def testDefaultParentCanBeSetSavedAndAdvancesWithZ(monkeypatch) -> None:
+    """Z learns a Parent; z saves with it and advances to the next table row."""
 
     class FilingApp(App):
         def compose(self) -> ComposeResult:
@@ -92,6 +92,7 @@ def testDefaultParentCanBeSetAndAppliedWithZ() -> None:
                     [
                         _row("shop.example", "Shopping", "Shop"),
                         _row("beta.example"),
+                        _row("gamma.example"),
                     ]
                 )
             )
@@ -102,6 +103,17 @@ def testDefaultParentCanBeSetAndAppliedWithZ() -> None:
             view = app.query_one(FilingView)
             table = app.query_one("#filing-table", DataTable)
             editor = app.query_one(FilingEditor)
+            saved: list[tuple[str, str, str, bool]] = []
+            monkeypatch.setattr(
+                editor,
+                "_domainStore",
+                lambda row, parent, child, proposed: saved.append(
+                    (row["domain"], parent, child, proposed)
+                )
+                or row["domain"],
+            )
+            monkeypatch.setattr(view, "planRecompute", lambda: None)
+
             table.focus()
             table.move_cursor(row=0)
             await pilot.press("Z")
@@ -112,10 +124,10 @@ def testDefaultParentCanBeSetAndAppliedWithZ() -> None:
             await pilot.pause()
             await pilot.press("z")
             await pilot.pause()
-            assert app.query_one("#filing-parent", Input).value == "Shopping"
-            assert app.query_one("#filing-child", Input).value == "Beta"
+            assert saved == [("beta.example", "Shopping", "Beta", False)]
             assert editor._disposition == "file"
-            assert app.focused.id == "filing-child"
+            assert table.cursor_row == 2
+            assert app.focused.id == "filing-table"
 
     asyncio.run(inspect())
 
