@@ -127,6 +127,29 @@ amazon.co.uk  -> Amazon
 
 The user can edit the proposed child name before approval.
 
+### Explicit archive-store override
+
+The source mailbox and local archive store are separate concepts. The normal
+mapping remains:
+
+```text
+Andy source  -> myMail
+Kathy source -> kathyMail
+```
+
+A File rule may explicitly select the other configured personal local archive as
+its **archive store** when the user deliberately wants cross-archive filing, for
+example Andy mail stored under `kathyMail`.
+
+This override must be explicit and persisted with the filing decision. It must
+never be inferred merely because an equivalent Parent/Folder path exists in the
+other archive.
+
+The initial cross-archive capability applies only to local archive filing of
+pre-live-year mail. It does not authorise filing current/live-year Andy mail into
+Kathy's IMAP account, or vice versa. Live-year filing remains within the source
+mailbox's own IMAP account.
+
 ## Filing decision precedence
 
 For an eligible read Inbox message, destination resolution should use this order:
@@ -205,26 +228,41 @@ list while preserving the selected row and viewport.
 
 The table provides these fast-path controls while it has focus:
 
+- `Space` toggles the current row into or out of the explicit multi-selection;
+- `Esc` clears the multi-selection while the table has focus; when editing a
+  filing field, `Esc` first returns focus to the table without clearing marks;
 - `i` records Ignore;
 - `j` records Junk;
 - `f` selects File editing; when the existing action is Ignore or Junk, `f`
   clears that saved disposition back to Choose before opening the destination
   editor;
+- `z` selects File using the current session default Parent and moves focus to
+  Folder so the suggested or typed child can be confirmed;
+- `Shift+Z` sets the session default Parent from the Parent on the row currently
+  highlighted in the filing table; it makes no filing decision itself;
 - `s` opens an exact sender override for a single domain;
 - `c` toggles between **All** rows and **Choose only** rows.
+
+The default Parent is a session convenience only. It is not a persisted filing
+rule or configuration value. `Shift+Z` must refuse to set a default from a row
+with no Parent, and `z` must refuse cleanly when no session default has yet been
+set. `z` applies to the current row or to all explicitly marked rows and must not
+save a partial Parent-only rule merely because focus moves to Folder.
 
 The current filter must be visible in the screen summary. Filtering changes only
 presentation; it does not change filing rules or the underlying plan.
 
 ### Multi-selection and bulk filing
 
-Moving Mail supports desktop-style mouse selection for applying one destination
-to several domains:
+Moving Mail supports explicit keyboard selection plus optional desktop-style
+mouse modifiers for applying one destination to several domains:
 
-- normal click selects one row and clears an existing multi-selection;
-- Ctrl+click adds or removes an individual row from the selection;
-- Shift+click selects a contiguous visible range from the selection anchor;
-- Ctrl+Shift+click extends the existing selection with that range when the
+- normal click changes the current row without clearing existing explicit marks;
+- `Space` adds or removes the current row from the explicit selection;
+- Ctrl+click may add or remove an individual row when the terminal supplies the
+  modifier;
+- Shift+click may select a contiguous visible range from the selection anchor;
+- Ctrl+Shift+click may extend the existing selection with that range when the
   terminal/mouse event supplies both modifiers.
 
 Selected rows remain distinct domain rules internally. Bulk filing never creates
@@ -264,6 +302,7 @@ The persisted model must support, at minimum:
 - mailbox-specific domain mappings;
 - optional mailbox-specific exact-sender overrides;
 - the disposition (`file`, `ignore`, or `junk`);
+- optional explicit archive-store override for local File destinations;
 - proposed/new parent metadata where the disposition is File;
 - canonical destination path where the disposition is File;
 - schema versioning and validation.
@@ -287,6 +326,7 @@ including:
 - disposition (`file`, `ignore`, or `junk`);
 - resolved canonical destination when the disposition is File;
 - destination kind (`imap` or `local`) when the disposition is File;
+- destination archive store when a local File action uses an explicit override;
 - filing decision source (`sender`, `domain`, `archive history`, or equivalent);
 - whether destination folder creation is required;
 - whether execution is currently permitted.
@@ -306,10 +346,15 @@ IMAP mirror folder where available or approved for creation.
 A future execution step may move the read Inbox message from `INBOX` to that IMAP
 folder once the destination is approved.
 
+An archive-store override does not change live-year routing. Live-year mail stays
+within the source mailbox's own IMAP account.
+
 ### Older mail
 
 For pre-live-year mail, the destination is the corresponding local archive path
-under `myMail` or `kathyMail`.
+under `myMail` or `kathyMail`, defaulting to the archive associated with the
+source mailbox unless the filing rule explicitly selects the other configured
+personal archive store.
 
 A future execution step must use copy -> verify -> remove semantics before the
 server copy may be removed. A failed or unverified copy leaves the source message
@@ -336,6 +381,7 @@ legacy Thunderbird filters into mailAgent filing rules or identify conflicts.
 - normal filing never deletes a message;
 - folder creation is explicit and reviewable;
 - local archival uses copy -> verify -> remove;
+- a cross-archive destination is explicit and never inferred;
 - shared/support mailbox content is not subjected to personal filing rules;
 - every executed filing action must be logged and auditable;
 - repeated runs must be idempotent and must not duplicate archived messages.
@@ -345,7 +391,9 @@ legacy Thunderbird filters into mailAgent filing rules or identify conflicts.
 - unread messages in `INBOX` remain untouched;
 - read messages in `INBOX` become filing candidates;
 - messages outside `INBOX` are not selected by normal Inbox filing;
-- Andy and Kathy use their own local archive taxonomies;
+- Andy and Kathy use their own local archive taxonomies by default;
+- a File rule may explicitly target the other configured personal local archive
+  without authorising live-year cross-account IMAP filing;
 - available Parent choices are discovered from the first level of the relevant
   local archive;
 - a user can propose a new Parent without immediately creating a folder;
@@ -360,8 +408,14 @@ legacy Thunderbird filters into mailAgent filing rules or identify conflicts.
 - Moving Mail separates Action from destination Status and unresolved rows show
   `Action = Choose`;
 - the user can toggle between All and Choose-only rows without changing rules;
-- Ctrl+click and Shift+click support multi-selection and one Parent/Folder can be
-  applied to all selected domains as separate persisted domain rules;
+- `Space` supports explicit multi-selection and one Parent/Folder can be applied
+  to all selected domains as separate persisted domain rules;
+- normal clicks can move the current row without discarding explicit marks;
+- `Esc` returns from the editor to the table before clearing selection on a
+  subsequent table-level `Esc`;
+- `Shift+Z` can take a non-empty Parent from the highlighted table row as a
+  session default and `z` can prefill that Parent for the current or marked rows
+  without prematurely saving a partial rule;
 - table rebuilds preserve the selected domain and viewport where possible;
 - Ignore produces no folder proposal and leaves the messages in `INBOX`;
 - Junk produces no archive-folder proposal and records a junk mark for
@@ -384,16 +438,20 @@ change; new parents are proposed automatically. The parent dropdown remains
 available. Table shortcuts i/j save Ignore/Junk; f opens File destination
 editing and resets a saved Ignore/Junk decision back to Choose first. The
 disposition dropdown and Add parent / Save domain buttons have been removed.
-Choose-only filtering and Ctrl/Shift multi-selection support rapid review and
-bulk destination assignment without changing mail.
+Choose-only filtering, Space-based multi-selection, Esc focus navigation and a
+session default Parent shortcut support rapid review and bulk destination
+assignment without changing mail.
 
 - discover parents from `myMail` and `kathyMail`;
 - group Inbox senders by domain;
 - create/edit durable sender/domain filing mappings;
 - support proposed parents and child folders;
+- support an explicit local archive-store override for deliberate cross-archive
+  filing decisions;
 - show Moving Mail Action and destination Status separately in the TUI;
 - filter the workspace to unresolved Choose rows when requested;
-- support desktop-style multi-selection and bulk domain filing decisions;
+- support explicit multi-selection and bulk domain filing decisions;
+- support `Shift+Z` / `z` for a session default Parent fast path;
 - produce read-only filing proposals;
 - record Ignore and Junk without changing flags or mail.
 
@@ -424,3 +482,7 @@ Phase 2 must not be enabled merely by completing Phase 1.
 - 2026-10-11: Separate Action from Status; add compact destination editing,
   Choose-only filtering, viewport preservation and desktop-style Ctrl/Shift
   multi-selection for bulk Parent/Folder assignment.
+- 2026-10-12: Replace terminal-sensitive Ctrl+Space selection with plain Space,
+  make Esc return from editing before clearing marks, add the session default
+  Parent shortcuts (`Shift+Z` to set, `z` to use), and define explicit local
+  archive-store overrides for deliberate cross-archive filing.
