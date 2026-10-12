@@ -44,7 +44,7 @@ def executionJournalHistory(actionId: str, path: Path | None = None) -> list[dic
     selected = path or executionJournalPath()
     if not selected.exists():
         raise ValueError("Unknown execution action")
-    with _database(selected) as db:
+    with _journalDatabase(selected) as db:
         _recordGet(db, actionId)
         return [
             dict(row)
@@ -62,7 +62,7 @@ def executionJournalLoad(path: Path | None = None) -> list[dict]:
         raise ValueError("Journal must not be a symbolic link")
     if not selected.exists():
         return []
-    with _database(selected) as db:
+    with _journalDatabase(selected) as db:
         return [
             _recordDecode(row)
             for row in db.execute("SELECT * FROM actions ORDER BY action_id")
@@ -81,7 +81,7 @@ def executionJournalRegister(actions: list[dict], path: Path | None = None) -> N
     An engine must explicitly reconcile such changes rather than copy twice.
     """
     sanitized = [executionActionValidate(action) for action in actions]
-    with _database(path or executionJournalPath()) as db:
+    with _journalDatabase(path or executionJournalPath()) as db:
         for action in sanitized:
             actionId = action["actionId"]
             sourceKey = _sourceKey(action)
@@ -90,7 +90,7 @@ def executionJournalRegister(actions: list[dict], path: Path | None = None) -> N
             ).fetchone()
             if prior and prior[0] != actionId:
                 raise ValueError("Conflicting execution action for source")
-            payload = _json(action)
+            payload = _valueJson(action)
             existing = db.execute(
                 "SELECT payload FROM actions WHERE action_id = ?", (actionId,)
             ).fetchone()
@@ -102,7 +102,7 @@ def executionJournalRegister(actions: list[dict], path: Path | None = None) -> N
                 "INSERT INTO actions(action_id, source_key, payload, state, attempts) VALUES (?, ?, ?, 'pending', 0)",
                 (actionId, sourceKey, payload),
             )
-            _event(db, actionId, "pending", None, None)
+            _journalEvent(db, actionId, "pending", None, None)
 
 
 def executionJournalRetry(
@@ -119,7 +119,7 @@ def executionJournalRetry(
     """
     if revalidated is not True or partialOutcomeVerified is not True:
         raise ValueError("Retry requires revalidation and partial-outcome verification")
-    with _database(path or executionJournalPath()) as db:
+    with _journalDatabase(path or executionJournalPath()) as db:
         row = _recordGet(db, actionId)
         if row["state"] == "completed" or (
             row["state"] == "pending" and row["started_at"] is None
@@ -129,7 +129,7 @@ def executionJournalRetry(
             "UPDATE actions SET state='pending', started_at=NULL, finished_at=NULL, verification=NULL, error=NULL WHERE action_id=?",
             (actionId,),
         )
-        _event(db, actionId, "pending", None, None)
+        _journalEvent(db, actionId, "pending", None, None)
 
 
 def executionJournalStart(
@@ -138,7 +138,7 @@ def executionJournalStart(
     """Durably mark an attempt before a future primitive can run."""
     if revalidated is not True:
         raise ValueError("Start requires fresh validation")
-    with _database(path or executionJournalPath()) as db:
+    with _journalDatabase(path or executionJournalPath()) as db:
         row = _recordGet(db, actionId)
         if row["state"] != "pending" or row["started_at"] is not None:
             raise ValueError(
@@ -146,9 +146,9 @@ def executionJournalStart(
             )
         db.execute(
             "UPDATE actions SET started_at=?, attempts=attempts+1 WHERE action_id=?",
-            (_now(), actionId),
+            (_timestampNow(), actionId),
         )
-        _event(db, actionId, "started", None, None)
+        _journalEvent(db, actionId, "started", None, None)
 
 
 def executionJournalFinish(
@@ -162,7 +162,7 @@ def executionJournalFinish(
     """Persist verified completion or a fixed safe failure code, never bodies/errors."""
     if state not in _STATES - {"pending"}:
         raise ValueError("Invalid terminal journal state")
-    with _database(path or executionJournalPath()) as db:
+    with _journalDatabase(path or executionJournalPath()) as db:
         row = _recordGet(db, actionId)
         action = executionActionValidate(json.loads(row["payload"]))
         if state == "completed":
@@ -181,16 +181,16 @@ def executionJournalFinish(
             raise ValueError("Action must be pending and started")
         db.execute(
             "UPDATE actions SET state=?, finished_at=?, verification=?, error=? WHERE action_id=?",
-            (state, _now(), verification, error, actionId),
+            (state, _timestampNow(), verification, error, actionId),
         )
-        _event(db, actionId, state, verification, error)
+        _journalEvent(db, actionId, state, verification, error)
 
 
 ## storage
 
 
 @contextmanager
-def _database(path: Path) -> Iterator[sqlite3.Connection]:
+def _journalDatabase(path: Path) -> Iterator[sqlite3.Connection]:
     if path.is_symlink():
         raise ValueError("Journal must not be a symbolic link")
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -228,7 +228,7 @@ def _database(path: Path) -> Iterator[sqlite3.Connection]:
         db.close()
 
 
-def _event(
+def _journalEvent(
     db: sqlite3.Connection,
     actionId: str,
     state: str,
@@ -237,7 +237,7 @@ def _event(
 ) -> None:
     db.execute(
         "INSERT INTO events(action_id, timestamp, state, verification, error) VALUES (?, ?, ?, ?, ?)",
-        (actionId, _now(), state, verification, error),
+        (actionId, _timestampNow(), state, verification, error),
     )
 
 
@@ -276,7 +276,7 @@ def _recordGet(db: sqlite3.Connection, actionId: str) -> sqlite3.Row:
 
 def _sourceKey(action: dict) -> str:
     source = action["source"]
-    return _json([source[key] for key in ("mailbox", "folder", "uidValidity", "uid")])
+    return _valueJson([source[key] for key in ("mailbox", "folder", "uidValidity", "uid")])
 
 
 def _verificationAllowed(action: dict) -> set[str]:
@@ -291,11 +291,11 @@ def _verificationAllowed(action: dict) -> set[str]:
     return _VERIFICATION[action["disposition"]]
 
 
-def _json(value: dict | list) -> str:
+def _valueJson(value: dict | list) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
-def _now() -> str:
+def _timestampNow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -310,7 +310,7 @@ def executionJournalCopyProof(
     Only hashes and UID boundaries are stored. Copy intent is never cleared:
     an uncertain COPY must be reconciled, never blindly repeated.
     """
-    with _database(path or executionJournalPath()) as db:
+    with _journalDatabase(path or executionJournalPath()) as db:
         row = _recordGet(db, actionId)
         db.execute(
             "CREATE TABLE IF NOT EXISTS copy_proofs (action_id TEXT PRIMARY KEY, payload TEXT NOT NULL)"
@@ -332,9 +332,10 @@ def executionJournalCopyProof(
         ):
             raise ValueError("Copy proof is immutable")
         db.execute(
-            "INSERT OR REPLACE INTO copy_proofs VALUES (?, ?)", (actionId, _json(proof))
+            "INSERT OR REPLACE INTO copy_proofs VALUES (?, ?)",
+            (actionId, _valueJson(proof)),
         )
-        _event(
+        _journalEvent(
             db,
             actionId,
             "removal-intent" if proof["removing"] else "copy-intent",
