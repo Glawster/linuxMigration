@@ -1,0 +1,17 @@
+name: raid-server
+
+# Non-destructive server prerequisites only. Storage provisioning is a separate,
+# explicitly confirmed workflow; this profile must never format or repartition
+# disks.
+apt:
+  - git
+  - openssh-server
+  - smartmontools
+  - lm-sensors
+  - nfs-kernel-server
+  - mergerfs
+  - snapraid
+
+services:
+  - ssh
+  - smartmontools
