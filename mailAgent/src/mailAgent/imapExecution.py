@@ -184,7 +184,7 @@ def _copyStart(
 ) -> dict:
     actionId = action["actionId"]
     imapFolderEnsure(client, action)
-    _select(client, action["destination"]["folder"])
+    _folderSelect(client, action["destination"]["folder"])
     proof = dict(
         digest=sha256(source[1]).hexdigest(),
         uidValidity=_responseNumber(client, "UIDVALIDITY"),
@@ -199,7 +199,7 @@ def _copyStart(
     if sha256(source[1]).hexdigest() != proof["digest"]:
         raise ImapExecutionBlocked("stale-source")
     executionJournalCopyProof(actionId, proof, path)
-    _ok(
+    _responseOk(
         client.uid(
             "COPY",
             action["source"]["uid"],
@@ -247,8 +247,8 @@ def _sourceRemove(client: Any, action: dict, proof: dict, path: Path) -> dict:
         proof = dict(proof, removing=True)
         executionJournalCopyProof(actionId, proof, path)
         uid = action["source"]["uid"]
-        _ok(client.uid("STORE", uid, "+FLAGS.SILENT", r"(\Deleted)"))
-        _ok(client.uid("EXPUNGE", uid))
+        _responseOk(client.uid("STORE", uid, "+FLAGS.SILENT", r"(\Deleted)"))
+        _responseOk(client.uid("EXPUNGE", uid))
     elif not proof["removing"]:
         raise ImapExecutionBlocked("stale-source")
     return proof
@@ -258,10 +258,10 @@ def _sourceRemove(client: Any, action: dict, proof: dict, path: Path) -> dict:
 
 
 def _destinationVerify(client: Any, action: dict, proof: dict) -> None:
-    _select(client, action["destination"]["folder"])
+    _folderSelect(client, action["destination"]["folder"])
     if _responseNumber(client, "UIDVALIDITY") != proof["uidValidity"]:
         raise ImapExecutionBlocked("destination-changed")
-    rows = _ok(client.uid("SEARCH", None, "UID", proof["uidNext"] + ":*"))
+    rows = _responseOk(client.uid("SEARCH", None, "UID", proof["uidNext"] + ":*"))
     if len(rows) != 1 or not isinstance(rows[0], bytes):
         raise ImapExecutionBlocked("verification-failed")
     matches = []
@@ -279,7 +279,7 @@ def _destinationVerify(client: Any, action: dict, proof: dict) -> None:
 
 
 def _folderExists(client: Any, folder: str) -> bool:
-    rows = _ok(client.list())
+    rows = _responseOk(client.list())
     for row in rows or []:
         if row is None:
             continue
@@ -292,7 +292,7 @@ def _folderExists(client: Any, folder: str) -> bool:
 
 
 def _messageRead(client: Any, uid: str) -> tuple[bytes, bytes] | None:
-    rows = _ok(client.uid("FETCH", uid, "(UID FLAGS BODY.PEEK[])"))
+    rows = _responseOk(client.uid("FETCH", uid, "(UID FLAGS BODY.PEEK[])"))
     messages = [r for r in rows or [] if isinstance(r, tuple)]
     if not messages:
         return None
@@ -311,7 +311,7 @@ def _messageRead(client: Any, uid: str) -> tuple[bytes, bytes] | None:
 def _sourceRead(
     client: Any, action: dict, writable: bool = False
 ) -> tuple[bytes, bytes] | None:
-    _select(client, action["source"]["folder"], writable)
+    _folderSelect(client, action["source"]["folder"], writable)
     if _responseNumber(client, "UIDVALIDITY") != action["source"]["uidValidity"]:
         raise ImapExecutionBlocked("stale-source")
     return _messageRead(client, action["source"]["uid"])
@@ -331,8 +331,8 @@ def _sourceValidate(
         raise ImapExecutionBlocked("stale-source")
 
 
-def _select(client: Any, folder: str, writable: bool = False) -> None:
-    _ok(client.select(_pathQuote(folder), readonly=not writable))
+def _folderSelect(client: Any, folder: str, writable: bool = False) -> None:
+    _responseOk(client.select(_pathQuote(folder), readonly=not writable))
 
 
 def _responseNumber(client: Any, name: str) -> str:
@@ -348,7 +348,7 @@ def _responseNumber(client: Any, name: str) -> str:
     return str(int(rows[0]))
 
 
-def _ok(response: tuple) -> list:
+def _responseOk(response: tuple) -> list:
     status, rows = response
     if status != "OK":
         raise ImapExecutionBlocked("verification-failed")
