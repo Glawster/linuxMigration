@@ -877,7 +877,7 @@ class FilingEditor(Widget):
 
     def action_sender_edit(self) -> None:
         """Reveal and focus a sender field; Enter saves the override."""
-        if len(self._view().selectedRows()) > 1:
+        if len(self._rows) > 1:
             self._status("Sender override requires one selected domain.")
             return
         if not self._row:
