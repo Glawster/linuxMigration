@@ -33,7 +33,7 @@ class FilingTable(DataTable):
     """Save domain dispositions with keys scoped to the focused filing table."""
 
     BINDINGS = [
-        Binding("c", "choose_filter", "Choose/All"),
+        Binding("c", "choose_filter", "Toggle To do/All"),
         Binding("i", "ignore", "Ignore"),
         Binding("j", "junk", "Junk"),
         Binding("f", "file", "File"),
@@ -86,6 +86,8 @@ class FilingTable(DataTable):
 class FilingView(Widget):
     """Domain table with a compact rule editor beneath it."""
 
+    BINDINGS = [Binding("c", "choose_filter", "", show=False)]
+
     def __init__(self, snapshot: dict, issue: str | None = None) -> None:
         """Keep the shared snapshot. Saves write rules, then replace its plan."""
         super().__init__()
@@ -94,6 +96,9 @@ class FilingView(Widget):
         plan = snapshot.get("filingPlan") or {}
         self._allRows: list[dict] = list(plan.get("rows") or [])
         self._chooseOnly = False
+        self._linger: set[tuple[str, str]] = set()
+        self._sortKey: str | None = None
+        self._sortDescending = False
         self._marked: set[tuple[str, str]] = set()
         self._selectionAnchor: tuple[str, str] | None = None
         self.rows: list[dict] = self._rowsVisible()
@@ -115,7 +120,9 @@ class FilingView(Widget):
             yield Static(self.issue, id="filing-issue", markup=False)
         table = FilingTable(id="filing-table", cursor_type="row")
         for key, label, width in _columnSpecs():
-            self._columnKeys[key] = table.add_column(label, width=width, key=key)
+            self._columnKeys[key] = table.add_column(
+                self._columnLabel(key, label), width=width, key=key
+            )
         for row in self.rows:
             table.add_row(*_tableCells(row, 16, self._identity(row) in self._marked))
         yield table
@@ -130,6 +137,10 @@ class FilingView(Widget):
         overrides = Static(_overrideText(plan), id="filing-overrides", markup=False)
         overrides.display = bool(plan.get("senderOverrides"))
         yield overrides
+
+    def action_choose_filter(self) -> None:
+        """Allow the To do/All toggle from anywhere in the Moving Mail view."""
+        self.chooseToggle()
 
     def actionNavigate(self) -> None:
         """Select the first unresolved domain and focus its decision field."""
@@ -151,29 +162,23 @@ class FilingView(Widget):
         self.query_one(target).focus()
 
     def chooseToggle(self) -> None:
-        """Toggle the table between all rows and only unresolved Choose rows."""
-        table = self.query_one("#filing-table", DataTable)
-        previous = self._selectedIdentity()
-        previousScroll = table.scroll_y
+        """Toggle the table between All and unresolved To do rows."""
         self._chooseOnly = not self._chooseOnly
-        self.rows = self._rowsVisible()
-        destinationWidth = self._widths.get("destination", 16)
-        with table.prevent(DataTable.RowHighlighted):
-            table.clear(columns=False)
-            for row in self.rows:
-                table.add_row(
-                    *_tableCells(
-                        row,
-                        destinationWidth,
-                        self._identity(row) in self._marked,
-                    )
-                )
-            self._cursorRestore(previous)
-        self._summaryUpdate()
-        self._emptyUpdate()
-        self._editorSync()
-        self.columnsFit()
-        self._viewportRestore(previousScroll)
+        self._visibleReload()
+
+    def sortToggle(self, key: str) -> None:
+        """Cycle Parent or Folder sorting through ascending, descending and off."""
+        if key not in ("parent", "folder"):
+            return
+        if self._sortKey != key:
+            self._sortKey = key
+            self._sortDescending = False
+        elif not self._sortDescending:
+            self._sortDescending = True
+        else:
+            self._sortKey = None
+            self._sortDescending = False
+        self._visibleReload(rebuildColumns=True)
 
     def planShow(self) -> None:
         """Reload the table while keeping the selected domain and viewport."""
@@ -184,6 +189,7 @@ class FilingView(Widget):
         self._allRows = list(plan.get("rows") or [])
         valid = {self._identity(row) for row in self._allRows}
         self._marked.intersection_update(valid)
+        self._linger.intersection_update(valid)
         if self._selectionAnchor not in valid:
             self._selectionAnchor = None
         self.rows = self._rowsVisible()
@@ -208,6 +214,18 @@ class FilingView(Widget):
 
     def planRecompute(self) -> None:
         """Rebuild the plan from saved rules. This does not rescan mail."""
+        linger: set[tuple[str, str]] = set()
+        if self._chooseOnly:
+            targets = self.selectedRows()
+            if not targets:
+                selected = self._selectedRow()
+                targets = [selected] if selected else []
+            linger = {
+                self._identity(row)
+                for row in targets
+                if row and _rowAction(row) == "Choose"
+            }
+            self._linger.update(linger)
         context = self.snapshot.get("filingContext")
         if not context:
             raise ValueError("Filing context is unavailable")
@@ -215,6 +233,8 @@ class FilingView(Widget):
             context, self.snapshot, filing.filingRulesLoad(filing.filingPath())
         )
         self.planShow()
+        if linger:
+            self.set_timer(1.5, lambda identities=set(linger): self._lingerExpire(identities))
 
     def columnsFit(self) -> None:
         """Give Domain most of the spare width and clip Destination."""
@@ -238,7 +258,7 @@ class FilingView(Widget):
                 table.clear(columns=True)
                 for name, label, _width in _columnSpecs():
                     self._columnKeys[name] = table.add_column(
-                        label, width=widths[name], key=name
+                        self._columnLabel(name, label), width=widths[name], key=name
                     )
                 for row in self.rows:
                     table.add_row(
@@ -266,6 +286,15 @@ class FilingView(Widget):
         """Refit columns when the terminal size changes, without resetting edits."""
         del event
         self.call_after_refresh(self.columnsFit)
+
+    @on(DataTable.HeaderSelected, "#filing-table")
+    def headerSelected(self, event: DataTable.HeaderSelected) -> None:
+        """Sort Parent or Folder by clicking its heading."""
+        for name in ("parent", "folder"):
+            if event.column_key == self._columnKeys.get(name):
+                event.stop()
+                self.sortToggle(name)
+                return
 
     @on(MouseUp, "#filing-table")
     def tableMouseUp(self, event: MouseUp) -> None:
@@ -345,16 +374,34 @@ class FilingView(Widget):
         return self.snapshot.get("filingPlan") or {}
 
     def _rowsVisible(self) -> list[dict]:
-        """Return either all plan rows or only rows whose action is Choose."""
-        if not self._chooseOnly:
-            return list(self._allRows)
-        return [row for row in self._allRows if _rowAction(row) == "Choose"]
+        """Return rows after the active To do filter and presentation sort."""
+        rows = list(self._allRows)
+        if self._chooseOnly:
+            rows = [
+                row
+                for row in rows
+                if _rowAction(row) == "Choose" or self._identity(row) in self._linger
+            ]
+        if self._sortKey:
+            key = self._sortKey
+            rows.sort(
+                key=lambda row: (
+                    str(row.get(key) or "").casefold(),
+                    str(row.get("domain") or "").casefold(),
+                ),
+                reverse=self._sortDescending,
+            )
+        return rows
 
     def _summaryDisplay(self) -> str:
-        """Describe outstanding work plus the current table filter."""
+        """Describe outstanding work plus the current table filter and sort."""
         base = _actionText(self._allRows) or _summaryText()
-        view = "Choose only" if self._chooseOnly else "All"
-        return f"{base} · View: {view} ({len(self.rows)}/{len(self._allRows)})"
+        view = "To do" if self._chooseOnly else "All"
+        sort = ""
+        if self._sortKey:
+            arrow = "↓" if self._sortDescending else "↑"
+            sort = f" · Sort: {self._sortKey.title()} {arrow}"
+        return f"{base} · View: {view} ({len(self.rows)}/{len(self._allRows)}){sort}"
 
     def _summaryUpdate(self) -> None:
         """Refresh the top guidance and warning styling."""
@@ -369,13 +416,61 @@ class FilingView(Widget):
         empty = self.query_one("#filing-empty", Static)
         message = ""
         if not self.rows:
-            message = (
-                "No domains need Choose"
-                if self._chooseOnly
-                else "No Inbox domains to file"
-            )
+            message = "No domains to do" if self._chooseOnly else "No Inbox domains to file"
         empty.update(message)
         empty.display = not self.rows
+
+    def _visibleReload(self, rebuildColumns: bool = False) -> None:
+        """Repaint filtered/sorted rows while preserving selection and viewport."""
+        table = self.query_one("#filing-table", DataTable)
+        previous = self._selectedIdentity()
+        previousScroll = table.scroll_y
+        self.rows = self._rowsVisible()
+        destinationWidth = self._widths.get("destination", 16)
+        with table.prevent(DataTable.RowHighlighted):
+            table.clear(columns=rebuildColumns)
+            if rebuildColumns:
+                for name, label, width in _columnSpecs():
+                    actual = self._widths.get(name, width)
+                    self._columnKeys[name] = table.add_column(
+                        self._columnLabel(name, label), width=actual, key=name
+                    )
+            for row in self.rows:
+                table.add_row(
+                    *_tableCells(
+                        row,
+                        destinationWidth,
+                        self._identity(row) in self._marked,
+                    )
+                )
+            self._cursorRestore(previous)
+        self._summaryUpdate()
+        self._emptyUpdate()
+        self._editorSync()
+        self._destinationsClip()
+        self._viewportRestore(previousScroll)
+
+    def _columnLabel(self, name: str, label: str) -> str:
+        """Show active Parent/Folder sort direction in the heading."""
+        if self._sortKey != name:
+            return label
+        arrow = "↓" if self._sortDescending else "↑"
+        return f"{label} {arrow}"
+
+    def _lingerExpire(self, identities: set[tuple[str, str]]) -> None:
+        """Briefly leave completed To do rows visible so the saved result is seen."""
+        if not identities:
+            return
+        self._linger.difference_update(identities)
+        for identity in identities:
+            row = next(
+                (row for row in self._allRows if self._identity(row) == identity),
+                None,
+            )
+            if row is not None and _rowAction(row) != "Choose":
+                self._marked.discard(identity)
+        if self._chooseOnly:
+            self._visibleReload()
 
     def _editorSync(self) -> None:
         """Show the active multi-selection or whichever domain the cursor is on."""
@@ -618,7 +713,9 @@ class FilingEditor(Widget):
             chooser.value = parent if parent and parent in legal else Select.NULL
         parentInput = self.query_one("#filing-parent", Input)
         childInput = self.query_one("#filing-child", Input)
-        parentInput.placeholder = "Mixed parents" if len(parents) > 1 else "Choose or type parent"
+        parentInput.placeholder = (
+            "Mixed parents" if len(parents) > 1 else "Choose or type parent"
+        )
         childInput.placeholder = "Mixed folders" if len(folders) > 1 else "Folder"
         parentInput.value = parent
         childInput.value = child
@@ -787,9 +884,7 @@ class FilingEditor(Widget):
                 )
                 plan = self._view()._plan()
                 for target in targets:
-                    discovered = set(
-                        plan.get("parents", {}).get(target["mailbox"], [])
-                    )
+                    discovered = set(plan.get("parents", {}).get(target["mailbox"], []))
                     filing.filingDomainSet(
                         target["mailbox"],
                         target["domain"],
