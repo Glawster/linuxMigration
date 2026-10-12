@@ -41,6 +41,8 @@ class FilingTable(DataTable):
         Binding("i", "ignore", "Ignore"),
         Binding("j", "junk", "Junk"),
         Binding("f", "file", "File"),
+        Binding("z", "file_default", "Default"),
+        Binding("shift+z", "default_set", "Set default", show=False),
         Binding("s", "sender_edit", "Sender"),
     ]
 
@@ -80,6 +82,16 @@ class FilingTable(DataTable):
     def action_file(self) -> None:
         """Open folder choices; File requires a destination before saving."""
         self._dispositionChoose("file")
+
+    def action_file_default(self) -> None:
+        """Use the session default Parent and continue with Folder editing."""
+        if isinstance(self.parent, FilingView):
+            self.parent.defaultApply()
+
+    def action_default_set(self) -> None:
+        """Take the highlighted row's Parent as the session default."""
+        if isinstance(self.parent, FilingView):
+            self.parent.defaultSet()
 
     def action_sender_edit(self) -> None:
         """Reveal exact sender editing for the selected domain."""
@@ -125,6 +137,7 @@ class FilingView(Widget):
         self._sortDescending = False
         self._marked: set[tuple[str, str]] = set()
         self._selectionAnchor: tuple[str, str] | None = None
+        self._defaultParent: str | None = None
         self.rows: list[dict] = self._rowsVisible()
         self._widths: dict[str, int] = {}
         self._columnKeys: dict[str, ColumnKey] = {}
@@ -189,6 +202,28 @@ class FilingView(Widget):
         """Toggle the table between All and unresolved To do rows."""
         self._chooseOnly = not self._chooseOnly
         self._visibleReload()
+
+    def defaultSet(self) -> None:
+        """Use the highlighted row's Parent as the session filing default."""
+        row = self._selectedRow()
+        parent = str(row.get("parent") or "").strip() if row else ""
+        editor = self.query_one(FilingEditor)
+        if not parent:
+            editor._status("Cannot set default: selected row has no Parent.")
+            return
+        self._defaultParent = parent
+        editor._status(f"Default Parent: {parent}")
+
+    def defaultApply(self) -> None:
+        """Apply the session default Parent to the current or marked rows."""
+        editor = self.query_one(FilingEditor)
+        if not self._defaultParent:
+            editor._status("No default Parent set — use Shift+Z first.")
+            return
+        if self._selectedRow() is None:
+            editor._status("Select a filing domain first.")
+            return
+        editor.defaultParentApply(self._defaultParent)
 
     def sortToggle(self, key: str) -> None:
         """Cycle Parent or Folder sorting through ascending, descending and off."""
@@ -661,7 +696,7 @@ class FilingEditor(Widget):
             )
         with HorizontalGroup(id="filing-status-row"):
             yield Static(
-                "Space Select · Esc Back/Clear · i Ignore · j Junk · f File · s Sender",
+                "Space Select · Esc Back/Clear · i Ignore · j Junk · f File · z Default · Z Set default · s Sender",
                 id="filing-shortcuts",
                 classes="filing-label",
                 markup=False,
@@ -803,6 +838,17 @@ class FilingEditor(Widget):
         self._disposition = disposition
         self._actionShow(disposition.title())
         self._fileFieldsShow(disposition == "file")
+
+    def defaultParentApply(self, parent: str) -> None:
+        """Prefill File with a session default Parent, then edit the Folder."""
+        if not self._row:
+            self._status("Select a filing domain first.")
+            return
+        self.dispositionSet("file")
+        self.query_one("#filing-parent", Input).value = parent
+        self._shownChoice = self._choiceValues()
+        self._status(f"Default Parent: {parent}")
+        self.query_one("#filing-child", Input).focus()
 
     def dispositionClear(self) -> None:
         """Reset selected saved Ignore/Junk domain decisions back to Choose."""
