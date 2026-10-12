@@ -84,7 +84,7 @@ class FilingTable(DataTable):
         self._dispositionChoose("file")
 
     def action_file_default(self) -> None:
-        """Use the session default Parent and continue with Folder editing."""
+        """Save the current row with the session default Parent and advance."""
         if isinstance(self.parent, FilingView):
             self.parent.defaultApply()
 
@@ -215,15 +215,35 @@ class FilingView(Widget):
         editor._status(f"Default Parent: {parent}")
 
     def defaultApply(self) -> None:
-        """Apply the session default Parent to the current or marked rows."""
+        """Save one row with the default Parent and advance to the next row."""
         editor = self.query_one(FilingEditor)
         if not self._defaultParent:
             editor._status("No default Parent set — use Z first.")
             return
-        if self._selectedRow() is None:
+        if self.selectedRows():
+            editor._status("Quick default filing requires one row; clear selection first.")
+            return
+        row = self._selectedRow()
+        if row is None:
             editor._status("Select a filing domain first.")
             return
-        editor.defaultParentApply(self._defaultParent)
+        table = self.query_one("#filing-table", DataTable)
+        current = table.cursor_row if isinstance(table.cursor_row, int) else 0
+        current = max(0, min(len(self.rows) - 1, current))
+        nextIdentity = (
+            self._identity(self.rows[current + 1])
+            if current + 1 < len(self.rows)
+            else None
+        )
+        if not editor.defaultParentApply(self._defaultParent):
+            return
+        table.focus()
+        if nextIdentity is None:
+            return
+        for index, candidate in enumerate(self.rows):
+            if self._identity(candidate) == nextIdentity:
+                table.move_cursor(row=index)
+                return
 
     def sortToggle(self, key: str) -> None:
         """Cycle Parent or Folder sorting through ascending, descending and off."""
@@ -839,16 +859,37 @@ class FilingEditor(Widget):
         self._actionShow(disposition.title())
         self._fileFieldsShow(disposition == "file")
 
-    def defaultParentApply(self, parent: str) -> None:
-        """Prefill File with a session default Parent, then edit the Folder."""
-        if not self._row:
+    def defaultParentApply(self, parent: str) -> bool:
+        """Save one File rule with the default Parent, or open an incomplete row."""
+        row = self._row
+        if not row:
             self._status("Select a filing domain first.")
-            return
+            return False
+        if len(self._rows) > 1:
+            self._status("Quick default filing requires one row; clear selection first.")
+            return False
+        if row.get("domainUncertain"):
+            self._status("Resolve the organisation domain before quick filing.")
+            self.query_one("#filing-domain", Input).focus()
+            return False
         self.dispositionSet("file")
         self.query_one("#filing-parent", Input).value = parent
-        self._shownChoice = self._choiceValues()
-        self._status(f"Default Parent: {parent}")
-        self.query_one("#filing-child", Input).focus()
+        childInput = self.query_one("#filing-child", Input)
+        if not filing.filingNameNormalize(childInput.value):
+            self._shownChoice = self._choiceValues()
+            self._status(f"Default Parent: {parent}; enter Folder to save.")
+            childInput.focus()
+            return False
+        try:
+            savedParent, child, proposed = self._choiceRead(row)
+            self._domainStore(row, savedParent, child, proposed)
+            self._view().planRecompute()
+        except (OSError, ValueError) as error:
+            self._status(str(error))
+            childInput.focus()
+            return False
+        self._status(f"Saved: {savedParent}/{child}")
+        return True
 
     def dispositionClear(self) -> None:
         """Reset selected saved Ignore/Junk domain decisions back to Choose."""
