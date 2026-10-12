@@ -34,6 +34,10 @@ class FilingTable(DataTable):
 
     BINDINGS = [
         Binding("c", "choose_filter", "Toggle To do/All"),
+        Binding("ctrl+space", "selection_toggle", "Select", show=False),
+        Binding("shift+up", "selection_up", "", show=False, priority=True),
+        Binding("shift+down", "selection_down", "", show=False, priority=True),
+        Binding("escape", "selection_clear", "", show=False),
         Binding("i", "ignore", "Ignore"),
         Binding("j", "junk", "Junk"),
         Binding("f", "file", "File"),
@@ -44,6 +48,26 @@ class FilingTable(DataTable):
         """Toggle between every filing row and only rows that still need Choose."""
         if isinstance(self.parent, FilingView):
             self.parent.chooseToggle()
+
+    def action_selection_toggle(self) -> None:
+        """Add or remove the current row from the keyboard multi-selection."""
+        if isinstance(self.parent, FilingView):
+            self.parent.selectionToggleCurrent()
+
+    def action_selection_up(self) -> None:
+        """Extend keyboard selection one visible row upward."""
+        if isinstance(self.parent, FilingView):
+            self.parent.selectionExtend(-1)
+
+    def action_selection_down(self) -> None:
+        """Extend keyboard selection one visible row downward."""
+        if isinstance(self.parent, FilingView):
+            self.parent.selectionExtend(1)
+
+    def action_selection_clear(self) -> None:
+        """Clear the explicit multi-selection without moving the cursor."""
+        if isinstance(self.parent, FilingView):
+            self.parent.selectionClear()
 
     def action_ignore(self) -> None:
         """Save Ignore for the selected domain, without changing mail."""
@@ -339,6 +363,41 @@ class FilingView(Widget):
         if not self._marked:
             return []
         return [row for row in self._allRows if self._identity(row) in self._marked]
+
+    def selectionToggleCurrent(self) -> None:
+        """Toggle the row under the cursor in the explicit multi-selection."""
+        row = self._selectedRow()
+        if not row:
+            return
+        identity = self._identity(row)
+        if identity in self._marked:
+            self._marked.remove(identity)
+        else:
+            self._marked.add(identity)
+        self._selectionAnchor = identity
+        self._selectionRender()
+
+    def selectionExtend(self, direction: int) -> None:
+        """Move one row and select the visible range from the keyboard anchor."""
+        if direction not in (-1, 1) or not self.rows:
+            return
+        table = self.query_one("#filing-table", DataTable)
+        current = table.cursor_row if isinstance(table.cursor_row, int) else 0
+        current = max(0, min(len(self.rows) - 1, current))
+        if self._selectionAnchor is None:
+            self._selectionAnchor = self._identity(self.rows[current])
+        target = max(0, min(len(self.rows) - 1, current + direction))
+        table.move_cursor(row=target)
+        self._rangeMark(self._identity(self.rows[target]), additive=False)
+        self._selectionRender()
+
+    def selectionClear(self) -> None:
+        """Clear explicit Ctrl/Shift selection and keep the current row active."""
+        if not self._marked and self._selectionAnchor is None:
+            return
+        self._marked.clear()
+        self._selectionAnchor = None
+        self._selectionRender()
 
     def _rangeMark(self, identity: tuple[str, str], additive: bool) -> None:
         """Mark the visible range from the anchor through the clicked row."""
