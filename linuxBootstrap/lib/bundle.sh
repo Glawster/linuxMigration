@@ -84,18 +84,29 @@ bundleSourceCopy() {
 }
 
 bundlePackagesDownload() {
-    local destination="$1" package
+    local destination="$1" package dependency
     shift
-    local -a packages=("$@")
+    local -a packages=("$@") dependencies=()
+
+    command -v apt-rdepends >/dev/null 2>&1 || {
+        logError "apt-rdepends is required to resolve an offline bundle dependency closure; install apt-rdepends"
+        return 2
+    }
 
     mkdir -p "$destination"
-    while IFS= read -r package; do
-        [[ -n "$package" ]] || continue
+    mapfile -t dependencies < <(
+        while IFS= read -r package; do
+            [[ -n "$package" ]] || continue
+            apt-rdepends "$package" 2>/dev/null | awk '/^[^ ]/ {print $1}'
+        done < <(bundlePackagesUnique "${packages[@]}") | awk 'NF && !seen[$0]++'
+    )
+
+    for dependency in "${dependencies[@]}"; do
         (
             cd "$destination"
-            apt-get download "$package"
+            apt-get download "$dependency"
         )
-    done < <(bundlePackagesUnique "${packages[@]}")
+    done
 }
 
 bundleRepositoryIndex() {
@@ -113,19 +124,28 @@ bundleRepositoryIndex() {
 
 bundleManifestWrite() {
     local destination="$1" distribution="$2" release="$3" architecture="$4"
-    local profiles packages
+    local profiles packages resolvedPackages
     shift 4
     local -a packageList=("$@")
     profiles="$(IFS=,; echo "${loadedProfiles[*]}")"
     packages="$(bundlePackagesUnique "${packageList[@]}" | paste -sd, -)"
+    resolvedPackages="$(
+        find "$destination/packages" -maxdepth 1 -type f -name '*.deb' -print0 \
+            | sort -z \
+            | xargs -0 -r dpkg-deb -f 2>/dev/null \
+                '${Package}=${Version}\n' \
+            | sort -u \
+            | paste -sd, -
+    )"
 
     cat > "$destination/manifest.txt" <<EOF
-format=1
+format=2
 profiles=$profiles
 distribution=$distribution
 release=$release
 architecture=$architecture
 packages=$packages
+resolved-packages=$resolvedPackages
 EOF
 }
 
