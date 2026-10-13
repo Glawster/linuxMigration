@@ -4,7 +4,9 @@
 
 linuxBootstrap should support preparing a reusable USB stick that can take a machine from a blank system disk to an installed and bootstrapped Linux host without requiring LAN or Internet access during installation.
 
-The first target is `raid-pc`, using Debian 13 on its dedicated 500 GB SSD, but the design is deliberately profile-driven so it can later be used for other supported hosts.
+The first target is `raid-pc`. The design is deliberately profile-driven and distribution-aware so it can later be used for other supported hosts.
+
+For the current `raid-pc` build, Pop!_OS 24.04 AMD64 is the preferred installation image because it is already used elsewhere in the environment and works with the existing APT-based linuxBootstrap model.
 
 ## User workflow
 
@@ -15,27 +17,53 @@ The USB has two responsibilities:
 
 The intended `raid-pc` workflow is:
 
-1. On an Internet-connected preparation machine, download the appropriate Debian installer ISO.
-2. Use Rufus to create the bootable installer USB.
-3. Keep or create a separate writable data partition on the same USB for the bootstrap payload.
-4. Populate that data partition using linuxBootstrap's bundle workflow.
-5. Boot `raid-pc` from the USB and install Debian 13 to the 500 GB OS SSD.
-6. Reboot into the installed Debian system without requiring a LAN connection.
-7. Mount the USB data partition.
-8. Run linuxBootstrap against the offline bundle for the `raid-pc` host profile.
-9. Review the normal safe-by-default preview and use `--confirm` only when ready to apply it.
-10. Connect the host to the LAN after the base system is known-good, then verify networking and any network-dependent configuration.
+1. On an Internet-connected preparation machine, download the required installation ISO.
+2. Use Balena Etcher to write the ISO to the USB stick.
+3. Inspect the resulting partition layout before making any further changes.
+4. Create a separate writable data partition in trailing unused space, starting safely beyond the end of the ISO image.
+5. Format the data partition as ext4 and label it `RAID-PC-DATA`.
+6. Populate that partition using linuxBootstrap's bundle workflow.
+7. Boot `raid-pc` from the USB and install Pop!_OS 24.04 to the dedicated 500 GB OS SSD.
+8. Reboot into the installed system without requiring a LAN connection.
+9. Mount the USB data partition.
+10. Run linuxBootstrap against the offline bundle for the `raid-pc` host profile.
+11. Review the normal safe-by-default preview and use `--confirm` only when ready to apply it.
+12. Connect the host to the LAN after the base system is known-good, then verify networking and any network-dependent configuration.
 
-Rufus remains the preferred tool for writing the bootable installer. linuxBootstrap does not need to replace Rufus or become an ISO-writing tool.
+Balena Etcher remains the preferred tool for writing the bootable installer image. linuxBootstrap does not replace Etcher or become an ISO-writing tool.
 
-## USB layout
+## Proven USB preparation method
 
-The conceptual layout is:
+A 32 GB Toshiba TransMemory USB stick was tested with a Pop!_OS 24.04 AMD64 ISO written by Balena Etcher.
+
+Immediately after flashing, the device appeared as:
 
 ```text
-USB stick
-├── bootable Debian installer area
-└── RAID-PC-DATA (writable partition)
+/dev/sdm                         28.9G
+├── /dev/sdm1                   3.3G  iso9660  Pop_OS 24.04 amd64
+└── /dev/sdm2                     4M  vfat
+```
+
+`fdisk` reported the ISO image ending at sector `6881279`. Because hybrid ISO partition tables can be interpreted differently by different partitioning tools, linuxBootstrap documentation must not rely on a generic "free space" report alone.
+
+For this tested image, the writable data partition was deliberately started at sector `6963200`, equivalent to 3400 MiB, leaving a safety margin beyond the end of the ISO image.
+
+The resulting layout was:
+
+```text
+/dev/sdm
+├── /dev/sdm1   3.3G
+├── /dev/sdm2     4M  vfat
+└── /dev/sdm3  25.6G
+```
+
+The intended final format is:
+
+```text
+32 GB USB
+├── Pop!_OS 24.04 boot/install image
+├── EFI boot data
+└── RAID-PC-DATA                ext4
     └── linuxBootstrapBundle/
         ├── manifest.json
         ├── linuxMigration/
@@ -44,9 +72,31 @@ USB stick
             └── *.deb
 ```
 
-The installer area and writable payload area are deliberately separate. Updating linuxBootstrap or refreshing packages should not require rewriting the Debian installer image.
+The data partition should be formatted with:
 
-The exact partitioning procedure depends on how Rufus writes the selected Debian image and must be documented and tested before it is treated as a supported preparation workflow. The implementation must not assume that unused capacity after writing an ISO is automatically writable.
+```bash
+sudo mkfs.ext4 -L RAID-PC-DATA /dev/sdX3
+```
+
+where `/dev/sdX` has first been positively identified as the intended USB device.
+
+The modified USB must be boot-tested after adding the data partition. Until that boot test succeeds, the preparation method is considered partially validated rather than complete.
+
+## Important hybrid-ISO rule
+
+Balena Etcher writes the hybrid ISO image directly to the device. The resulting ISO and EFI structures are not equivalent to a normal partitioned data disk.
+
+Different tools may therefore describe the device differently. For example, one tool may show the ISO9660 image as a normal-looking partition while another reports much of that same region as free space.
+
+Consequently:
+
+- never create a new partition merely from the first "free space" position reported by a partition editor;
+- determine the actual end of the written ISO image first;
+- start the writable payload partition safely beyond that boundary;
+- use explicit device identification before any partitioning or formatting operation;
+- do not make linuxBootstrap itself automatically repartition removable media in the initial implementation.
+
+This method should remain documented as image-specific until tested with other ISO releases.
 
 ## Proposed command line
 
@@ -80,7 +130,7 @@ A bundle must contain enough information to install the selected profile without
 
 - the linuxMigration/linuxBootstrap source required to run the selected profile;
 - the selected host profile and inherited role profiles;
-- all required Debian `.deb` packages;
+- all required APT `.deb` packages;
 - package dependencies required by those packages;
 - a machine-readable manifest describing the bundle;
 - checksums for bundled payload files.
@@ -112,6 +162,16 @@ The dependency closure, rather than only these top-level packages, must be avail
 - package list and versions;
 - payload checksums.
 
+For the current `raid-pc` bundle, expected target identity is conceptually:
+
+```text
+distribution: pop
+release: 24.04
+architecture: amd64
+```
+
+The implementation should derive and validate the actual operating-system identity rather than depend on these literal display strings.
+
 Before an offline installation, linuxBootstrap must compare the manifest with the running system. A bundle for the wrong distribution release or architecture must fail before package installation.
 
 ## Package handling
@@ -121,6 +181,8 @@ The preferred implementation is a small local APT repository or another APT-comp
 Bundle creation must resolve and download the complete dependency set while the preparation machine has Internet access. Offline installation must not silently fall back to network repositories.
 
 A missing dependency is an error and should be reported before linuxBootstrap attempts unrelated configuration.
+
+The package bundle must be built for the selected target distribution and release. A package set prepared for Debian must not be treated as interchangeable with one prepared for Pop!_OS/Ubuntu simply because both use APT.
 
 ## Safety requirements
 
@@ -134,7 +196,7 @@ The offline feature inherits linuxBootstrap's safe-by-default behaviour:
 - the target OS disk and storage disks remain outside the responsibility of bundle creation;
 - the `raid-pc` storage safety boundary remains unchanged: normal bootstrap operations never format, repartition or automatically assign storage disks.
 
-Rufus is responsible for the explicitly user-selected bootable-media write. linuxBootstrap's initial implementation should operate only on an already-mounted writable payload partition/directory.
+Balena Etcher is responsible for the explicitly user-selected bootable-media write. linuxBootstrap's initial implementation should operate only on an already-mounted writable payload partition/directory.
 
 ## Network-independent boundary
 
@@ -157,7 +219,7 @@ The bootable installer and bootstrap payload have different lifecycles. A normal
     --confirm
 ```
 
-A new Debian installer image is required only when the chosen installation image itself needs to change.
+A new installer image is required only when the chosen installation image itself needs to change.
 
 Bundle refresh should replace its own managed bundle directory atomically where practical and must not delete unrelated files from the USB partition.
 
@@ -190,21 +252,27 @@ Bundle refresh should replace its own managed bundle directory atomically where 
 - apply the existing profile workflow from local resources;
 - report deferred network-only actions explicitly.
 
-### Stage 4 - documented Rufus preparation
+### Stage 4 - documented bootable USB preparation
 
-- verify the chosen Debian installer image with Rufus;
-- establish a repeatable method for retaining/creating the writable payload partition;
-- document the Windows preparation steps;
-- test boot, Debian installation and subsequent payload access on representative hardware.
+- use Balena Etcher to write the selected hybrid installation ISO;
+- identify the actual end of the written ISO image;
+- create the writable payload partition only in trailing space beyond that boundary;
+- format and label the payload partition `RAID-PC-DATA`;
+- verify the partition can be mounted and written;
+- boot-test the modified USB;
+- test OS installation and subsequent payload access on representative hardware;
+- document any image-specific offsets or constraints discovered during testing.
+
+The currently tested Pop!_OS 24.04 image used sector `6963200` (3400 MiB) as the start of `RAID-PC-DATA`. This value must not be generalized to other installer images without measuring their actual written size first.
 
 ## Out of scope initially
 
 The first implementation does not need to:
 
-- replace Rufus;
+- replace Balena Etcher;
 - create or write bootable ISO images;
 - automatically repartition USB devices;
-- automate the Debian installer itself;
+- automate the OS installer itself;
 - embed credentials or secrets;
 - provision or format `raid-pc` storage disks.
 
