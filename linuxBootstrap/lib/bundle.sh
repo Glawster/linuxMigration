@@ -136,6 +136,49 @@ bundleRepositoryIndex() {
     )
 }
 
+bundleRepositoryValidate() {
+    local destination="$1" packageDir sourceList sourceParts listsDir archivesDir package
+    shift
+    local -a packages=("$@")
+    packageDir="$(cd "$destination" && pwd)"
+    sourceList="$(mktemp)"
+    sourceParts="$(mktemp -d)"
+    listsDir="$(mktemp -d)"
+    archivesDir="$(mktemp -d)"
+    mkdir -p "$listsDir/partial" "$archivesDir/partial"
+    printf 'deb [trusted=yes] file:%s ./\n' "$packageDir" > "$sourceList"
+
+    local -a aptOptions=(
+        -o "Dir::Etc::sourcelist=$sourceList"
+        -o "Dir::Etc::sourceparts=$sourceParts"
+        -o "Dir::State::lists=$listsDir"
+        -o "Dir::Cache::archives=$archivesDir"
+        -o 'Acquire::Languages=none'
+        -o 'APT::Get::List-Cleanup=0'
+    )
+
+    if ! apt-get "${aptOptions[@]}" update >/dev/null; then
+        rm -rf -- "$sourceList" "$sourceParts" "$listsDir" "$archivesDir"
+        logError "offline bundle repository index cannot be read by APT"
+        return 2
+    fi
+
+    local -a uniquePackages=()
+    mapfile -t uniquePackages < <(bundlePackagesUnique "${packages[@]}")
+    if ! apt-get "${aptOptions[@]}" --simulate --no-download install "${uniquePackages[@]}" >/dev/null; then
+        rm -rf -- "$sourceList" "$sourceParts" "$listsDir" "$archivesDir"
+        logError "offline bundle repository cannot satisfy requested packages without network repositories"
+        return 2
+    fi
+
+    rm -rf -- "$sourceList" "$sourceParts" "$listsDir" "$archivesDir"
+    printf '  Offline APT validation passed for'
+    for package in "${uniquePackages[@]}"; do
+        printf ' %s' "$package"
+    done
+    printf '\n'
+}
+
 bundleManifestWrite() {
     local destination="$1" distribution="$2" release="$3" architecture="$4"
     local profiles packages resolvedPackages packageFile packageName packageVersion
@@ -187,6 +230,7 @@ bundleCreate() {
     bundleSourceCopy "$bundleRoot/linuxBootstrap"
     bundlePackagesDownload "$bundleRoot/packages" "${packages[@]}"
     bundleRepositoryIndex "$bundleRoot/packages"
+    bundleRepositoryValidate "$bundleRoot/packages" "${packages[@]}"
     bundleManifestWrite "$bundleRoot" "$distribution" "$release" "$architecture" "${packages[@]}"
     bundleChecksumsWrite "$bundleRoot"
     logSuccess "offline bootstrap bundle created: $bundleRoot"
