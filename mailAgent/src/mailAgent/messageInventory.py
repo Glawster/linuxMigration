@@ -92,6 +92,7 @@ def messageParse(metadata: bytes, header: bytes, folder: str, uidValidity: str) 
         uid=uid[1].decode(),
         uidValidity=uidValidity,
         year=None,
+        messageDate=None,
         sender=None,
         senderName="",
         subject="",
@@ -120,8 +121,9 @@ def messageParse(metadata: bytes, header: bytes, folder: str, uidValidity: str) 
     try:
         if len(dates) != 1:
             raise ValueError("Missing or duplicate Date header")
-        date = parsedate_to_datetime(dates[0])
-        result["year"] = date.year
+        parsedDate = parsedate_to_datetime(dates[0])
+        result["year"] = parsedDate.year
+        result["messageDate"] = parsedDate.date().isoformat()
     except (ValueError, TypeError, OverflowError):
         result["issue"] = "Missing, invalid or ambiguous Date header"
     return result
