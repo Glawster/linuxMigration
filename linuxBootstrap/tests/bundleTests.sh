@@ -104,10 +104,22 @@ EOF
 printf '%s\n' "$1"
 printf '  Depends: shared-dependency\n'
 printf 'shared-dependency\n'
+printf '  Depends: debconf-2.0\n'
+printf 'debconf-2.0\n'
+EOF
+    cat > "$fakeBin/apt-cache" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == policy ]] || exit 2
+if [[ "${2:-}" == debconf-2.0 ]]; then
+    printf 'debconf-2.0:\n  Installed: (none)\n  Candidate: (none)\n'
+else
+    printf '%s:\n  Installed: (none)\n  Candidate: 1\n' "$2"
+fi
 EOF
     cat > "$fakeBin/apt-get" <<'EOF'
 #!/usr/bin/env bash
 [[ "${1:-}" == download ]] || exit 2
+[[ "${2:-}" != debconf-2.0 ]] || exit 42
 printf 'fake package %s\n' "$2" > "${2}_1_amd64.deb"
 EOF
     cat > "$fakeBin/dpkg-deb" <<'EOF'
@@ -129,7 +141,7 @@ for file in ./*.deb; do
     printf 'Package: %s\nFilename: %s\n\n' "$(basename "$file" .deb)" "$file"
 done
 EOF
-    chmod +x "$fakeBin/dpkg" "$fakeBin/apt-rdepends" "$fakeBin/apt-get" "$fakeBin/dpkg-deb" "$fakeBin/dpkg-scanpackages"
+    chmod +x "$fakeBin/dpkg" "$fakeBin/apt-rdepends" "$fakeBin/apt-cache" "$fakeBin/apt-get" "$fakeBin/dpkg-deb" "$fakeBin/dpkg-scanpackages"
 
     output="$(PATH="$fakeBin:$PATH" BUNDLE_OS_RELEASE="$osRelease" NO_COLOR=1 \
         "$projectDir/bootstrap.sh" bundle \
@@ -137,11 +149,13 @@ EOF
         --target-distribution pop --target-release 22.04 --target-architecture amd64 \
         --confirm)"
     assertContains "$output" 'create offline bootstrap bundle' 'confirmed bundle reports creation'
+    assertContains "$output" 'Skipping virtual dependency debconf-2.0' 'confirmed bundle skips virtual dependency'
     [[ -f "$target/linuxBootstrapBundle/manifest.txt" ]] && pass 'confirmed bundle writes manifest' || fail 'confirmed bundle writes manifest'
     [[ -f "$target/linuxBootstrapBundle/SHA256SUMS" ]] && pass 'confirmed bundle writes checksums' || fail 'confirmed bundle writes checksums'
     [[ -f "$target/linuxBootstrapBundle/packages/Packages.gz" ]] && pass 'confirmed bundle writes apt repository index' || fail 'confirmed bundle writes apt repository index'
     [[ -f "$target/linuxBootstrapBundle/linuxBootstrap/bootstrap.sh" ]] && pass 'confirmed bundle copies bootstrap source' || fail 'confirmed bundle copies bootstrap source'
     [[ -f "$target/linuxBootstrapBundle/packages/shared-dependency_1_amd64.deb" ]] && pass 'confirmed bundle downloads dependency closure' || fail 'confirmed bundle downloads dependency closure'
+    [[ ! -e "$target/linuxBootstrapBundle/packages/debconf-2.0_1_amd64.deb" ]] && pass 'confirmed bundle does not download virtual package' || fail 'confirmed bundle does not download virtual package'
     grep -q '^distribution=pop$' "$target/linuxBootstrapBundle/manifest.txt" && pass 'manifest records distribution' || fail 'manifest records distribution'
     grep -q '^packages=.*snapraid' "$target/linuxBootstrapBundle/manifest.txt" && pass 'manifest records requested packages' || fail 'manifest records requested packages'
     grep -q '^resolved-packages=.*shared-dependency=1' "$target/linuxBootstrapBundle/manifest.txt" && pass 'manifest records resolved package versions' || fail 'manifest records resolved package versions'
