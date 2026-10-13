@@ -101,12 +101,7 @@ result before applying that profile on another host.
 
 ### Offline bootable USB
 
-linuxBootstrap is being extended to support a reusable bootable installation
-USB: Rufus writes the Debian installer and a separate writable USB area carries
-the selected host profile, linuxBootstrap source and an offline APT package
-bundle. The initial target is `raid-pc`. See the
-[offline bootstrap USB design](documentation/offlineBootstrapUsb.md) for the
-proposed `bundle` and `install --offline` workflows and their safety boundary.
+linuxBootstrap can build a reusable bootable Pop!_OS installation image with an embedded offline bootstrap bundle. The initial target is `raid-pc`. The `bundle` command creates the local APT repository, source payload, manifest and checksums; the `image` command embeds that validated bundle into a copy of the Pop!_OS 22.04 installer while preserving BIOS/UEFI hybrid boot support. The first `raid-pc` image has been boot-tested and its package set installed successfully on a fresh system with the LAN disconnected. Post-install offline repository setup is still manual and is the remaining Stage 5 automation. See the [offline bootstrap USB guide](documentation/offlineBootstrapUsb.md).
 
 ### Zen Browser
 
