@@ -14,7 +14,7 @@ dependencies = [
 
 [project.scripts]
 mailAgent = "mailAgent.cli:main"
-mailAgent-execute = "mailAgent.executionApp:main"
+mailAgent-execute = "mailAgent.executionCli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
