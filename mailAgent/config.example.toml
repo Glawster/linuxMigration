@@ -1,4 +1,5 @@
 [general]
+credentialsSessionCache = true # reuse mailbox passwords until logout (Linux PAM/keyutils)
 liveYear = 2026
 # Optional override; default is ~/.config/mailAgent/credentials.json.gpg
 # credentialsFile = "~/.config/mailAgent/credentials.json.gpg"

@@ -6,6 +6,13 @@ import stat
 import subprocess
 from pathlib import Path
 
+from mailAgent.credentialSession import (
+    SessionCredentialError,
+    credentialsSessionGet,
+    credentialsSessionIdentity,
+    credentialsSessionPut,
+)
+
 
 class CredentialError(ValueError):
     """A deliberately secret-free credential failure safe for user display."""
@@ -67,24 +74,17 @@ def credentialsDecrypt(path: Path) -> bytes:
     return result.stdout
 
 
-def credentialsLoad(path: Path | None = None) -> dict:
+def credentialsLoad(path: Path | None = None, *, sessionCache: bool = False) -> dict:
     """Parse and validate decrypted JSON without creating a plaintext file."""
-    plaintext = credentialsDecrypt(
+    selected = (
         path
         if path is not None
         else Path.home() / ".config/mailAgent/credentials.json.gpg"
     )
-    try:
-        try:
-            credentials = json.loads(plaintext, object_pairs_hook=_objectParse)
-        except (ValueError, UnicodeError, RecursionError):
-            raise CredentialError(
-                "Decrypted credential store is not valid JSON"
-            ) from None
-        credentialsValidate(credentials)
-        return credentials
-    finally:
-        del plaintext
+    if sessionCache:
+        return _credentialsSessionLoad(selected)
+    plaintext = credentialsDecrypt(selected)
+    return _credentialsParse(plaintext)
 
 
 def credentialsValidate(credentials: dict) -> None:
@@ -106,6 +106,44 @@ def credentialsValidate(credentials: dict) -> None:
 
 
 ## utilities
+
+
+def _credentialsParse(plaintext: bytes) -> dict:
+    try:
+        try:
+            credentials = json.loads(plaintext, object_pairs_hook=_objectParse)
+        except (ValueError, UnicodeError, RecursionError):
+            raise CredentialError(
+                "Decrypted credential store is not valid JSON"
+            ) from None
+        credentialsValidate(credentials)
+        return credentials
+    finally:
+        del plaintext
+
+
+def _credentialsSessionLoad(path: Path) -> dict:
+    path = _storeValidate(path)
+    try:
+        identity = credentialsSessionIdentity(path)
+        cached = credentialsSessionGet(identity)
+        if cached is not None:
+            if credentialsSessionIdentity(_storeValidate(path)) != identity:
+                raise CredentialError(
+                    "Encrypted credential store changed while loading"
+                )
+            return _credentialsParse(cached)
+        credentials = _credentialsParse(credentialsDecrypt(path))
+        # Only password fields are cached; unknown store fields stay out.
+        projected = {
+            key: {"password": value["password"]} for key, value in credentials.items()
+        }
+        if credentialsSessionIdentity(_storeValidate(path)) != identity:
+            raise CredentialError("Encrypted credential store changed while loading")
+        credentialsSessionPut(identity, json.dumps(projected).encode())
+        return credentials
+    except SessionCredentialError as error:
+        raise CredentialError(str(error)) from None
 
 
 def _objectParse(pairs: list[tuple]) -> dict:

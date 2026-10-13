@@ -1,17 +1,30 @@
 # Current increment
 
-Active requirement: [REQ-009](requirements/features/009-read-inbox-filing.md) (`InProgress`).
+Active requirement: [REQ-010](requirements/features/010-approved-mailbox-change-execution.md) (`InProgress`).
 
-## Delivered in Phase 1
+## Delivered
 
-- Moving Mail is a main-menu tab with durable mailbox-specific domain and sender rules.
-- File resolves canonical archive destinations; Ignore and Junk record decisions without folder paths.
-- Read-only plans separate folder moves from Ignore/Junk dispositions; unread mail remains excluded.
-- The compact editor supports discovered/proposed parents and File, Ignore, and Junk choices.
-- Responsive table sizing uses public Textual APIs.
+- Approved-plan validation and durable execution journaling.
+- Exact, separately approved and idempotent IMAP destination creation.
+- One explicitly confirmed personal live-year File action: copy, verify full
+  destination content, then remove only the approved source UID.
+- Durable copy/removal intent and conservative restart reconciliation without
+  duplicate COPY, with executor exclusion for concurrent runs.
+- Fake-mailbox tests for interruptions, failures and stale/unapproved actions.
+- Moving Mail review now separates Action from destination Status, uses a compact
+  selected-domain editor, keeps Parent and Folder on separate rows, and exposes
+  `i` Ignore, `j` Junk, `f` File and `s` Sender override shortcuts without an
+  action dropdown.
 
-## Remaining Phase 2
+See [Execution boundary](../documentation/executionBoundary.md) for the API,
+connection ownership, fresh-observation contract and uncertain-copy policy.
+Normal discovery, planning and the TUI remain read-only. No real mail was changed.
 
-Execution remains disabled. Reviewed folder creation, IMAP moves, verified local
-archival and Thunderbird-compatible junk marking require the execution controls
-specified by REQ-004 and REQ-008.
+## Remaining sequence
+
+1. Broaden proven single-action execution to batches.
+2. Add local Thunderbird archive copy -> verify -> remove.
+3. Add supported Thunderbird-compatible Junk marking.
+
+REQ-008 final approval and an explicit TUI Execute operation remain integration
+dependencies. REQ-010 stays InProgress.

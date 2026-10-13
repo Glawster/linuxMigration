@@ -57,8 +57,8 @@ history is not used to choose a destination for that host.
 Parents are the first level of the local archive only. `Shopping/Amazon/Orders`
 contributes the parent `Shopping`. Deeper names are not extra parents.
 
-`Add parent` records a proposed parent in the filing rules. It does not create
-a Thunderbird or local folder. The plan status distinguishes:
+Typing a new name in Parent records a proposed parent when the edit is committed.
+It does not create a Thunderbird, IMAP or local folder. The plan status distinguishes:
 
 | Status | Meaning |
 | --- | --- |
@@ -85,7 +85,9 @@ The file is mailbox-specific and can store domain rules, exact sender
 overrides, a confirmed organisation domain for a host the suffix list left
 uncertain, proposed parent names and the canonical `Parent/Child` path. It is
 written atomically with user-only permissions. It has a schema version and it
-must not contain passwords, tokens or message content.
+must not contain passwords, tokens or message content. Loading rejects symlinks,
+non-regular files, files owned by another user and group/world permissions.
+An existing rules file must have mode `600`.
 
 Saving a rule is preference data. It still does not change the mailbox.
 
@@ -109,23 +111,50 @@ or require them.
 
 ## Review in the TUI
 
-Open **Moving Mail** on the main menu. One line says that read mail may be
-filed and that this phase changes neither folders nor mail. The table takes
+Open **Moving Mail** on the main menu. When decisions are needed, the summary
+uses amber **ACTION NEEDED** text with the next step. Status cells and the
+selected row's status use the same amber highlight for missing choices,
+uncertain domains and proposed folders. Otherwise the summary explains that
+read mail may be filed and this phase changes neither folders nor mail.
+The top banner explicitly says Execute is not available in the TUI yet.
+Plan also highlights required review or refresh actions in amber. Text labels
+identify the action as well as colour. The table takes
 most of the panel and scrolls on its own. Each row is one organisation domain
 and shows the archive (`myMail` or `kathyMail`), how many current Inbox
 messages it represents, the parent, the folder, the canonical destination and
 the status.
 
-The selected row is the heading of the editor under the table, for example
-`Filing: dpd.co.uk · kathyMail · 2 messages`. Choose a parent, edit the folder
-name, and save a domain rule. **Add parent** records a filing decision only;
-the folder is not created. The new-parent name is asked for only when you add
-a parent.
+Right-click **ACTION NEEDED**, or focus it with Tab and press Enter, to go
+to the relevant controls. Moving Mail selects the first domain needing a
+decision and focuses its domain or folder field. Proposed folders open their
+folder field for review. In Plan, the shortcut opens Review Queue or Proposed
+Moves; when no plan exists, it focuses Refresh Plan. Navigation never saves a
+decision, starts a refresh or executes mailbox changes.
 
-Choose **File**, **Ignore**, or **Junk** in the editor and save a domain rule
-or sender override. Ignore and Junk need no folder. Ignore leaves mail in the
-Inbox; Junk records a future mark for Thunderbird's junk filter. Phase 1 only
-records these decisions and status: it changes no flags, folders, or mail.
+Saving a complete domain or sender decision clears that row's amber highlight
+and updates the action count. A saved proposed folder keeps its descriptive
+status but no longer asks for the same decision. The banner clears when no
+decisions remain; navigating to a field alone does not resolve its action.
+
+The selected row is the heading of the editor under the table, for example
+`Filing: dpd.co.uk · kathyMail · 2 messages`. Parent accepts typed names and
+has a dropdown for discovered and proposed parents. Edit Parent, Folder or an
+uncertain organisation domain; Enter or leaving the field saves a complete
+rule. Choosing a parent from the dropdown also saves. An unfamiliar parent is
+recorded as a proposal. Invalid or incomplete entries show an error and retain
+the previous decision. Selecting a row and resizing never save a rule.
+
+With the table focused, press **i** to save Ignore, **j** to save Junk, or **f**
+to choose File and focus Parent. Ignore and Junk need no folder. These keys
+remain ordinary text while editing fields. To choose a disposition for an
+exact sender override, use **Alt+i**, **Alt+j** or **Alt+f** in the editor,
+then press Enter in Sender to save. Press **s** with the table focused (or
+**Alt+s** in the editor) to reveal the Sender field. There is no disposition dropdown or
+Add parent, Save domain or Sender override button.
+
+Ignore leaves mail in Inbox; Junk records a future mark for Thunderbird's
+junk filter. Phase 1 records these decisions and status: it changes no flags,
+folders or mail.
 The plan's `dispositions` list is separate from its folder-move `proposals`.
 Existing rules without a disposition remain File rules.
 

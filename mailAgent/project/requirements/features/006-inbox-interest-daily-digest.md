@@ -1,5 +1,9 @@
 # REQ-006 - Inbox interest and daily digest
 
+## Status
+
+Completed
+
 ## Purpose
 
 Allow the user to define what kinds of Inbox messages belong in a daily digest

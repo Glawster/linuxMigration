@@ -42,7 +42,8 @@ def main() -> None:
         if _auditIssuesReport(snapshot, logger):
             logger.error("Audit finished with incomplete mailbox data")
             raise SystemExit(1)
-        logger.info("Audit complete: %d mailboxes", len(snapshot["mailboxes"]))
+        quickText = f"Audit complete: {len(snapshot['mailboxes'])} mailboxes"
+        logger.info(quickText)
     except (OSError, ValueError, KeyError):
         parser.exit(
             1,
@@ -151,6 +152,8 @@ def _snapshotBuild(args: argparse.Namespace, config: dict, logger: Any) -> dict:
     }
     if config["general"].get("credentialsFile"):
         options["credentialsFile"] = Path(config["general"]["credentialsFile"])
+    if config["general"].get("credentialsSessionCache"):
+        options["credentialsSessionCache"] = True
     snapshot = discoveryRun(
         config["mailboxes"], _thunderbirdRoot(args.thunderbird), **options
     )

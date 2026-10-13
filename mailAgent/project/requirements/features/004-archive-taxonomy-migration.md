@@ -1,5 +1,9 @@
 # REQ-004 - Archive taxonomy and mail migration
 
+## Status
+
+InProgress
+
 ## Purpose
 
 Use the existing local archive structure as the canonical taxonomy for the

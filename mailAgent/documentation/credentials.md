@@ -49,6 +49,43 @@ At runtime mailAgent:
 The decrypted credentials must never be written to `/tmp`, application state,
 logs, discovery snapshots, or generated reports.
 
+## Reuse passwords until logout
+
+To reuse mailbox passwords across closing and reopening mailAgent, enable:
+
+```toml
+[general]
+credentialsSessionCache = true
+```
+
+This is enabled in this PC's mailAgent configuration. The first launch loads the
+encrypted file normally. Later launches and refreshes in the same login session
+reuse the passwords from the Linux kernel login-session keyring. Closing the app
+releases its process memory but leaves the session cache available. Logout
+revokes the login keyring; shutdown clears kernel memory. The next login loads
+the encrypted file again. Screen locking alone does not clear the cache.
+
+The cache requires Linux `keyctl` from keyutils and a PAM-created `_ses` keyring
+with `pam_keyinit.so ... revoke` in the login profile. This PC's GDM and console
+login profiles use `force revoke`; mailAgent does not change PAM configuration.
+Apps launched in another login context, or through a launcher that replaces its
+inherited session keyring, do not share the cache. Only a process possessing the
+same login keyring can read its cached entries. See the
+[PAM keyring lifecycle](https://www.man7.org/linux/man-pages/man8/pam_keyinit.8.html)
+and [keyutils interface](https://www.man7.org/linux/man-pages/man1/keyctl.1.html).
+
+Mailbox passwords stay in kernel memory. No environment variable or plaintext
+cache file is created, and no secret appears in command arguments. Passwords
+enter keyctl through stdin and leave through a captured pipe. The GPG unlock
+passphrase is not cached by this feature.
+
+Each entry is bound to the encrypted store's resolved path and content hash.
+Changing the file forces another load. Missing files or unsafe permissions are
+still rejected on cache hits. Cache errors remain secret-free and do not fall
+back to another cache or a plaintext file. To disable caching, set the option
+to false; omitting it also preserves the original per-run GPG behavior.
+Legacy `passwordEnv` accounts are unaffected.
+
 ## Security requirements
 
 mailAgent must never:
@@ -156,8 +193,8 @@ an argument sequence with `--batch --decrypt`, captured stdout/stderr and a
 120-second timeout. GPG agent/pinentry handles unlocking according to the user's
 setup. No passphrase is placed on the command line or supplied by the TUI.
 
-The store is decrypted once per discovery run when an account uses a credential
-ID. JSON is parsed and
+Without session caching, the store is decrypted once per discovery run when an
+account uses a credential ID. JSON is parsed and
 validated in memory, including rejecting duplicate keys and missing, empty or
 non-string passwords. Accounts share the in-memory credential dictionary, which
 is cleared after account processing, including when the run is interrupted.

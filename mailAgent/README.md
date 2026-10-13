@@ -24,6 +24,7 @@ The example configuration declares five independent mailboxes: Andy and Kathy
 - [Discovery phase and usage](documentation/discoveryPhase.md)
 - [Mailbox roles and migration planning](documentation/mailboxModel.md)
 - [Encrypted credentials setup](documentation/credentials.md)
+- [MA-011 Login-session password cache](project/requirements/features/MA-011-sessionCredentialCache.md)
 - [REQ-003](project/requirements/features/003-mailbox-discovery.md)
 - [REQ-004](project/requirements/features/004-archive-taxonomy-migration.md)
 - [REQ-005](project/requirements/features/005-encrypted-credentials-store.md)
@@ -33,6 +34,8 @@ The example configuration declares five independent mailboxes: Andy and Kathy
 - [REQ-009](project/requirements/features/009-read-inbox-filing.md)
 - [Inbox filing](documentation/inboxFiling.md)
 - [Requirements](project/requirements/requirementsIndex.md)
+- [Execution boundary](documentation/executionBoundary.md)
+- [REQ-010](project/requirements/features/010-approved-mailbox-change-execution.md)
 
 ## Install
 
@@ -61,7 +64,20 @@ Use `mailAgent --confirm` to persist the audit snapshot. JSON is an optional
 machine-readable export and is always written to a file rather than stdout.
 Mailbox operations remain read-only.
 
-The first version never deletes, moves, flags, or sends mail.
+Normal CLI/TUI workflows never delete, move, flag, or send mail. REQ-010 now
+provides a separately invoked, fake-tested core API for one approved IMAP File
+action; see [Execution boundary](documentation/executionBoundary.md).
+
+## Testing
+
+Run the full project test suite from the mailAgent project directory:
+
+    pytest
+
+Before integration, also run:
+
+    runLinter
+    manageProject --check
 
 ## Archive and migration planning
 

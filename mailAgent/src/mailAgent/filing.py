@@ -6,6 +6,7 @@ move mail, or enable the later execution phase.
 
 import json
 import os
+import stat
 import tempfile
 from functools import lru_cache
 from importlib.resources import files
@@ -165,9 +166,7 @@ def filingPath() -> Path:
 def filingRulesLoad(path: Path | None = None) -> dict:
     """Load filing rules. A missing file is an empty rule set."""
     path = path or filingPath()
-    if not path.exists():
-        return _emptyRules()
-    data = json.loads(path.read_text())
+    data = _rulesRead(path)
     _rulesValidate(data)
     return data
 
@@ -298,7 +297,7 @@ def _accountFile(
     # Copy so the caller's configuration is not given a live-year field.
     owner = dict(found)
     owner["liveYear"] = plan["liveYear"]
-    observed = _observed(snapshot, account["id"])
+    observed = _mailboxObserved(snapshot, account["id"])
     inventory = observed.get("inboxInventory")
     if not isinstance(inventory, dict):
         return
@@ -520,18 +519,26 @@ def _existingSpelling(label: str, folders: list) -> str | None:
 
 
 def _filingWrite(data: dict, path: Path) -> dict:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    _rulesValidate(data)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     payload = json.dumps(data, indent=2, sort_keys=True) + "\n"
     temporaryName = None
     try:
         with tempfile.NamedTemporaryFile(
             mode="w", dir=path.parent, delete=False
         ) as temporary:
-            temporary.write(payload)
             temporaryName = temporary.name
+            temporary.write(payload)
+            temporary.flush()
+            os.fsync(temporary.fileno())
         os.chmod(temporaryName, 0o600)
         os.replace(temporaryName, path)
         temporaryName = None
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
     finally:
         if temporaryName:
             os.unlink(temporaryName)
@@ -777,7 +784,7 @@ def _messagePropose(
         plan["dispositions"].append(record)
         return
     try:
-        observed = _observed(prepared["snapshot"], owner["id"])
+        observed = _mailboxObserved(prepared["snapshot"], owner["id"])
         mappings = prepared["history"][owner["id"]][0]
         destination, create = _destinationBuild(
             decision, message, owner, observed, archive, mappings
@@ -803,7 +810,7 @@ def _messageResolve(
     archive: dict,
 ) -> tuple[dict | None, str, str]:
     if owner["id"] not in prepared["history"]:
-        observed = _observed(prepared["snapshot"], owner["id"])
+        observed = _mailboxObserved(prepared["snapshot"], owner["id"])
         prepared["history"][owner["id"]] = _mappingsFor(owner, observed, archive)
     senderRule = _senderRule(rules, owner["id"], sender)
     if senderRule:
@@ -841,7 +848,7 @@ def _organisationDomain(
     return host, True
 
 
-def _observed(snapshot: dict, mailbox: str) -> dict:
+def _mailboxObserved(snapshot: dict, mailbox: str) -> dict:
     for observed in snapshot.get("mailboxes", []):
         if observed.get("id") == mailbox:
             return observed
@@ -1083,8 +1090,36 @@ def _rowDecision(
     return dict(decided[0]["decision"]), source
 
 
+def _rulesRead(path: Path) -> dict:
+    """Read only an owner-only regular file, without following symlinks."""
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return _emptyRules()
+    except OSError:
+        raise ValueError(
+            "Filing rules must be a readable regular file, not a symlink"
+        ) from None
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ValueError("Filing rules must be a regular file")
+        if metadata.st_uid != os.getuid() or metadata.st_mode & 0o077:
+            raise ValueError("Filing rules must be user-only; use chmod 600")
+        with os.fdopen(descriptor, encoding="utf-8") as reader:
+            descriptor = None
+            return json.load(reader)
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
 def _rulesValidate(data: dict) -> None:
-    if not isinstance(data, dict) or data.get("schemaVersion") != _SCHEMA_VERSION:
+    if (
+        not isinstance(data, dict)
+        or type(data.get("schemaVersion")) is not int
+        or data["schemaVersion"] != _SCHEMA_VERSION
+    ):
         raise ValueError("Unsupported filing-rules schema")
     if _secretKey(data):
         raise ValueError("Filing rules must not contain secrets or message content")
@@ -1116,7 +1151,7 @@ def _rulesValidate(data: dict) -> None:
             if chosen != _domainKey(chosen):
                 raise ValueError("Invalid filing domain")
         for sender, decision in senders.items():
-            if senderNormalize(sender) != sender:
+            if senderNormalize(sender) != sender or not _senderHost(sender):
                 raise ValueError("Invalid filing sender override")
             _decisionValidate(decision)
         for name in proposed:

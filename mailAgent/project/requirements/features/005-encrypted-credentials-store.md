@@ -1,5 +1,9 @@
 # REQ-005 - Encrypted credentials store
 
+## Status
+
+Completed
+
 ## Purpose
 
 Provide persistent mailbox credentials without requiring shell exports and

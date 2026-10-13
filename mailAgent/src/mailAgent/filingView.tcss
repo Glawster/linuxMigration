@@ -1,5 +1,10 @@
-/* Moving Mail layout only. Colour, borders and the two-row control
-   come from myStyles.css. */
+/* Colour roles come from myStyles.css, including the warning palette. */
+
+.action-needed {
+    height: auto;
+    border: none;
+    text-style: bold;
+}
 
 Screen > TabbedContent {
     height: 1fr;
@@ -50,13 +55,13 @@ FilingView #filing-empty {
 
 FilingEditor {
     height: auto;
-    max-height: 32;
+    max-height: 16;
     layout: vertical;
     padding: 0;
 }
 
 FilingEditor HorizontalGroup {
-    height: auto;
+    height: 1;
     margin: 0;
     padding: 0;
     align: left middle;
@@ -64,26 +69,75 @@ FilingEditor HorizontalGroup {
 
 FilingEditor .filing-label {
     width: auto;
+    height: 1;
     padding: 0 1 0 0;
 }
 
 FilingEditor .filing-lead {
-    width: 20;
+    width: 12;
 }
 
 FilingEditor .filing-value {
     width: 1fr;
+    height: 1;
+}
+
+/* Moving Mail is intentionally denser than the shared form default. */
+FilingEditor Input,
+FilingEditor Select {
+    height: 1;
+    min-height: 1;
+    border: none;
+    padding: 0 1;
+    margin: 0 1 0 0;
+}
+
+/* A one-row control cannot spare a row for a focus border. Use a raised
+   surface instead so the active text-entry control remains obvious. */
+FilingEditor Input:focus {
+    border: none;
+    background: #243545;
+    color: #f5f8fb;
+}
+
+/* The shared focus border would consume the only row and hide the Select text/arrow. */
+FilingEditor Select:focus {
+    border: none;
+}
+
+FilingEditor SelectCurrent {
+    height: 1;
+    min-height: 1;
+    border: none;
+    padding: 0 1;
 }
 
 FilingEditor .filing-field {
     width: 1fr;
-    max-width: 40;
-    margin: 0 1 0 0;
+    max-width: 54;
 }
 
-FilingEditor .filing-action {
-    width: 20;
-    min-width: 20;
-    max-width: 20;
-    margin: 0 1 0 0;
+/* Parent and Folder entry fields use the same width; the picker is a separate wider control. */
+FilingEditor .filing-parent-field,
+FilingEditor .filing-folder-field {
+    width: 48;
+    max-width: 48;
+}
+
+FilingEditor #filing-parent-options {
+    width: 30;
+    min-width: 30;
+}
+
+/* Shortcut help is already shown in the Footer; do not duplicate it here. */
+FilingEditor #filing-shortcuts {
+    display: none;
+}
+
+FilingEditor #filing-status,
+FilingEditor #filing-row-status,
+FilingEditor #filing-heading {
+    height: 1;
+    margin: 0;
+    padding: 0;
 }

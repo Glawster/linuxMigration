@@ -1,5 +1,9 @@
 # REQ-007 - Unsubscribe discovery and action
 
+## Status
+
+ToDo
+
 ## Purpose
 
 Identify unsubscribe information in email so the user can review and act on
