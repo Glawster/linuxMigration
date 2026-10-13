@@ -8,6 +8,7 @@ from pathlib import Path
 import tomllib
 from typing import Any
 
+from organiseMyProjects.logUtils import setApplication
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.widgets import Button, DataTable, Footer, Header, Static
@@ -26,6 +27,7 @@ def main() -> None:
     """Open the explicit execution screen; normal mailAgent remains read-only."""
     parser = parserBuild()
     args = parser.parse_args()
+    setApplication("mailAgent")
     path = args.config.expanduser().absolute()
     try:
         config = configValidate(tomllib.loads(path.read_text()), path.parent)
