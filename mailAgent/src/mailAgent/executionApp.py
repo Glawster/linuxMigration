@@ -21,6 +21,7 @@ from mailAgent.executionPlan import executionPlanPrepare
 from mailAgent.executionReview import executionReviewBuild, executionReviewSelect
 from mailAgent.filing import filingContextBuild, filingPlanBuild, filingRulesLoad
 from mailAgent.imapExecution import imapFileExecute
+from mailAgent.version import applicationVersion
 
 
 def main() -> None:
@@ -69,7 +70,7 @@ def parserBuild() -> argparse.ArgumentParser:
 class ExecutionApp(App):
     """Review one live-year filing action and execute only the selected row."""
 
-    TITLE = "mailAgent Execute"
+    TITLE = f"mailAgent Execute · {applicationVersion()}"
     BINDINGS = [("q", "quit", "Quit")]
     CSS_PATH = files("organiseMyProjects").joinpath("myStyles.css")
 
@@ -257,7 +258,53 @@ def filingPlanFresh(config: dict, thunderbird: Path) -> dict:
         raise ValueError("Mailbox discovery is incomplete; execution is blocked")
     snapshot["localArchives"] = localArchivesDiscover(config)
     context = filingContextBuild(config)
-    return filingPlanBuild(context, snapshot, filingRulesLoad())
+    plan = filingPlanBuild(context, snapshot, filingRulesLoad())
+    executionNamespaceApply(plan, snapshot)
+    return plan
+
+
+def executionNamespaceApply(plan: dict, snapshot: dict) -> None:
+    """Apply each server's personal namespace to newly proposed IMAP mirrors."""
+    from mailAgent.migrationPlanning import _imapNameEncode
+
+    observed = {mailbox["id"]: mailbox for mailbox in snapshot.get("mailboxes", [])}
+    for entry in plan.get("proposals", []):
+        destination = entry.get("destination")
+        if (
+            not isinstance(destination, dict)
+            or destination.get("kind") != "imap"
+            or not entry.get("requiresFolderCreation")
+        ):
+            continue
+        mailbox = observed.get(destination.get("mailbox"))
+        namespace = mailbox.get("namespace") if isinstance(mailbox, dict) else None
+        if not isinstance(namespace, dict):
+            raise ValueError("IMAP personal namespace unavailable; execution is blocked")
+        prefix = namespace.get("prefix")
+        delimiter = namespace.get("delimiter")
+        if not isinstance(prefix, str) or not isinstance(delimiter, str) or not delimiter:
+            raise ValueError("IMAP personal namespace is not usable for folder creation")
+        canonical = entry.get("canonical")
+        if not isinstance(canonical, str) or not canonical:
+            raise ValueError("IMAP execution destination has no canonical folder")
+        parts = canonical.split("/")
+        if any(not part or delimiter in part for part in parts):
+            raise ValueError("Canonical folder cannot be mapped to the IMAP namespace")
+        wireFolder = prefix + _imapNameEncode(delimiter.join(parts))
+        folders = mailbox.get("folders", [])
+        existing = [folder for folder in folders if folder.get("path") == wireFolder]
+        if len(existing) > 1:
+            raise ValueError("IMAP destination is ambiguous")
+        if existing:
+            if "\\noselect" in {
+                flag.lower() for flag in existing[0].get("attributes", [])
+            }:
+                raise ValueError("IMAP destination cannot receive messages")
+            destination["exists"] = True
+            entry["requiresFolderCreation"] = False
+        else:
+            destination["exists"] = False
+        destination["folder"] = wireFolder
 
 
 def localArchivesDiscover(config: dict) -> list[dict]:
