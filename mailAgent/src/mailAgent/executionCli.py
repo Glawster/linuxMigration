@@ -17,10 +17,13 @@ from mailAgent.executionApp import (
     thunderbirdRoot,
 )
 from mailAgent.executionReview import executionReviewBuild
+from mailAgent.version import applicationVersion
 
 
 class LoggedExecutionApp(ExecutionApp):
     """Execution TUI that persists concise, secret-free operation outcomes."""
+
+    TITLE = f"mailAgent Execute · {applicationVersion()}"
 
     def __init__(self, review: dict, reviewRefresh, execute, logger) -> None:
         super().__init__(review, reviewRefresh, execute)
