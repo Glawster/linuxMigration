@@ -62,11 +62,11 @@ testRaidPcBundlePlan() {
         --profile raid-pc \
         --output "$target" \
         --target-distribution pop \
-        --target-release 24.04 \
+        --target-release 22.04 \
         --target-architecture amd64)"
     assertContains "$output" 'Profiles ........ raid-server,raid-pc' 'bundle resolves inherited profiles'
     assertContains "$output" 'Distribution .... pop' 'bundle reports target distribution'
-    assertContains "$output" 'Release ......... 24.04' 'bundle reports target release'
+    assertContains "$output" 'Release ......... 22.04' 'bundle reports target release'
     assertContains "$output" 'Architecture .... amd64' 'bundle reports target architecture'
     assertContains "$output" 'openssh-server' 'bundle includes raid server apt packages'
     assertContains "$output" 'snapraid' 'bundle includes SnapRAID'
@@ -82,7 +82,7 @@ testBundleRejectsRootOutput() {
     assertFailsWith 'bundle rejects root output path' 'bundle output must not be /' \
         env NO_COLOR=1 "$projectDir/bootstrap.sh" bundle \
         --profile raid-pc --output / \
-        --target-distribution pop --target-release 24.04 --target-architecture amd64
+        --target-distribution pop --target-release 22.04 --target-architecture amd64
 }
 
 testConfirmedBundleUsesMatchingTarget() {
@@ -92,17 +92,29 @@ testConfirmedBundleUsesMatchingTarget() {
     mkdir -p "$fakeBin"
     cat > "$osRelease" <<'EOF'
 ID=pop
-VERSION_ID="24.04"
+VERSION_ID="22.04"
 EOF
     cat > "$fakeBin/dpkg" <<'EOF'
 #!/usr/bin/env bash
 [[ "${1:-}" == --print-architecture ]] && { printf 'amd64\n'; exit 0; }
 exit 2
 EOF
+    cat > "$fakeBin/apt-rdepends" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$1"
+printf '  Depends: shared-dependency\n'
+printf 'shared-dependency\n'
+EOF
     cat > "$fakeBin/apt-get" <<'EOF'
 #!/usr/bin/env bash
 [[ "${1:-}" == download ]] || exit 2
 printf 'fake package %s\n' "$2" > "${2}_1_amd64.deb"
+EOF
+    cat > "$fakeBin/dpkg-deb" <<'EOF'
+#!/usr/bin/env bash
+file="$3"
+name="$(basename "$file" _1_amd64.deb)"
+printf '%s=1\n' "$name"
 EOF
     cat > "$fakeBin/dpkg-scanpackages" <<'EOF'
 #!/usr/bin/env bash
@@ -111,20 +123,22 @@ for file in ./*.deb; do
     printf 'Package: %s\nFilename: %s\n\n' "$(basename "$file" .deb)" "$file"
 done
 EOF
-    chmod +x "$fakeBin/dpkg" "$fakeBin/apt-get" "$fakeBin/dpkg-scanpackages"
+    chmod +x "$fakeBin/dpkg" "$fakeBin/apt-rdepends" "$fakeBin/apt-get" "$fakeBin/dpkg-deb" "$fakeBin/dpkg-scanpackages"
 
     output="$(PATH="$fakeBin:$PATH" BUNDLE_OS_RELEASE="$osRelease" NO_COLOR=1 \
         "$projectDir/bootstrap.sh" bundle \
         --profile raid-pc --output "$target" \
-        --target-distribution pop --target-release 24.04 --target-architecture amd64 \
+        --target-distribution pop --target-release 22.04 --target-architecture amd64 \
         --confirm)"
     assertContains "$output" 'create offline bootstrap bundle' 'confirmed bundle reports creation'
     [[ -f "$target/linuxBootstrapBundle/manifest.txt" ]] && pass 'confirmed bundle writes manifest' || fail 'confirmed bundle writes manifest'
     [[ -f "$target/linuxBootstrapBundle/SHA256SUMS" ]] && pass 'confirmed bundle writes checksums' || fail 'confirmed bundle writes checksums'
     [[ -f "$target/linuxBootstrapBundle/packages/Packages.gz" ]] && pass 'confirmed bundle writes apt repository index' || fail 'confirmed bundle writes apt repository index'
     [[ -f "$target/linuxBootstrapBundle/linuxBootstrap/bootstrap.sh" ]] && pass 'confirmed bundle copies bootstrap source' || fail 'confirmed bundle copies bootstrap source'
+    [[ -f "$target/linuxBootstrapBundle/packages/shared-dependency_1_amd64.deb" ]] && pass 'confirmed bundle downloads dependency closure' || fail 'confirmed bundle downloads dependency closure'
     grep -q '^distribution=pop$' "$target/linuxBootstrapBundle/manifest.txt" && pass 'manifest records distribution' || fail 'manifest records distribution'
     grep -q '^packages=.*snapraid' "$target/linuxBootstrapBundle/manifest.txt" && pass 'manifest records requested packages' || fail 'manifest records requested packages'
+    grep -q '^resolved-packages=.*shared-dependency=1' "$target/linuxBootstrapBundle/manifest.txt" && pass 'manifest records resolved package versions' || fail 'manifest records resolved package versions'
     rm -rf -- "$fakeBin" "$target" "$osRelease"
 }
 
