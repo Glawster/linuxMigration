@@ -1,6 +1,8 @@
 # REQ-010 Approved mailbox change execution
 
-Status: InProgress
+## Status
+
+InProgress
 
 ## Purpose
 
