@@ -17,6 +17,7 @@ from mailAgent.auditUi import (
 )
 from mailAgent.digestInteraction import DigestPolicyTable
 from mailAgent.planSummary import planSummaryLines
+from mailAgent.version import applicationVersion
 
 
 def auditAppBuild(
@@ -29,6 +30,7 @@ def auditAppBuild(
     # consistently gets the standardized digest controls whether or not a plan exists.
     auditUi._DigestPolicyTable = DigestPolicyTable
     baseApp = _auditAppBuild(snapshot)
+    baseApp.TITLE = f"Mailbox Audit · mailAgent {applicationVersion()}"
     if planRefresh is None:
         return baseApp
 
@@ -36,6 +38,8 @@ def auditAppBuild(
 
     class InteractiveMailboxAudit(baseClass):
         """Mailbox audit with an in-place refresh handler registered on the class."""
+
+        TITLE = f"Mailbox Audit · mailAgent {applicationVersion()}"
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
             if event.button.id == "refresh-planning":
