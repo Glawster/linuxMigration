@@ -83,6 +83,12 @@ bundleSourceCopy() {
         -cf - . | tar -C "$destination" -xf -
 }
 
+bundlePackageDownloadable() {
+    local package="$1"
+    apt-cache policy "$package" 2>/dev/null \
+        | awk '/Candidate:/ { found=1; if ($2 != "(none)") ok=1 } END { exit !(found && ok) }'
+}
+
 bundlePackagesDownload() {
     local destination="$1" package dependency
     shift
@@ -90,6 +96,10 @@ bundlePackagesDownload() {
 
     command -v apt-rdepends >/dev/null 2>&1 || {
         logError "apt-rdepends is required to resolve an offline bundle dependency closure; install apt-rdepends"
+        return 2
+    }
+    command -v apt-cache >/dev/null 2>&1 || {
+        logError "apt-cache is required to validate offline bundle packages"
         return 2
     }
 
@@ -102,6 +112,10 @@ bundlePackagesDownload() {
     )
 
     for dependency in "${dependencies[@]}"; do
+        if ! bundlePackageDownloadable "$dependency"; then
+            printf '  Skipping virtual dependency %s\n' "$dependency"
+            continue
+        fi
         (
             cd "$destination"
             apt-get download "$dependency"
