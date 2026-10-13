@@ -124,19 +124,19 @@ bundleRepositoryIndex() {
 
 bundleManifestWrite() {
     local destination="$1" distribution="$2" release="$3" architecture="$4"
-    local profiles packages resolvedPackages
+    local profiles packages resolvedPackages packageFile packageName packageVersion
     shift 4
     local -a packageList=("$@")
     profiles="$(IFS=,; echo "${loadedProfiles[*]}")"
     packages="$(bundlePackagesUnique "${packageList[@]}" | paste -sd, -)"
     resolvedPackages="$(
-        find "$destination/packages" -maxdepth 1 -type f -name '*.deb' -print0 \
-            | sort -z \
-            | xargs -0 -r dpkg-deb -f 2>/dev/null \
-                '${Package}=${Version}\n' \
-            | sort -u \
-            | paste -sd, -
+        while IFS= read -r -d '' packageFile; do
+            packageName="$(dpkg-deb -f "$packageFile" Package)"
+            packageVersion="$(dpkg-deb -f "$packageFile" Version)"
+            printf '%s=%s\n' "$packageName" "$packageVersion"
+        done < <(find "$destination/packages" -maxdepth 1 -type f -name '*.deb' -print0 | sort -z)
     )"
+    resolvedPackages="$(printf '%s\n' "$resolvedPackages" | awk 'NF && !seen[$0]++' | paste -sd, -)"
 
     cat > "$destination/manifest.txt" <<EOF
 format=2
