@@ -7,7 +7,7 @@ from typing import Any
 
 
 def mailboxDiscover(client: Any, account: dict) -> dict:
-    """Observe folders, counts and quota using an authenticated connection."""
+    """Observe folders, counts, namespace and quota using an authenticated connection."""
     result = {key: account[key] for key in ("id", "name", "host", "username")}
     result.update(folders=[], quota=[], issues=[])
     status, rows = client.list()
@@ -40,6 +40,15 @@ def mailboxDiscover(client: Any, account: dict) -> dict:
         c.decode().upper() if isinstance(c, bytes) else c.upper()
         for c in client.capabilities
     }
+    if "NAMESPACE" in capabilities:
+        try:
+            status, data = client.namespace()
+            if status == "OK":
+                result["namespace"] = namespaceParse(data)
+            else:
+                result["issues"].append("Namespace unavailable")
+        except Exception:
+            result["issues"].append("Namespace unavailable")
     if "QUOTA" in capabilities:
         try:
             status, data = client.getquotaroot("INBOX")
@@ -76,6 +85,23 @@ def folderParse(row: bytes | tuple) -> dict:
         "rawPath": raw.decode("ascii", "surrogateescape"),
         "delimiter": None if delimiter == b"NIL" else _pathUnquote(delimiter),
         "attributes": attributes.decode("ascii").split(),
+    }
+
+
+def namespaceParse(data: list) -> dict:
+    """Return the first personal namespace prefix and hierarchy delimiter."""
+    if not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], bytes):
+        raise ValueError("Unsupported NAMESPACE response")
+    match = re.match(
+        rb'^\(\("((?:\\.|[^"\\])*)"\s+(NIL|"(?:\\.|[^"\\])*")',
+        data[0],
+    )
+    if not match:
+        raise ValueError("Unsupported NAMESPACE response")
+    prefix, delimiter = match.groups()
+    return {
+        "prefix": _pathUnquote(b'"' + prefix + b'"'),
+        "delimiter": None if delimiter == b"NIL" else _pathUnquote(delimiter),
     }
 
 
