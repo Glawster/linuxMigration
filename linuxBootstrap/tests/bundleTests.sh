@@ -118,9 +118,23 @@ fi
 EOF
     cat > "$fakeBin/apt-get" <<'EOF'
 #!/usr/bin/env bash
-[[ "${1:-}" == download ]] || exit 2
-[[ "${2:-}" != debconf-2.0 ]] || exit 42
-printf 'fake package %s\n' "$2" > "${2}_1_amd64.deb"
+if [[ "${1:-}" == download ]]; then
+    [[ "${2:-}" != debconf-2.0 ]] || exit 42
+    printf 'fake package %s\n' "$2" > "${2}_1_amd64.deb"
+    exit 0
+fi
+args=" $* "
+if [[ "$args" == *" update "* ]]; then
+    [[ "$args" == *"Dir::Etc::sourcelist="* ]] || exit 43
+    exit 0
+fi
+if [[ "$args" == *" --simulate "* && "$args" == *" --no-download "* && "$args" == *" install "* ]]; then
+    [[ "$args" == *" git "* ]] || exit 44
+    [[ "$args" == *" openssh-server "* ]] || exit 45
+    [[ "$args" == *" snapraid "* ]] || exit 46
+    exit 0
+fi
+exit 2
 EOF
     cat > "$fakeBin/dpkg-deb" <<'EOF'
 #!/usr/bin/env bash
@@ -150,6 +164,7 @@ EOF
         --confirm)"
     assertContains "$output" 'create offline bootstrap bundle' 'confirmed bundle reports creation'
     assertContains "$output" 'Skipping virtual dependency debconf-2.0' 'confirmed bundle skips virtual dependency'
+    assertContains "$output" 'Offline APT validation passed for' 'confirmed bundle validates local APT repository'
     [[ -f "$target/linuxBootstrapBundle/manifest.txt" ]] && pass 'confirmed bundle writes manifest' || fail 'confirmed bundle writes manifest'
     [[ -f "$target/linuxBootstrapBundle/SHA256SUMS" ]] && pass 'confirmed bundle writes checksums' || fail 'confirmed bundle writes checksums'
     [[ -f "$target/linuxBootstrapBundle/packages/Packages.gz" ]] && pass 'confirmed bundle writes apt repository index' || fail 'confirmed bundle writes apt repository index'
