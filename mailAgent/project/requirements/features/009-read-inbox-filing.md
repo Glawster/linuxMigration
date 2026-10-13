@@ -1,5 +1,9 @@
 # REQ-009 - Read Inbox filing
 
+## Status
+
+InProgress
+
 ## Purpose
 
 Use mailAgent as the primary filing engine for personal mailboxes so that the
