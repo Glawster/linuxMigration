@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mailAgent"
-version = "0.2.0.dev2"
+version = "0.2.0.dev3"
 requires-python = ">=3.11"
 dependencies = [
     "organiseMyProjects",
