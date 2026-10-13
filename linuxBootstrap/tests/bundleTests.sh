@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 projectDir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+testTmpDir="${TMPDIR:-/tmp}"
 passed=0
 failed=0
 
@@ -36,7 +37,7 @@ testBundleRequiresOutput() {
 }
 
 testRaidPcBundlePlan() {
-    local output target="$TMPDIR/raid-pc-bundle-test"
+    local output target="$testTmpDir/raid-pc-bundle-test"
     rm -rf -- "$target"
     output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" bundle \
         --profile raid-pc \
@@ -61,7 +62,7 @@ testRaidPcBundlePlan() {
 }
 
 testBundleConfirmStillPlanningOnly() {
-    local output target="$TMPDIR/raid-pc-bundle-confirm-test"
+    local output target="$testTmpDir/raid-pc-bundle-confirm-test"
     rm -rf -- "$target"
     output="$(NO_COLOR=1 "$projectDir/bootstrap.sh" bundle \
         --profile raid-pc \
