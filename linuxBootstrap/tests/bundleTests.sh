@@ -112,9 +112,15 @@ printf 'fake package %s\n' "$2" > "${2}_1_amd64.deb"
 EOF
     cat > "$fakeBin/dpkg-deb" <<'EOF'
 #!/usr/bin/env bash
-file="$3"
+[[ "${1:-}" == -f ]] || exit 2
+file="$2"
+field="$3"
 name="$(basename "$file" _1_amd64.deb)"
-printf '%s=1\n' "$name"
+case "$field" in
+    Package) printf '%s\n' "$name" ;;
+    Version) printf '1\n' ;;
+    *) exit 2 ;;
+esac
 EOF
     cat > "$fakeBin/dpkg-scanpackages" <<'EOF'
 #!/usr/bin/env bash
