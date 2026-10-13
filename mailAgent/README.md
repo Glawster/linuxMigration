@@ -68,6 +68,17 @@ Normal CLI/TUI workflows never delete, move, flag, or send mail. REQ-010 now
 provides a separately invoked, fake-tested core API for one approved IMAP File
 action; see [Execution boundary](documentation/executionBoundary.md).
 
+## Testing
+
+Run the full project test suite from the mailAgent project directory:
+
+    pytest
+
+Before integration, also run:
+
+    runLinter
+    manageProject --check
+
 ## Archive and migration planning
 
 Set each mailbox host and credential ID in
