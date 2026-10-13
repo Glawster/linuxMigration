@@ -12,6 +12,7 @@ Debian where their documented package/configuration contract supports it.
 - [Network naming and static addresses](documentation/networking.md)
 - [NFS exports and mounts](documentation/nfs.md)
 - [raid-pc storage server](documentation/raidPc.md)
+- [Offline bootable bootstrap USB](documentation/offlineBootstrapUsb.md)
 - [User configuration and VS Code extensions](documentation/userConfiguration.md)
 - [DCS World standalone on Linux](documentation/dcsWorld.md)
 - [World of Warcraft through Battle.net](documentation/worldOfWarcraft.md)
@@ -97,6 +98,10 @@ Exactly one destination profile must be named. Capture preserves every other
 profile section and never reads credentials, signing keys, credential helpers,
 repository-local settings, or private key material. Commit and review the
 result before applying that profile on another host.
+
+### Offline bootable USB
+
+linuxBootstrap can build a reusable bootable Pop!_OS installation image with an embedded offline bootstrap bundle. The initial target is `raid-pc`. The `bundle` command creates the local APT repository, source payload, manifest and checksums; the `image` command embeds that validated bundle into a copy of the Pop!_OS 22.04 installer while preserving BIOS/UEFI hybrid boot support. The first `raid-pc` image has been boot-tested and its package set installed successfully on a fresh system with the LAN disconnected. Post-install offline repository setup is still manual and is the remaining Stage 5 automation. See the [offline bootstrap USB guide](documentation/offlineBootstrapUsb.md).
 
 ### Zen Browser
 

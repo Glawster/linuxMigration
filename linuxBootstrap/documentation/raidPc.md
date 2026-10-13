@@ -24,13 +24,9 @@ filesystem UUIDs and/or filesystem labels as appropriate.
 
 ## Operating system
 
-The intended server installation is a minimal, headless Debian installation.
-Desktop applications and workstation roles are not part of the `raid-pc`
-profile.
+The installed operating system is Pop!_OS 22.04 AMD64 (Intel/AMD image) on the dedicated 500 GB SSD. The machine is intended to run headless after installation; desktop applications and workstation roles are not part of the `raid-pc` profile.
 
-The host profile should provide the normal server prerequisites, including SSH,
-SMART monitoring, hardware/sensor inspection, Git and the packages needed by
-the selected storage and NFS configuration.
+The host profile provides the normal server prerequisites, including SSH, SMART monitoring, hardware/sensor inspection, Git and the packages needed by the selected storage and NFS configuration. The base package set has been validated by installing it on a fresh Pop!_OS 22.04 system from the offline bootstrap bundle with the LAN disconnected.
 
 ## Safety boundary
 
