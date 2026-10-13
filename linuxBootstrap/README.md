@@ -12,6 +12,7 @@ Debian where their documented package/configuration contract supports it.
 - [Network naming and static addresses](documentation/networking.md)
 - [NFS exports and mounts](documentation/nfs.md)
 - [raid-pc storage server](documentation/raidPc.md)
+- [Offline bootable bootstrap USB](documentation/offlineBootstrapUsb.md)
 - [User configuration and VS Code extensions](documentation/userConfiguration.md)
 - [DCS World standalone on Linux](documentation/dcsWorld.md)
 - [World of Warcraft through Battle.net](documentation/worldOfWarcraft.md)
@@ -97,6 +98,15 @@ Exactly one destination profile must be named. Capture preserves every other
 profile section and never reads credentials, signing keys, credential helpers,
 repository-local settings, or private key material. Commit and review the
 result before applying that profile on another host.
+
+### Offline bootable USB
+
+linuxBootstrap is being extended to support a reusable bootable installation
+USB: Rufus writes the Debian installer and a separate writable USB area carries
+the selected host profile, linuxBootstrap source and an offline APT package
+bundle. The initial target is `raid-pc`. See the
+[offline bootstrap USB design](documentation/offlineBootstrapUsb.md) for the
+proposed `bundle` and `install --offline` workflows and their safety boundary.
 
 ### Zen Browser
 
