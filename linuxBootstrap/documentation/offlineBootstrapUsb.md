@@ -2,127 +2,112 @@
 
 ## Purpose
 
-linuxBootstrap should support preparing a reusable USB stick that can take a machine from a blank system disk to an installed and bootstrapped Linux host without requiring LAN or Internet access during installation.
+linuxBootstrap should support preparing a reusable bootable installer image that can take a machine from a blank system disk to an installed and bootstrapped Linux host without requiring LAN or Internet access during installation.
 
-The first target is `raid-pc`. The design is deliberately profile-driven and distribution-aware so it can later be used for other supported hosts.
+The first target is `raid-pc`. The design is profile-driven and distribution-aware so it can later be used for other supported hosts.
 
 For the current `raid-pc` build, Pop!_OS 24.04 AMD64 is the preferred installation image because it is already used elsewhere in the environment and works with the existing APT-based linuxBootstrap model.
 
+## Design decision
+
+The preferred single-stick design is a customised installer ISO containing the offline linuxBootstrap payload.
+
+An earlier experiment wrote the stock Pop!_OS hybrid ISO with Balena Etcher and then added a writable partition in the unused trailing space. Although the partition could be created and formatted successfully, the modified stick did not boot: the boot process reported an unclean filesystem.
+
+That approach is therefore rejected. linuxBootstrap must not modify the partition table of an Etcher-written hybrid installer image as part of the supported workflow.
+
+Instead, the bootstrap payload is added to a copy of the installer ISO before the image is written to USB. Balena Etcher then writes the completed custom ISO as one immutable bootable image.
+
 ## User workflow
-
-The USB has two responsibilities:
-
-1. boot and install the supported Linux distribution;
-2. provide linuxBootstrap and every package needed to apply the selected host profile offline.
 
 The intended `raid-pc` workflow is:
 
-1. On an Internet-connected preparation machine, download the required installation ISO.
-2. Use Balena Etcher to write the ISO to the USB stick.
-3. Inspect the resulting partition layout before making any further changes.
-4. Create a separate writable data partition in trailing unused space, starting safely beyond the end of the ISO image.
-5. Format the data partition as ext4 and label it `RAID-PC-DATA`.
-6. Populate that partition using linuxBootstrap's bundle workflow.
-7. Boot `raid-pc` from the USB and install Pop!_OS 24.04 to the dedicated 500 GB OS SSD.
-8. Reboot into the installed system without requiring a LAN connection.
-9. Mount the USB data partition.
-10. Run linuxBootstrap against the offline bundle for the `raid-pc` host profile.
-11. Review the normal safe-by-default preview and use `--confirm` only when ready to apply it.
-12. Connect the host to the LAN after the base system is known-good, then verify networking and any network-dependent configuration.
+1. On an Internet-connected preparation machine, obtain the supported Pop!_OS 24.04 AMD64 source ISO.
+2. Build the offline linuxBootstrap bundle for `raid-pc`.
+3. Remaster a copy of the source ISO and add the bundle under a dedicated `raid-pc` directory.
+4. Rebuild the ISO while preserving the original BIOS/UEFI/hybrid boot behaviour.
+5. Validate the resulting ISO and its embedded bootstrap payload.
+6. Use Balena Etcher to write the custom ISO to the USB stick.
+7. Boot-test the USB.
+8. Boot `raid-pc` from the USB and install Pop!_OS 24.04 to the dedicated 500 GB OS SSD.
+9. Reboot into the installed system without requiring LAN or Internet access.
+10. Mount or otherwise access the installer media.
+11. Run linuxBootstrap against the embedded offline bundle for the `raid-pc` host profile.
+12. Review the normal safe-by-default preview and use `--confirm` only when ready to apply it.
+13. Connect the host to the LAN after the base system is known-good, then verify networking and any network-dependent configuration.
 
-Balena Etcher remains the preferred tool for writing the bootable installer image. linuxBootstrap does not replace Etcher or become an ISO-writing tool.
+Balena Etcher remains responsible only for writing the completed ISO to the explicitly selected USB device. linuxBootstrap does not directly write or repartition USB devices.
 
-## Proven USB preparation method
+## Custom ISO layout
 
-A 32 GB Toshiba TransMemory USB stick was tested with a Pop!_OS 24.04 AMD64 ISO written by Balena Etcher.
-
-Immediately after flashing, the device appeared as:
-
-```text
-/dev/sdm                         28.9G
-├── /dev/sdm1                   3.3G  iso9660  Pop_OS 24.04 amd64
-└── /dev/sdm2                     4M  vfat
-```
-
-`fdisk` reported the ISO image ending at sector `6881279`. Because hybrid ISO partition tables can be interpreted differently by different partitioning tools, linuxBootstrap documentation must not rely on a generic "free space" report alone.
-
-For this tested image, the writable data partition was deliberately started at sector `6963200`, equivalent to 3400 MiB, leaving a safety margin beyond the end of the ISO image.
-
-The resulting layout was:
+The conceptual image is:
 
 ```text
-/dev/sdm
-├── /dev/sdm1   3.3G
-├── /dev/sdm2     4M  vfat
-└── /dev/sdm3  25.6G
-```
-
-The intended final format is:
-
-```text
-32 GB USB
-├── Pop!_OS 24.04 boot/install image
-├── EFI boot data
-└── RAID-PC-DATA                ext4
+raid-pc-popos-24.04-amd64.iso
+├── original Pop!_OS installer/live content
+├── original BIOS/UEFI boot structures
+└── raid-pc/
     └── linuxBootstrapBundle/
         ├── manifest.json
+        ├── checksums
         ├── linuxMigration/
         │   └── linuxBootstrap/
         └── packages/
             └── *.deb
 ```
 
-The data partition should be formatted with:
+The bootstrap payload is read-only on the installer media. It does not need a writable USB filesystem during installation or bootstrap.
 
-```bash
-sudo mkfs.ext4 -L RAID-PC-DATA /dev/sdX3
-```
-
-where `/dev/sdX` has first been positively identified as the intended USB device.
-
-The modified USB must be boot-tested after adding the data partition. Until that boot test succeeds, the preparation method is considered partially validated rather than complete.
-
-## Important hybrid-ISO rule
-
-Balena Etcher writes the hybrid ISO image directly to the device. The resulting ISO and EFI structures are not equivalent to a normal partitioned data disk.
-
-Different tools may therefore describe the device differently. For example, one tool may show the ISO9660 image as a normal-looking partition while another reports much of that same region as free space.
-
-Consequently:
-
-- never create a new partition merely from the first "free space" position reported by a partition editor;
-- determine the actual end of the written ISO image first;
-- start the writable payload partition safely beyond that boundary;
-- use explicit device identification before any partitioning or formatting operation;
-- do not make linuxBootstrap itself automatically repartition removable media in the initial implementation.
-
-This method should remain documented as image-specific until tested with other ISO releases.
+The source ISO must never be modified in place. Image creation works from a copy or extracted working tree and produces a new output ISO.
 
 ## Proposed command line
 
-Bundle creation should be explicit and safe by default. A target profile determines the package set:
+Bundle creation remains a separate operation so it can be tested independently:
 
 ```bash
-./bootstrap.sh bundle --profile raid-pc --output /media/$USER/RAID-PC-DATA
+./bootstrap.sh bundle --profile raid-pc --output ./build/raid-pc-bundle
 ```
 
-The command should preview what it intends to place on the destination. Consistent with the rest of linuxBootstrap, writes occur only with confirmation:
+The command previews by default. Writes require confirmation:
 
 ```bash
 ./bootstrap.sh bundle --profile raid-pc \
-    --output /media/$USER/RAID-PC-DATA \
+    --output ./build/raid-pc-bundle \
     --confirm
 ```
 
-On the target machine:
+A second command builds the customised installer image:
 
 ```bash
-cd /media/$USER/RAID-PC-DATA/linuxBootstrapBundle/linuxMigration/linuxBootstrap
+./bootstrap.sh image \
+    --profile raid-pc \
+    --iso /path/to/pop-os_24.04_amd64.iso \
+    --output ./build/raid-pc-popos-24.04-amd64.iso
+```
+
+Image creation also previews by default and requires confirmation before creating or replacing output files:
+
+```bash
+./bootstrap.sh image \
+    --profile raid-pc \
+    --iso /path/to/pop-os_24.04_amd64.iso \
+    --output ./build/raid-pc-popos-24.04-amd64.iso \
+    --confirm
+```
+
+The exact CLI spelling remains a design target until implementation and tests establish the final interface.
+
+## Running the embedded bootstrap
+
+After Pop!_OS is installed, the installer USB is inserted or remains available and its ISO filesystem is mounted. The operator then runs linuxBootstrap from the embedded bundle, conceptually:
+
+```bash
+cd /media/$USER/<installer-label>/raid-pc/linuxBootstrapBundle/linuxMigration/linuxBootstrap
 ./bootstrap.sh install --profile raid-pc --offline
 ./bootstrap.sh install --profile raid-pc --offline --confirm
 ```
 
-The exact CLI spelling is a design target until implementation and tests establish the final interface.
+The implementation must not depend on a fixed desktop automount path. Documentation can show an example, while bootstrap discovery should accept an explicit bundle path or reliably locate the embedded manifest.
 
 ## Bundle contents
 
@@ -131,7 +116,7 @@ A bundle must contain enough information to install the selected profile without
 - the linuxMigration/linuxBootstrap source required to run the selected profile;
 - the selected host profile and inherited role profiles;
 - all required APT `.deb` packages;
-- package dependencies required by those packages;
+- the complete dependency closure required by those packages;
 - a machine-readable manifest describing the bundle;
 - checksums for bundled payload files.
 
@@ -158,6 +143,7 @@ The dependency closure, rather than only these top-level packages, must be avail
 - target distribution;
 - target distribution release;
 - target architecture;
+- source installer identity and checksum;
 - linuxBootstrap source revision/commit;
 - package list and versions;
 - payload checksums.
@@ -184,19 +170,39 @@ A missing dependency is an error and should be reported before linuxBootstrap at
 
 The package bundle must be built for the selected target distribution and release. A package set prepared for Debian must not be treated as interchangeable with one prepared for Pop!_OS/Ubuntu simply because both use APT.
 
+## ISO remastering requirements
+
+The custom-image implementation must preserve the boot behaviour of the source Pop!_OS ISO. Merely copying files into an extracted directory and creating a generic ISO9660 image is insufficient.
+
+The image builder must:
+
+- inspect and validate the source ISO before modifying anything;
+- preserve the source image's BIOS/UEFI/hybrid boot structures and required boot files;
+- add only the managed bootstrap payload to the installer filesystem;
+- produce a new output ISO rather than changing the source image;
+- generate or update checksums required by the installer image where applicable;
+- verify that the embedded manifest and package payload can be read back from the completed ISO;
+- record the source ISO checksum and resulting custom ISO checksum;
+- fail rather than emit an image when required boot metadata cannot be reproduced safely.
+
+The exact remastering commands and tooling must be established from inspection of the actual Pop!_OS 24.04 source ISO and covered by tests. The design must not hard-code boot parameters copied from an unrelated Debian or Ubuntu image.
+
 ## Safety requirements
 
 The offline feature inherits linuxBootstrap's safe-by-default behaviour:
 
 - `bundle` previews by default and requires `--confirm` before writing;
+- `image` previews by default and requires `--confirm` before creating the custom ISO;
 - `install --offline` previews configuration changes by default;
 - package installation and configuration changes require `--confirm`;
-- the USB preparation workflow must never repartition or format an arbitrary device implicitly;
-- linuxBootstrap must validate the output path before writing a bundle;
-- the target OS disk and storage disks remain outside the responsibility of bundle creation;
+- the image workflow never writes directly to a block device;
+- linuxBootstrap validates source and output paths before writing;
+- the original installer ISO remains unchanged;
+- an existing output ISO is not silently overwritten;
+- the target OS disk and storage disks remain outside the responsibility of bundle/image creation;
 - the `raid-pc` storage safety boundary remains unchanged: normal bootstrap operations never format, repartition or automatically assign storage disks.
 
-Balena Etcher is responsible for the explicitly user-selected bootable-media write. linuxBootstrap's initial implementation should operate only on an already-mounted writable payload partition/directory.
+Balena Etcher remains an explicit manual step after image generation. The operator selects the target USB in Etcher.
 
 ## Network-independent boundary
 
@@ -209,19 +215,28 @@ No operation should hang or unexpectedly attempt Internet access when `--offline
 
 For `raid-pc`, this makes it possible to install and inspect the server on the bench before connecting it to the home LAN.
 
-## Refreshing a reusable USB
+## Refreshing the installation media
 
-The bootable installer and bootstrap payload have different lifecycles. A normal refresh should update only the writable payload partition:
+The installer ISO and bootstrap payload can have different lifecycles. If only linuxBootstrap or package versions change, the source Pop!_OS ISO can be reused to generate a fresh custom ISO.
 
-```bash
-./bootstrap.sh bundle --profile raid-pc \
-    --output /media/$USER/RAID-PC-DATA \
-    --confirm
+The workflow is:
+
+```text
+stock Pop!_OS ISO
+        +
+current raid-pc offline bundle
+        |
+        v
+new custom raid-pc ISO
+        |
+        v
+Balena Etcher
+        |
+        v
+USB
 ```
 
-A new installer image is required only when the chosen installation image itself needs to change.
-
-Bundle refresh should replace its own managed bundle directory atomically where practical and must not delete unrelated files from the USB partition.
+The generated ISO is a build artefact and should not be committed to the repository.
 
 ## Implementation stages
 
@@ -243,36 +258,55 @@ Bundle refresh should replace its own managed bundle directory atomically where 
 - validate the finished bundle;
 - preserve safe-by-default `--confirm` behaviour.
 
-### Stage 3 - offline installation
+### Stage 3 - custom image planning and inspection
 
-- add `install --offline`;
-- discover and validate the bundle;
+- add the `image` command in preview mode;
+- inspect the supplied Pop!_OS ISO;
+- identify the boot method and metadata required to reproduce it;
+- validate source ISO identity and checksum;
+- calculate the intended embedded bundle location;
+- report required image-building tools;
+- add command-double tests without creating an ISO.
+
+### Stage 4 - custom image creation
+
+- extract or stage the source ISO safely;
+- embed the validated offline bundle;
+- rebuild the bootable hybrid ISO while preserving Pop!_OS boot behaviour;
+- verify the completed ISO filesystem and embedded manifest;
+- calculate and report the output checksum;
+- boot-test the image after writing it with Balena Etcher.
+
+### Stage 5 - offline installation
+
+- add `install --offline` and explicit bundle-path handling;
+- discover and validate the embedded bundle;
 - reject distribution/release/architecture mismatches;
-- configure APT to use the bundle without contacting network repositories;
+- configure APT to use only the embedded local package source;
 - apply the existing profile workflow from local resources;
 - report deferred network-only actions explicitly.
 
-### Stage 4 - documented bootable USB preparation
+## Rejected approach: trailing writable partition
 
-- use Balena Etcher to write the selected hybrid installation ISO;
-- identify the actual end of the written ISO image;
-- create the writable payload partition only in trailing space beyond that boundary;
-- format and label the payload partition `RAID-PC-DATA`;
-- verify the partition can be mounted and written;
-- boot-test the modified USB;
-- test OS installation and subsequent payload access on representative hardware;
-- document any image-specific offsets or constraints discovered during testing.
+The following method was tested and rejected:
 
-The currently tested Pop!_OS 24.04 image used sector `6963200` (3400 MiB) as the start of `RAID-PC-DATA`. This value must not be generalized to other installer images without measuring their actual written size first.
+1. write the Pop!_OS 24.04 hybrid ISO to a 32 GB Toshiba TransMemory stick using Balena Etcher;
+2. observe the approximately 3.3 GB ISO image and 4 MB EFI structure;
+3. create a third partition beginning at sector `6963200` (3400 MiB), beyond the reported end of the ISO image;
+4. format that partition for `RAID-PC-DATA`.
+
+The resulting USB did not boot successfully and reported an unclean filesystem. The experiment demonstrated that apparently unused trailing capacity on an Etcher-written hybrid ISO must not be assumed safe for an additional partition.
+
+This result is retained here so the failed design is not accidentally reintroduced later.
 
 ## Out of scope initially
 
 The first implementation does not need to:
 
-- replace Balena Etcher;
-- create or write bootable ISO images;
-- automatically repartition USB devices;
-- automate the OS installer itself;
+- replace Balena Etcher or write directly to USB devices;
+- automatically repartition removable media;
+- automate the Pop!_OS installer itself;
+- automatically execute linuxBootstrap during OS installation;
 - embed credentials or secrets;
 - provision or format `raid-pc` storage disks.
 
