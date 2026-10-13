@@ -17,6 +17,10 @@ requestedStaticIp=""
 requestedCommand="install"
 requestedProfileAction=""
 requestedProfileName=""
+requestedOutput=""
+requestedTargetDistribution=""
+requestedTargetRelease=""
+requestedTargetArchitecture=""
 dryRun=1
 verbose=0
 
@@ -24,7 +28,7 @@ usage() {
     cat <<'EOF'
 Usage: bootstrap.sh <command> [options]
 
-Configure a Pop!_OS machine from one or more composable profiles.
+Configure a Linux machine from one or more composable profiles.
 Changes are previewed unless --confirm is supplied.
 
 Commands:
@@ -32,18 +36,23 @@ Commands:
   update               Converge, then update installed apt and Flatpak packages
   status               Inspect profile compliance without making changes
   capture              Capture supported global settings into one profile
+  bundle               Plan an offline bootstrap bundle for a profile
   profile list         List role and host profiles
   profile show NAME    Show a profile's merged configuration
   profile validate     Validate all profile definitions
   profile add NAME     Preview creation of a new role profile
 
 Options:
-  --profile NAME       Load a role or host profile (repeatable)
-  --hostname NAME      Override the configured hostname
-  --static-ip CIDR     Override the configured static IPv4 address
-  -y, --confirm        Apply changes
-  --verbose            Show additional diagnostic information
-  -h, --help           Show this help
+  --profile NAME              Load a role or host profile (repeatable)
+  --hostname NAME             Override the configured hostname
+  --static-ip CIDR            Override the configured static IPv4 address
+  --output PATH               Bundle output directory
+  --target-distribution ID    Bundle target distribution (defaults to current system)
+  --target-release VERSION    Bundle target release (defaults to current system)
+  --target-architecture ARCH  Bundle target architecture (defaults to current system)
+  -y, --confirm               Apply changes
+  --verbose                   Show additional diagnostic information
+  -h, --help                  Show this help
 EOF
 }
 
@@ -69,7 +78,7 @@ argumentsParse() {
         requestedCommand="install"
     fi
     case "$requestedCommand" in
-        capture|install|update|status|profile) ;;
+        bundle|capture|install|update|status|profile) ;;
         *) logError "unknown command: $requestedCommand"; usage >&2; exit 2 ;;
     esac
     while (($#)); do
@@ -89,6 +98,26 @@ argumentsParse() {
                 requestedStaticIp="$2"
                 shift 2
                 ;;
+            --output)
+                argumentRequireValue "$1" "${2:-}"
+                requestedOutput="$2"
+                shift 2
+                ;;
+            --target-distribution)
+                argumentRequireValue "$1" "${2:-}"
+                requestedTargetDistribution="$2"
+                shift 2
+                ;;
+            --target-release)
+                argumentRequireValue "$1" "${2:-}"
+                requestedTargetRelease="$2"
+                shift 2
+                ;;
+            --target-architecture)
+                argumentRequireValue "$1" "${2:-}"
+                requestedTargetArchitecture="$2"
+                shift 2
+                ;;
             -y|--confirm) dryRun=0; shift ;;
             --verbose) verbose=1; shift ;;
             -h|--help) usage; exit 0 ;;
@@ -97,6 +126,10 @@ argumentsParse() {
     done
     if [[ "$requestedCommand" == capture ]]; then
         ((${#requestedProfiles[@]} == 1)) || { logError "capture requires exactly one --profile NAME"; exit 2; }
+    elif [[ "$requestedCommand" == bundle ]]; then
+        ((${#requestedProfiles[@]} == 1)) || { logError "bundle requires exactly one --profile NAME"; exit 2; }
+        [[ -n "$requestedOutput" ]] || { logError "bundle requires --output PATH"; exit 2; }
+        dryRun=1
     elif [[ "$requestedCommand" != profile ]]; then
         ((${#requestedProfiles[@]})) || requestedProfiles=(common)
     fi
@@ -106,7 +139,7 @@ argumentsParse() {
 
 modulesLoad() {
     local module
-    for module in capture packages git ssh hostname networking nfs repositories installers steam davinci dcs mcm wow userConfig; do
+    for module in bundle capture packages git ssh hostname networking nfs repositories installers steam davinci dcs mcm wow userConfig; do
         # shellcheck source=/dev/null
         source "$projectDir/lib/$module.sh"
     done
@@ -157,6 +190,16 @@ installRun() {
     summaryPrint
 }
 
+bundleRun() {
+    profilesLoad "${requestedProfiles[@]}"
+    bundlePlan \
+        "$requestedOutput" \
+        "$requestedTargetDistribution" \
+        "$requestedTargetRelease" \
+        "$requestedTargetArchitecture" \
+        "${profileAptPackages[@]}"
+}
+
 profileRun() {
     case "$requestedProfileAction" in
         list) profilesList ;;
@@ -194,6 +237,7 @@ bootstrapRun() {
     logInfo "linux-bootstrap $requestedCommand starting"
     [[ "$dryRun" == 1 && "$requestedCommand" != status && "$requestedCommand" != profile ]] && logWarning "dry-run mode: no system changes will be made"
     case "$requestedCommand" in
+        bundle) bundleRun ;;
         capture) captureRun ;;
         install) installRun ;;
         update) updateRun ;;
