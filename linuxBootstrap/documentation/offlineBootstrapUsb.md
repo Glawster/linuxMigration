@@ -6,7 +6,7 @@ linuxBootstrap should support preparing a reusable bootable installer image that
 
 The first target is `raid-pc`. The design is profile-driven and distribution-aware so it can later be used for other supported hosts.
 
-For the current `raid-pc` build, Pop!_OS 24.04 AMD64 is the preferred installation image because it is already used elsewhere in the environment and works with the existing APT-based linuxBootstrap model.
+For the current `raid-pc` build, Pop!_OS 22.04 AMD64 is the preferred installation image because it is already used elsewhere in the environment and works with the existing APT-based linuxBootstrap model.
 
 ## Design decision
 
@@ -22,14 +22,14 @@ Instead, the bootstrap payload is added to a copy of the installer ISO before th
 
 The intended `raid-pc` workflow is:
 
-1. On an Internet-connected preparation machine, obtain the supported Pop!_OS 24.04 AMD64 source ISO.
+1. On an Internet-connected preparation machine, obtain the supported Pop!_OS 22.04 AMD64 source ISO.
 2. Build the offline linuxBootstrap bundle for `raid-pc`.
 3. Remaster a copy of the source ISO and add the bundle under a dedicated `raid-pc` directory.
 4. Rebuild the ISO while preserving the original BIOS/UEFI/hybrid boot behaviour.
 5. Validate the resulting ISO and its embedded bootstrap payload.
 6. Use Balena Etcher to write the custom ISO to the USB stick.
 7. Boot-test the USB.
-8. Boot `raid-pc` from the USB and install Pop!_OS 24.04 to the dedicated 500 GB OS SSD.
+8. Boot `raid-pc` from the USB and install Pop!_OS 22.04 to the dedicated 500 GB OS SSD.
 9. Reboot into the installed system without requiring LAN or Internet access.
 10. Mount or otherwise access the installer media.
 11. Run linuxBootstrap against the embedded offline bundle for the `raid-pc` host profile.
@@ -43,16 +43,17 @@ Balena Etcher remains responsible only for writing the completed ISO to the expl
 The conceptual image is:
 
 ```text
-raid-pc-popos-24.04-amd64.iso
+raid-pc-popos-22.04-amd64.iso
 ├── original Pop!_OS installer/live content
 ├── original BIOS/UEFI boot structures
 └── raid-pc/
     └── linuxBootstrapBundle/
-        ├── manifest.json
-        ├── checksums
-        ├── linuxMigration/
-        │   └── linuxBootstrap/
+        ├── manifest.txt
+        ├── SHA256SUMS
+        ├── linuxBootstrap/
         └── packages/
+            ├── Packages
+            ├── Packages.gz
             └── *.deb
 ```
 
@@ -81,8 +82,9 @@ A second command builds the customised installer image:
 ```bash
 ./bootstrap.sh image \
     --profile raid-pc \
-    --iso /path/to/pop-os_24.04_amd64.iso \
-    --output ./build/raid-pc-popos-24.04-amd64.iso
+    --iso /path/to/pop-os_22.04_amd64_intel_58.iso \
+    --bundle ./build/raid-pc-bundle/linuxBootstrapBundle \
+    --output ./build/raid-pc-popos-22.04-amd64.iso
 ```
 
 Image creation also previews by default and requires confirmation before creating or replacing output files:
@@ -90,12 +92,13 @@ Image creation also previews by default and requires confirmation before creatin
 ```bash
 ./bootstrap.sh image \
     --profile raid-pc \
-    --iso /path/to/pop-os_24.04_amd64.iso \
-    --output ./build/raid-pc-popos-24.04-amd64.iso \
+    --iso /path/to/pop-os_22.04_amd64_intel_58.iso \
+    --bundle ./build/raid-pc-bundle/linuxBootstrapBundle \
+    --output ./build/raid-pc-popos-22.04-amd64.iso \
     --confirm
 ```
 
-The exact CLI spelling remains a design target until implementation and tests establish the final interface.
+The `bundle` and `image` command lines above are implemented and were used for the first `raid-pc` installation-media build.
 
 ## Running the embedded bootstrap
 
@@ -134,7 +137,7 @@ The dependency closure, rather than only these top-level packages, must be avail
 
 ## Manifest
 
-`manifest.json` should record at least:
+`manifest.txt` currently records:
 
 - bundle format version;
 - creation timestamp;
@@ -143,22 +146,22 @@ The dependency closure, rather than only these top-level packages, must be avail
 - target distribution;
 - target distribution release;
 - target architecture;
-- source installer identity and checksum;
-- linuxBootstrap source revision/commit;
-- package list and versions;
-- payload checksums.
+- requested top-level package list;
+- resolved package list and versions.
+
+`SHA256SUMS` records payload integrity separately. Source-ISO identity and bootstrap revision remain desirable future manifest metadata rather than current fields.
 
 For the current `raid-pc` bundle, expected target identity is conceptually:
 
 ```text
 distribution: pop
-release: 24.04
+release: 22.04
 architecture: amd64
 ```
 
 The implementation should derive and validate the actual operating-system identity rather than depend on these literal display strings.
 
-Before an offline installation, linuxBootstrap must compare the manifest with the running system. A bundle for the wrong distribution release or architecture must fail before package installation.
+Stage 5 must compare this metadata with the running system before package installation. A bundle for the wrong distribution release or architecture must fail.
 
 ## Package handling
 
@@ -185,7 +188,7 @@ The image builder must:
 - record the source ISO checksum and resulting custom ISO checksum;
 - fail rather than emit an image when required boot metadata cannot be reproduced safely.
 
-The exact remastering commands and tooling must be established from inspection of the actual Pop!_OS 24.04 source ISO and covered by tests. The design must not hard-code boot parameters copied from an unrelated Debian or Ubuntu image.
+The exact remastering commands and tooling must be established from inspection of the actual Pop!_OS 22.04 source ISO and covered by tests. The design must not hard-code boot parameters copied from an unrelated Debian or Ubuntu image.
 
 ## Safety requirements
 
@@ -214,6 +217,18 @@ A successful offline run means the base profile can be applied without LAN or In
 No operation should hang or unexpectedly attempt Internet access when `--offline` is selected.
 
 For `raid-pc`, this makes it possible to install and inspect the server on the bench before connecting it to the home LAN.
+
+## First end-to-end validation
+
+The first `raid-pc` media build and installation was completed with the Pop!_OS 22.04 Intel/AMD ISO `pop-os_22.04_amd64_intel_58.iso`.
+
+The generated image was verified to retain legacy BIOS boot through `/isolinux/isolinux.bin`, UEFI boot through `/boot/grub/efi.img`, and hybrid MBR/GPT metadata. The embedded `/raid-pc/linuxBootstrapBundle` payload was present and its `SHA256SUMS` validation passed.
+
+The image was written with Balena Etcher and booted successfully. Pop!_OS 22.04 was then installed to the dedicated 500 GB SSD. With the machine still disconnected from the LAN, the bundle was copied to `/opt/linuxBootstrap` and used as the only APT source. The fresh installation successfully installed `git`, `openssh-server`, `smartmontools`, `lm-sensors`, `nfs-kernel-server`, `mergerfs` and `snapraid` together with their required dependencies without Internet access.
+
+Two implementation details were confirmed during the test. The active `file:` repository should not live below a private home directory because APT normally reads repository metadata as the restricted `_apt` user. Also, `--no-download` must not be used for the real install from a `file:` source: APT still needs to acquire/copy the selected `.deb` files from the local repository. Network repositories must instead be disabled explicitly.
+
+This validates bundle creation, dependency closure, local APT indexing, ISO remastering, bootability and real offline package installation. Automating the post-install local-repository setup remains Stage 5 work.
 
 ## Refreshing the installation media
 
@@ -290,7 +305,7 @@ The generated ISO is a build artefact and should not be committed to the reposit
 
 The following method was tested and rejected:
 
-1. write the Pop!_OS 24.04 hybrid ISO to a 32 GB Toshiba TransMemory stick using Balena Etcher;
+1. write the Pop!_OS 22.04 hybrid ISO to a 32 GB Toshiba TransMemory stick using Balena Etcher;
 2. observe the approximately 3.3 GB ISO image and 4 MB EFI structure;
 3. create a third partition beginning at sector `6963200` (3400 MiB), beyond the reported end of the ISO image;
 4. format that partition for `RAID-PC-DATA`.
