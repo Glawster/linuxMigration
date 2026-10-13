@@ -1,5 +1,9 @@
 # REQ-003 - Existing mailbox and filter discovery
 
+## Status
+
+Completed
+
 ## Purpose
 
 Audit the existing mail environment before mailAgent makes organisation
