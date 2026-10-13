@@ -1,5 +1,9 @@
 # REQ-008 - Plan resolution and approval
 
+## Status
+
+InProgress
+
 ## Purpose
 
 Turn the read-only migration plan into a durable, reviewable set of user
