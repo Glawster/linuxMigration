@@ -36,7 +36,7 @@ Commands:
   update               Converge, then update installed apt and Flatpak packages
   status               Inspect profile compliance without making changes
   capture              Capture supported global settings into one profile
-  bundle               Plan an offline bootstrap bundle for a profile
+  bundle               Plan or create an offline bootstrap bundle for a profile
   profile list         List role and host profiles
   profile show NAME    Show a profile's merged configuration
   profile validate     Validate all profile definitions
@@ -129,7 +129,6 @@ argumentsParse() {
     elif [[ "$requestedCommand" == bundle ]]; then
         ((${#requestedProfiles[@]} == 1)) || { logError "bundle requires exactly one --profile NAME"; exit 2; }
         [[ -n "$requestedOutput" ]] || { logError "bundle requires --output PATH"; exit 2; }
-        dryRun=1
     elif [[ "$requestedCommand" != profile ]]; then
         ((${#requestedProfiles[@]})) || requestedProfiles=(common)
     fi
@@ -192,7 +191,7 @@ installRun() {
 
 bundleRun() {
     profilesLoad "${requestedProfiles[@]}"
-    bundlePlan \
+    bundleRunAction \
         "$requestedOutput" \
         "$requestedTargetDistribution" \
         "$requestedTargetRelease" \
