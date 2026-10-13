@@ -1,7 +1,9 @@
 """IMAP namespace discovery and execution destination regression tests."""
 
+from unittest.mock import Mock
+
 from mailAgent.executionApp import executionNamespaceApply
-from mailAgent.imapDiscovery import namespaceParse
+from mailAgent.imapDiscovery import mailboxDiscover, namespaceParse
 
 
 def testNamespaceParseInboxPrefix():
@@ -16,6 +18,22 @@ def testNamespaceParseEmptyPrefix():
         "prefix": "",
         "delimiter": "/",
     }
+
+
+def testNamespaceIsProbedWhenCapabilityIsNotAdvertised():
+    client = Mock()
+    client.capabilities = (b"IMAP4REV1",)
+    client.list.return_value = ("OK", [b'(\\HasChildren) "." INBOX'])
+    client.status.return_value = ("OK", [b'INBOX (MESSAGES 1 UNSEEN 0)'])
+    client.namespace.return_value = ("OK", [b'(("INBOX." ".")) NIL NIL'])
+
+    result = mailboxDiscover(
+        client,
+        dict(id="andy", name="Andy", host="mail.example", username="andy"),
+    )
+
+    assert result["namespace"] == {"prefix": "INBOX.", "delimiter": "."}
+    client.namespace.assert_called_once_with()
 
 
 def testExecutionNamespacePrefixesNewMirror():
