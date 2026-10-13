@@ -1,6 +1,6 @@
 # MA-012 Rolling IMAP retention and local archive aging
 
-Status: ToDo
+Status: InProgress
 
 ## Purpose
 
@@ -116,6 +116,56 @@ The reconciliation should:
 Messages whose date or canonical destination cannot be determined safely remain
 on IMAP and are reported for review.
 
+### Generic IMAP archive folders
+
+Server-side holding folders such as `INBOX.Archive` and `INBOX.Archive.2025` are
+not part of the authoritative canonical local taxonomy merely because their IMAP
+names can be decoded into `Archive` or `Archive/2025`.
+
+Messages aging out of such generic archive folders must be reclassified using the
+same filing knowledge used elsewhere in mailAgent, in this order where available:
+
+1. an explicit approved sender/domain filing decision;
+2. existing authoritative local archive history/classification for that sender;
+3. any other explicit canonical mapping already approved by the user.
+
+If a unique canonical destination can be resolved, the retention proposal should
+target that canonical local folder. If classification remains ambiguous or no
+safe local destination exists, the message remains blocked for review. mailAgent
+must not create or use `Archive`/`Archive/<year>` in the local archive simply as
+a fallback for these server-side holding folders.
+
+### Sent mail
+
+Sent mail requires separate destination resolution from received mail because the
+message sender will normally be the mailbox owner and therefore cannot be used as
+the filing classifier.
+
+The intended future behaviour is to place aged Sent messages into the correct
+canonical `myMail` or `kathyMail` folder according to the **recipient address**.
+The recipient address must be matched against the same known sender/address
+mapping and canonical filing knowledge already used for received mail. In other
+words, if messages received from a known address map to a canonical folder, a
+Sent message addressed to that same correspondent may use that mapping for its
+local archive destination.
+
+Sent retention classification must:
+
+- inspect recipient address fields suitable for the message (`To`, and where
+  needed `Cc`/`Bcc` when safely available);
+- resolve recipients against approved sender/address mappings and authoritative
+  archive history;
+- require one unambiguous canonical destination before proposing a move;
+- block messages with multiple conflicting recipient destinations rather than
+  guessing;
+- preserve the source Sent message on IMAP when no safe canonical destination can
+  be established.
+
+For the current MA-012 implementation, **Sent mail remains excluded from
+retention execution**. This requirement records the intended policy only; Sent
+messages must remain untouched until recipient-based classification is designed,
+tested and explicitly enabled in a later increment.
+
 ## Execution
 
 Execution must reuse the REQ-010 safety model.
@@ -213,7 +263,10 @@ MA-012 must not:
 - use global IMAP `EXPUNGE` as a fallback for exact-message removal;
 - modify shared or support mailboxes;
 - create or synchronise additional local archive copies on other devices;
-- silently change a user-approved cross-archive destination.
+- silently change a user-approved cross-archive destination;
+- treat generic server archive folders as authoritative canonical local folders;
+- execute Sent-mail retention until recipient-based classification is explicitly
+  implemented and enabled.
 
 ## Audit state
 
@@ -245,6 +298,15 @@ At minimum retain:
   filing;
 - retention review is read-only and reports proposed actions before mutation;
 - unresolved date or destination identity blocks the action rather than guessing;
+- generic IMAP archive folders such as `INBOX.Archive` and
+  `INBOX.Archive.2025` are reclassified using approved sender/archive knowledge
+  rather than mapped directly to local `Archive` folders;
+- unresolved generic-archive messages remain blocked rather than creating a
+  fallback local archive path;
+- Sent messages are excluded from retention execution for the current increment;
+- future Sent retention classification uses recipient addresses to resolve the
+  same canonical correspondence mappings used for received mail;
+- Sent messages with conflicting or unresolved recipient mappings remain on IMAP;
 - local archival uses copy -> verify -> remove;
 - failed local verification leaves the IMAP source unchanged;
 - interrupted execution is retry-safe and does not duplicate archive copies;
@@ -269,10 +331,14 @@ Suggested increments:
 
 1. introduce and test retention configuration and calendar-month cutoff logic;
 2. produce a read-only retention reconciliation plan;
-3. integrate rolling cutoff into new Inbox File destination decisions;
-4. execute one approved IMAP-to-local retention action using REQ-010 primitives;
-5. add retention review/progress presentation;
-6. broaden to safe batches after single-message execution is proven.
+3. reclassify messages from generic server archive folders into canonical local
+   destinations using approved sender/archive knowledge;
+4. integrate rolling cutoff into new Inbox File destination decisions;
+5. execute one approved IMAP-to-local retention action using REQ-010 primitives;
+6. add retention review/progress presentation;
+7. define and test recipient-based Sent-mail classification before allowing Sent
+   retention execution;
+8. broaden to safe batches after single-message execution is proven.
 
 Do not make MA-012 implementation part of the current REQ-010 stabilization
 unless a required compatibility hook is identified explicitly.
