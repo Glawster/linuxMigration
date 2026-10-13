@@ -4,11 +4,8 @@ set -Eeuo pipefail
 projectDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export projectDir
 
-# shellcheck source=lib/logging.sh
 source "$projectDir/lib/logging.sh"
-# shellcheck source=lib/common.sh
 source "$projectDir/lib/common.sh"
-# shellcheck source=lib/profiles.sh
 source "$projectDir/lib/profiles.sh"
 
 declare -a requestedProfiles=()
@@ -18,6 +15,8 @@ requestedCommand="install"
 requestedProfileAction=""
 requestedProfileName=""
 requestedOutput=""
+requestedIso=""
+requestedBundle=""
 requestedTargetDistribution=""
 requestedTargetRelease=""
 requestedTargetArchitecture=""
@@ -37,6 +36,7 @@ Commands:
   status               Inspect profile compliance without making changes
   capture              Capture supported global settings into one profile
   bundle               Plan or create an offline bootstrap bundle for a profile
+  image                Plan or create a bootable installer ISO containing a bundle
   profile list         List role and host profiles
   profile show NAME    Show a profile's merged configuration
   profile validate     Validate all profile definitions
@@ -46,7 +46,9 @@ Options:
   --profile NAME              Load a role or host profile (repeatable)
   --hostname NAME             Override the configured hostname
   --static-ip CIDR            Override the configured static IPv4 address
-  --output PATH               Bundle output directory
+  --output PATH               Bundle directory or image output path
+  --iso PATH                  Source installer ISO for image command
+  --bundle PATH               linuxBootstrapBundle directory for image command
   --target-distribution ID    Bundle target distribution (defaults to current system)
   --target-release VERSION    Bundle target release (defaults to current system)
   --target-architecture ARCH  Bundle target architecture (defaults to current system)
@@ -62,14 +64,9 @@ argumentsParse() {
         shift
         if [[ "$requestedCommand" == profile ]]; then
             (($#)) || { logError "profile requires an action"; usage >&2; exit 2; }
-            requestedProfileAction="$1"
-            shift
+            requestedProfileAction="$1"; shift
             case "$requestedProfileAction" in
-                show|add)
-                    (($#)) || { logError "profile $requestedProfileAction requires a name"; exit 2; }
-                    requestedProfileName="$1"
-                    shift
-                    ;;
+                show|add) (($#)) || { logError "profile $requestedProfileAction requires a name"; exit 2; }; requestedProfileName="$1"; shift ;;
                 list|validate) ;;
                 *) logError "unknown profile action: $requestedProfileAction"; exit 2 ;;
             esac
@@ -78,46 +75,20 @@ argumentsParse() {
         requestedCommand="install"
     fi
     case "$requestedCommand" in
-        bundle|capture|install|update|status|profile) ;;
+        bundle|image|capture|install|update|status|profile) ;;
         *) logError "unknown command: $requestedCommand"; usage >&2; exit 2 ;;
     esac
     while (($#)); do
         case "$1" in
-            --profile)
-                argumentRequireValue "$1" "${2:-}"
-                requestedProfiles+=("$2")
-                shift 2
-                ;;
-            --hostname)
-                argumentRequireValue "$1" "${2:-}"
-                requestedHostname="$2"
-                shift 2
-                ;;
-            --static-ip)
-                argumentRequireValue "$1" "${2:-}"
-                requestedStaticIp="$2"
-                shift 2
-                ;;
-            --output)
-                argumentRequireValue "$1" "${2:-}"
-                requestedOutput="$2"
-                shift 2
-                ;;
-            --target-distribution)
-                argumentRequireValue "$1" "${2:-}"
-                requestedTargetDistribution="$2"
-                shift 2
-                ;;
-            --target-release)
-                argumentRequireValue "$1" "${2:-}"
-                requestedTargetRelease="$2"
-                shift 2
-                ;;
-            --target-architecture)
-                argumentRequireValue "$1" "${2:-}"
-                requestedTargetArchitecture="$2"
-                shift 2
-                ;;
+            --profile) argumentRequireValue "$1" "${2:-}"; requestedProfiles+=("$2"); shift 2 ;;
+            --hostname) argumentRequireValue "$1" "${2:-}"; requestedHostname="$2"; shift 2 ;;
+            --static-ip) argumentRequireValue "$1" "${2:-}"; requestedStaticIp="$2"; shift 2 ;;
+            --output) argumentRequireValue "$1" "${2:-}"; requestedOutput="$2"; shift 2 ;;
+            --iso) argumentRequireValue "$1" "${2:-}"; requestedIso="$2"; shift 2 ;;
+            --bundle) argumentRequireValue "$1" "${2:-}"; requestedBundle="$2"; shift 2 ;;
+            --target-distribution) argumentRequireValue "$1" "${2:-}"; requestedTargetDistribution="$2"; shift 2 ;;
+            --target-release) argumentRequireValue "$1" "${2:-}"; requestedTargetRelease="$2"; shift 2 ;;
+            --target-architecture) argumentRequireValue "$1" "${2:-}"; requestedTargetArchitecture="$2"; shift 2 ;;
             -y|--confirm) dryRun=0; shift ;;
             --verbose) verbose=1; shift ;;
             -h|--help) usage; exit 0 ;;
@@ -129,6 +100,11 @@ argumentsParse() {
     elif [[ "$requestedCommand" == bundle ]]; then
         ((${#requestedProfiles[@]} == 1)) || { logError "bundle requires exactly one --profile NAME"; exit 2; }
         [[ -n "$requestedOutput" ]] || { logError "bundle requires --output PATH"; exit 2; }
+    elif [[ "$requestedCommand" == image ]]; then
+        ((${#requestedProfiles[@]} == 1)) || { logError "image requires exactly one --profile NAME"; exit 2; }
+        [[ -n "$requestedIso" ]] || { logError "image requires --iso PATH"; exit 2; }
+        [[ -n "$requestedBundle" ]] || { logError "image requires --bundle PATH"; exit 2; }
+        [[ -n "$requestedOutput" ]] || { logError "image requires --output PATH"; exit 2; }
     elif [[ "$requestedCommand" != profile ]]; then
         ((${#requestedProfiles[@]})) || requestedProfiles=(common)
     fi
@@ -138,19 +114,14 @@ argumentsParse() {
 
 modulesLoad() {
     local module
-    for module in bundle capture packages git ssh hostname networking nfs repositories installers steam davinci dcs mcm wow userConfig; do
-        # shellcheck source=/dev/null
+    for module in bundle image capture packages git ssh hostname networking nfs repositories installers steam davinci dcs mcm wow userConfig; do
         source "$projectDir/lib/$module.sh"
     done
 }
 
 configurationApply() {
     hostnameApply "${requestedHostname:-${profileHostname:-}}"
-    networkingApply \
-        "${requestedStaticIp:-${profileNetwork[address]:-${profileStaticIp:-}}}" \
-        "${profileNetwork[connection]:-}" \
-        "${profileNetwork[gateway]:-}" \
-        "${profileNetwork[dns]:-}"
+    networkingApply "${requestedStaticIp:-${profileNetwork[address]:-${profileStaticIp:-}}}" "${profileNetwork[connection]:-}" "${profileNetwork[gateway]:-}" "${profileNetwork[dns]:-}"
     networkingExpectedValidate "${profileExpectedIp:-}"
     hostsApply "${profileHostEntries[@]}"
     repositoriesApply "${profileRepositories[@]}"
@@ -162,41 +133,26 @@ configurationApply() {
     nfsMountsApply "${profileNfsMounts[@]}"
     installersApply "${profileInstallers[@]}"
     steamAppsApply "${profileSteamApps[@]}"
-    davinciApply \
-        "${profileDaVinci[enabled]:-false}" \
-        "${profileDaVinci[remove]:-false}" \
-        "${profileDaVinci[installerDir]:-$HOME/Downloads}"
-    dcsApply \
-        "${profileDcs[enabled]:-false}" \
-        "${profileDcs[installDir]:-/mnt/games/dcs}" \
-        "${profileDcs[vr]:-false}"
-    mcmApply \
-        "${profileMcm[enabled]:-false}" \
-        "${profileMcm[prefix]:-$HOME/.wine-mcm}" \
-        "${profileMcmDrives[@]}"
-    wowApply \
-        "${profileWow[enabled]:-false}" \
-        "${profileWow[installDir]:-/mnt/games/wow}"
+    davinciApply "${profileDaVinci[enabled]:-false}" "${profileDaVinci[remove]:-false}" "${profileDaVinci[installerDir]:-$HOME/Downloads}"
+    dcsApply "${profileDcs[enabled]:-false}" "${profileDcs[installDir]:-/mnt/games/dcs}" "${profileDcs[vr]:-false}"
+    mcmApply "${profileMcm[enabled]:-false}" "${profileMcm[prefix]:-$HOME/.wine-mcm}" "${profileMcmDrives[@]}"
+    wowApply "${profileWow[enabled]:-false}" "${profileWow[installDir]:-/mnt/games/wow}"
     managedFilesApply "${profileManagedFiles[@]}"
     vscodeExtensionsApply "${profileVscodeExtensions[@]}"
     gitApply
     sshApply
 }
 
-installRun() {
-    profilesLoad "${requestedProfiles[@]}"
-    configurationApply
-    summaryPrint
-}
+installRun() { profilesLoad "${requestedProfiles[@]}"; configurationApply; summaryPrint; }
 
 bundleRun() {
     profilesLoad "${requestedProfiles[@]}"
-    bundleRunAction \
-        "$requestedOutput" \
-        "$requestedTargetDistribution" \
-        "$requestedTargetRelease" \
-        "$requestedTargetArchitecture" \
-        "${profileAptPackages[@]}"
+    bundleRunAction "$requestedOutput" "$requestedTargetDistribution" "$requestedTargetRelease" "$requestedTargetArchitecture" "${profileAptPackages[@]}"
+}
+
+imageRun() {
+    profilesLoad "${requestedProfiles[@]}"
+    imageRunAction "$requestedIso" "$requestedBundle" "$requestedOutput"
 }
 
 profileRun() {
@@ -208,35 +164,20 @@ profileRun() {
     esac
 }
 
-statusRun() {
-    profilesLoad "${requestedProfiles[@]}"
-    configurationApply
-    summaryPrint
-}
-
-updateRun() {
-    profilesLoad "${requestedProfiles[@]}"
-    configurationApply
-    packagesUpdate "${profileAptPackages[@]}"
-    summaryPrint
-}
-
-captureRun() {
-    loadedProfiles=("${requestedProfiles[0]}")
-    captureGitProfile "${requestedProfiles[0]}"
-    summaryPrint
-}
+statusRun() { profilesLoad "${requestedProfiles[@]}"; configurationApply; summaryPrint; }
+updateRun() { profilesLoad "${requestedProfiles[@]}"; configurationApply; packagesUpdate "${profileAptPackages[@]}"; summaryPrint; }
+captureRun() { loadedProfiles=("${requestedProfiles[0]}"); captureGitProfile "${requestedProfiles[0]}"; summaryPrint; }
 
 bootstrapRun() {
     loggingInitialize
     argumentsParse "$@"
     trap 'errorTrap $? "$LINENO" "$BASH_COMMAND"' ERR
     modulesLoad
-
     logInfo "linux-bootstrap $requestedCommand starting"
     [[ "$dryRun" == 1 && "$requestedCommand" != status && "$requestedCommand" != profile ]] && logWarning "dry-run mode: no system changes will be made"
     case "$requestedCommand" in
         bundle) bundleRun ;;
+        image) imageRun ;;
         capture) captureRun ;;
         install) installRun ;;
         update) updateRun ;;
