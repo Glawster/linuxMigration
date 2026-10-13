@@ -40,15 +40,17 @@ def mailboxDiscover(client: Any, account: dict) -> dict:
         c.decode().upper() if isinstance(c, bytes) else c.upper()
         for c in client.capabilities
     }
-    if "NAMESPACE" in capabilities:
+    # Some servers accept NAMESPACE but fail to advertise it in CAPABILITY.
+    # Probe it directly when the client exposes the command; malformed/unsupported
+    # responses simply leave namespace absent, which keeps execution fail-closed.
+    namespace = getattr(client, "namespace", None)
+    if callable(namespace):
         try:
-            status, data = client.namespace()
+            status, data = namespace()
             if status == "OK":
                 result["namespace"] = namespaceParse(data)
-            else:
-                result["issues"].append("Namespace unavailable")
         except Exception:
-            result["issues"].append("Namespace unavailable")
+            pass
     if "QUOTA" in capabilities:
         try:
             status, data = client.getquotaroot("INBOX")
