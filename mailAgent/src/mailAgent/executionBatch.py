@@ -1,7 +1,7 @@
 """Sequential bulk execution over an explicitly reviewed candidate set."""
 
 
-def executionBatchRun(review: dict, reviewRefresh, execute) -> dict:
+def executionBatchRun(review: dict, reviewRefresh, execute, progress=None) -> dict:
     """Execute the currently reviewed candidates one at a time with revalidation.
 
     The candidate set is captured at button press. Before every mutation the review
@@ -13,7 +13,11 @@ def executionBatchRun(review: dict, reviewRefresh, execute) -> dict:
     if len(actionIds) != len(set(actionIds)):
         raise ValueError("Bulk execution requires unique reviewed actions")
 
+    requested = len(actionIds)
     completed = 0
+    if progress is not None:
+        progress(completed, requested)
+
     for actionId in actionIds:
         fresh = reviewRefresh()
         matches = [
@@ -29,5 +33,7 @@ def executionBatchRun(review: dict, reviewRefresh, execute) -> dict:
         if not isinstance(result, dict) or result.get("state") != "completed":
             raise ValueError("Bulk execution stopped because an action did not complete")
         completed += 1
+        if progress is not None:
+            progress(completed, requested)
 
-    return dict(state="completed", completed=completed, requested=len(actionIds))
+    return dict(state="completed", completed=completed, requested=requested)
