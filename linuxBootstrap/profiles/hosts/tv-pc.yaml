@@ -7,9 +7,6 @@ profiles:
   - vr
   - media-library
 
-repositories:
-  - warp
-
 apt:
   - code
   - gh
@@ -21,7 +18,6 @@ apt:
   - libxcb-xinerama0
   - libxkbcommon-x11-0
   - ocl-icd-libopencl1
-  - warp-terminal
   - openssh-server
   - nfs-common
 
