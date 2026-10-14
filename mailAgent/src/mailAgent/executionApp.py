@@ -100,12 +100,12 @@ class ExecutionApp(App):
 
         refresh = Button("Refresh review", id="execution-refresh")
         run = Button(
-            "Execute selected mail change",
+            "Execute Selected",
             id="execution-run",
             disabled=not bool(self.review.get("candidates")),
         )
         runAll = Button(
-            "Execute all reviewed mail changes",
+            "Execute All",
             id="execution-run-all",
             disabled=not bool(self.review.get("candidates")),
         )
