@@ -11,6 +11,7 @@ from typing import Any
 from organiseMyProjects.logUtils import setApplication
 from rich.text import Text
 from textual.app import App, ComposeResult
+from textual.containers import Horizontal
 from textual.widgets import Button, DataTable, Footer, Header, Static
 
 from mailAgent.archiveDiscovery import archiveDiscover
@@ -98,26 +99,26 @@ class ExecutionApp(App):
         yield table
 
         refresh = Button("Refresh review", id="execution-refresh")
-        refresh.styles.height = 1
-        yield refresh
-
         run = Button(
             "Execute selected mail change",
             id="execution-run",
-            variant="error",
             disabled=not bool(self.review.get("candidates")),
         )
-        run.styles.height = 1
-        yield run
-
         runAll = Button(
             "Execute all reviewed mail changes",
             id="execution-run-all",
-            variant="error",
             disabled=not bool(self.review.get("candidates")),
         )
-        runAll.styles.height = 1
-        yield runAll
+        for button in (refresh, run, runAll):
+            button.styles.width = "1fr"
+            button.styles.height = 3
+            button.styles.margin = (0, 1)
+
+        actions = Horizontal(refresh, run, runAll, id="execution-actions")
+        actions.styles.height = 3
+        actions.styles.margin = (1, 0)
+        actions.styles.padding = (0, 1)
+        yield actions
 
         yield Static("", id="execution-status", markup=False)
         yield Footer()
