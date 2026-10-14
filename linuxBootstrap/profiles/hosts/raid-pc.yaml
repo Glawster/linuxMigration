@@ -7,3 +7,9 @@ master: false
 # have been inventoried and reviewed.
 profiles:
   - raid-server
+
+repositories:
+  - warp
+
+apt:
+  - warp-terminal
