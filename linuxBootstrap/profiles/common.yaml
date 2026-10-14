@@ -1,5 +1,8 @@
 name: common
 
+repositories:
+  - warp
+
 apt:
   - avahi-daemon
   - curl
@@ -7,6 +10,7 @@ apt:
   - git
   - libnss-mdns
   - openssh-client
+  - warp-terminal
 
 services:
   - avahi-daemon
