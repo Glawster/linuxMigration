@@ -1,6 +1,6 @@
 """Verified Thunderbird local-archive copy primitive.
 
-This module deliberately does not remove the IMAP source.  It provides the local
+This module deliberately does not remove the IMAP source. It provides the local
 copy-and-verify half of REQ-010/MA-012 execution so orchestration can checkpoint
 and revalidate before exact source removal.
 """
@@ -24,7 +24,7 @@ class LocalArchiveExecutionBlocked(ValueError):
 def localArchiveCopyVerify(source: bytes, action: dict) -> dict:
     """Copy one approved message to an existing Thunderbird mbox and verify it.
 
-    The operation is idempotent for an already-present exact message.  It never
+    The operation is idempotent for an already-present exact message. It never
     removes or changes the IMAP source and never creates archive folders.
     """
     approved = executionActionValidate(action)
@@ -82,9 +82,24 @@ def localArchiveContains(source: bytes, action: dict) -> bool:
         or destination.get("format") != "thunderbird"
     ):
         raise LocalArchiveExecutionBlocked("unsupported")
+    return localArchiveDigestVerify(approved, sha256(_mboxBytes(source)).hexdigest())
+
+
+def localArchiveDigestVerify(action: dict, digest: str) -> bool:
+    """Verify exactly one archived message by a previously checkpointed digest."""
+    approved = executionActionValidate(action)
+    destination = approved.get("destination", {})
+    if (
+        approved.get("disposition") != "file"
+        or destination.get("kind") != "local"
+        or destination.get("format") != "thunderbird"
+        or not isinstance(digest, str)
+        or len(digest) != 64
+        or any(char not in "0123456789abcdef" for char in digest)
+    ):
+        raise LocalArchiveExecutionBlocked("unsupported")
     path = Path(destination["path"])
     _destinationValidate(path)
-    digest = sha256(_mboxBytes(source)).hexdigest()
     box = mailbox.mbox(path, create=False)
     try:
         box.lock()
