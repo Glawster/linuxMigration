@@ -33,6 +33,20 @@ def testBulkExecutesCapturedActionsInOrderWithFreshReview():
     ]
 
 
+def testBulkReportsInitialAndCompletedProgress():
+    updates = []
+
+    result = executionBatchRun(
+        review("a", "b"),
+        lambda: review("a", "b"),
+        lambda actionId, fresh: {"state": "completed"},
+        progress=lambda completed, requested: updates.append((completed, requested)),
+    )
+
+    assert result == {"state": "completed", "completed": 2, "requested": 2}
+    assert updates == [(0, 2), (1, 2), (2, 2)]
+
+
 def testBulkStopsWhenReviewedActionDisappears():
     executed = []
 
