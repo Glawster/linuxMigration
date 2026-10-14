@@ -1,4 +1,4 @@
-"""Explicit TUI for executing one reviewed live-year filing action at a time."""
+"""Explicit TUI for executing reviewed mail filing actions."""
 
 import argparse
 import asyncio
@@ -17,6 +17,7 @@ from mailAgent.archiveDiscovery import archiveDiscover
 from mailAgent.configuration import configValidate
 from mailAgent.credentials import credentialGet, credentialsLoad
 from mailAgent.discovery import discoveryRun
+from mailAgent.executionBatch import executionBatchRun
 from mailAgent.executionPlan import executionPlanPrepare
 from mailAgent.executionReview import executionReviewBuild, executionReviewSelect
 from mailAgent.filing import filingContextBuild, filingPlanBuild, filingRulesLoad
@@ -56,7 +57,7 @@ def main() -> None:
 def parserBuild() -> argparse.ArgumentParser:
     """Define the separate mutation-capable TUI arguments."""
     parser = argparse.ArgumentParser(
-        description="Review and explicitly execute one safe mail filing action"
+        description="Review and explicitly execute safe mail filing actions"
     )
     parser.add_argument(
         "--config", type=Path, default=Path.home() / ".config/mailAgent/config.toml"
@@ -68,7 +69,7 @@ def parserBuild() -> argparse.ArgumentParser:
 
 
 class ExecutionApp(App):
-    """Review one live-year filing action and execute only the selected row."""
+    """Review filing actions and execute one row or the captured reviewed set."""
 
     TITLE = f"mailAgent Execute · {applicationVersion()}"
     BINDINGS = [("q", "quit", "Quit")]
@@ -83,8 +84,8 @@ class ExecutionApp(App):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(
-            "EXECUTION MODE · selected mail can be moved. Only one reviewed live-year "
-            "File action is executed at a time.",
+            "EXECUTION MODE · reviewed mail can be moved. Execute one selected action "
+            "or the complete currently reviewed set.",
             id="execution-safety",
             markup=False,
         )
@@ -95,23 +96,40 @@ class ExecutionApp(App):
         for row in self.tableRows():
             table.add_row(*(Text(value) for value in row))
         yield table
-        yield Button("Refresh review", id="execution-refresh")
-        yield Button(
+
+        refresh = Button("Refresh review", id="execution-refresh")
+        refresh.styles.height = 1
+        yield refresh
+
+        run = Button(
             "Execute selected mail change",
             id="execution-run",
             variant="error",
             disabled=not bool(self.review.get("candidates")),
         )
+        run.styles.height = 1
+        yield run
+
+        runAll = Button(
+            "Execute all reviewed mail changes",
+            id="execution-run-all",
+            variant="error",
+            disabled=not bool(self.review.get("candidates")),
+        )
+        runAll.styles.height = 1
+        yield runAll
+
         yield Static("", id="execution-status", markup=False)
         yield Footer()
 
     def summaryText(self) -> str:
-        """Explain exactly what this first execution increment can change."""
+        """Explain exactly what the current execution review can change."""
         count = len(self.review.get("candidates", []))
         blocked = len(self.review.get("blocked", []))
         return (
             f"{count} executable live-year File actions · {blocked} blocked. "
-            "Older/local archive filing, Ignore and Junk execution are not enabled here."
+            "Bulk execution processes only the currently reviewed rows, one at a time, "
+            "with fresh revalidation before every action."
         )
 
     def tableRows(self) -> list[tuple[str, ...]]:
@@ -129,9 +147,19 @@ class ExecutionApp(App):
         ]
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Refresh safely or explicitly execute the currently selected action."""
+        """Refresh safely or explicitly execute selected/reviewed actions."""
         if event.button.id == "execution-refresh":
             self.workerStart("Refreshing execution review…", self.reviewRefresh, False)
+            return
+        if event.button.id == "execution-run-all":
+            selectedReview = self.review
+            self.workerStart(
+                "Executing reviewed mail changes one at a time…",
+                lambda: executionBatchRun(
+                    selectedReview, self.reviewRefresh, self.execute
+                ),
+                True,
+            )
             return
         if event.button.id != "execution-run":
             return
@@ -154,6 +182,7 @@ class ExecutionApp(App):
     def workerStart(self, message: str, operation, executed: bool) -> None:
         """Run blocking IMAP work away from the Textual event loop."""
         self.query_one("#execution-run", Button).disabled = True
+        self.query_one("#execution-run-all", Button).disabled = True
         self.query_one("#execution-refresh", Button).disabled = True
         self.query_one("#execution-status", Static).update(message)
         self.run_worker(
@@ -171,17 +200,27 @@ class ExecutionApp(App):
             self.review = refreshed
             self.reviewShow()
             if executed:
-                state = result.get("state", "unknown") if isinstance(result, dict) else "unknown"
-                status.update(f"Execution finished: {state}. Review refreshed.")
+                if isinstance(result, dict) and "requested" in result:
+                    status.update(
+                        f"Bulk execution finished: {result.get('completed', 0)}/"
+                        f"{result.get('requested', 0)} completed. Review refreshed."
+                    )
+                else:
+                    state = (
+                        result.get("state", "unknown")
+                        if isinstance(result, dict)
+                        else "unknown"
+                    )
+                    status.update(f"Execution finished: {state}. Review refreshed.")
             else:
                 status.update("Execution review refreshed.")
         except Exception as error:
             status.update(f"Execution blocked or failed: {error}")
         finally:
+            hasCandidates = bool(self.review.get("candidates"))
             self.query_one("#execution-refresh", Button).disabled = False
-            self.query_one("#execution-run", Button).disabled = not bool(
-                self.review.get("candidates")
-            )
+            self.query_one("#execution-run", Button).disabled = not hasCandidates
+            self.query_one("#execution-run-all", Button).disabled = not hasCandidates
 
     def reviewShow(self) -> None:
         """Replace the review rows without leaving execution mode."""
