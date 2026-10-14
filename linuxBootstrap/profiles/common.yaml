@@ -10,6 +10,7 @@ apt:
   - git
   - libnss-mdns
   - openssh-client
+  - vim
   - warp-terminal
 
 services:
