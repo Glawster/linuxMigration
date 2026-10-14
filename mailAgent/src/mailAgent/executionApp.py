@@ -111,10 +111,6 @@ class ExecutionApp(App):
         )
         for button in (refresh, run, runAll):
             button.styles.width = "1fr"
-            button.styles.height = 1
-            button.styles.padding = (0, 0)
-            button.styles.border = ("none", "transparent")
-            button.styles.margin = (0, 1)
 
         actions = Horizontal(refresh, run, runAll, id="execution-actions")
         actions.styles.height = 3
