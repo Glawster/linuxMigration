@@ -111,13 +111,14 @@ class ExecutionApp(App):
         )
         for button in (refresh, run, runAll):
             button.styles.width = "1fr"
-            button.styles.height = 3
+            button.styles.height = 1
+            button.styles.padding = (0, 0)
+            button.styles.border = ("none", "transparent")
             button.styles.margin = (0, 1)
 
         actions = Horizontal(refresh, run, runAll, id="execution-actions")
         actions.styles.height = 3
-        actions.styles.margin = (1, 0)
-        actions.styles.padding = (0, 1)
+        actions.styles.padding = (1, 1)
         yield actions
 
         yield Static("", id="execution-status", markup=False)
