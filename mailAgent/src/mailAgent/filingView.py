@@ -131,6 +131,7 @@ class FilingView(Widget):
         self.issue = issue
         plan = snapshot.get("filingPlan") or {}
         self._allRows: list[dict] = list(plan.get("rows") or [])
+        _statusRowsApply(self._allRows, plan, snapshot)
         self._chooseOnly = False
         self._linger: set[tuple[str, str]] = set()
         self._sortKey: str | None = None
@@ -266,6 +267,7 @@ class FilingView(Widget):
         previousScroll = table.scroll_y
         plan = self._plan()
         self._allRows = list(plan.get("rows") or [])
+        _statusRowsApply(self._allRows, plan, self.snapshot)
         valid = {self._identity(row) for row in self._allRows}
         self._marked.intersection_update(valid)
         self._linger.intersection_update(valid)
@@ -1191,6 +1193,73 @@ def _domainCell(row: dict, marked: bool) -> Text:
     return Text(prefix + str(row.get("domain", "")), style=style)
 
 
+def _statusRowsApply(rows: list[dict], plan: dict, snapshot: dict) -> None:
+    """Apply the agreed Choose/Local/IMAP/Existing/Moved status vocabulary."""
+    context = snapshot.get("filingContext") or {}
+    accounts = {
+        account.get("id"): account
+        for account in context.get("accounts", [])
+        if isinstance(account, dict) and account.get("id")
+    }
+    archives = {
+        archive.get("mailbox"): archive
+        for archive in snapshot.get("localArchives", [])
+        if isinstance(archive, dict) and archive.get("mailbox")
+    }
+    mailboxes = {
+        mailbox.get("id"): mailbox
+        for mailbox in snapshot.get("mailboxes", [])
+        if isinstance(mailbox, dict) and mailbox.get("id")
+    }
+
+    for row in rows:
+        disposition = str(row.get("disposition") or "").lower()
+        canonical = str(row.get("canonical") or "")
+        previous = str(row.get("status") or "")
+        if disposition in ("ignore", "junk"):
+            row["status"] = ""
+            continue
+        if previous == "Moved":
+            row["status"] = "Moved"
+            continue
+        if not canonical:
+            row["status"] = "Choose"
+            continue
+
+        mailbox = str(row.get("mailbox") or "")
+        archive = archives.get(mailbox, {})
+        localExists = any(
+            folder.get("path") == canonical and folder.get("selectable")
+            for folder in archive.get("folders", [])
+            if isinstance(folder, dict)
+        )
+
+        imapExists = False
+        account = accounts.get(mailbox)
+        observed = mailboxes.get(mailbox, {})
+        if isinstance(account, dict) and isinstance(archive, dict):
+            try:
+                mappings, _index = filing._mappingsFor(account, observed, archive)
+            except (KeyError, TypeError, ValueError):
+                mappings = []
+            imapExists = any(
+                mapping.get("canonical") == canonical
+                and mapping.get("imapExists")
+                and mapping.get("imapSelectable")
+                for mapping in mappings
+                if isinstance(mapping, dict)
+            )
+
+        if localExists and imapExists:
+            row["status"] = "Existing"
+        elif localExists:
+            row["status"] = "Local"
+        elif imapExists:
+            row["status"] = "IMAP"
+        else:
+            row["status"] = "Choose"
+
+
 def _tableCells(row: dict, destinationWidth: int, marked: bool = False) -> tuple:
     """Return one table row, with Action distinct from destination status."""
     action = _rowAction(row)
@@ -1224,15 +1293,12 @@ def _textClip(value: str, width: int) -> str:
 def _actionText(rows: list[dict]) -> str:
     """Explain the next available user action without implying execution exists."""
     choices = sum(_rowNeedsChoice(row) for row in rows)
-    proposed = sum(_rowNeedsAction(row) and not _rowNeedsChoice(row) for row in rows)
-    prompts = []
-    if choices:
-        prompts.append(
-            f"{choices} domains need an action · enter a destination to File · i Ignore · j Junk"
-        )
-    if proposed:
-        prompts.append(f"review proposed folders for {proposed} domains")
-    return "⚠ ACTION NEEDED: " + "; ".join(prompts) + "." if prompts else ""
+    if not choices:
+        return ""
+    return (
+        f"⚠ ACTION NEEDED: {choices} domains need an action · "
+        "enter a destination to File · i Ignore · j Junk."
+    )
 
 
 def _rowAction(row: dict) -> str:
@@ -1250,27 +1316,27 @@ def _rowAction(row: dict) -> str:
 
 
 def _rowStatus(row: dict) -> str:
-    """Return only destination state; actions live in their own column."""
+    """Return the agreed destination/execution status vocabulary."""
     status = str(row.get("status") or "")
-    if status in ("Needs choice", "Ignore", "Junk"):
-        return ""
-    return status
+    return status if status in ("Choose", "IMAP", "Local", "Existing", "Moved") else ""
 
 
 def _rowNeedsAction(row: dict) -> bool:
-    """Identify domain decisions or proposed folders requiring user review."""
-    return _rowNeedsChoice(row) or (
-        str(row.get("status", "")).startswith("Proposed")
-        and row.get("decisionSource") not in ("domain", "sender")
-    )
+    """Identify domain decisions that still require a user choice."""
+    return _rowNeedsChoice(row)
 
 
 def _rowNeedsChoice(row: dict) -> bool:
-    """A saved complete rule resolves a choice even for a proposed folder."""
-    return row.get("status") == "Needs choice" or (
-        bool(row.get("domainUncertain"))
-        and row.get("decisionSource") not in ("domain", "sender")
+    """A complete saved File rule resolves the choice regardless of topology."""
+    disposition = str(row.get("disposition") or "").lower()
+    if disposition in ("ignore", "junk"):
+        return False
+    unresolved = not bool(row.get("canonical"))
+    uncertain = bool(row.get("domainUncertain")) and row.get("decisionSource") not in (
+        "domain",
+        "sender",
     )
+    return unresolved or uncertain
 
 
 def _summaryText() -> str:
