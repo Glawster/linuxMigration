@@ -3,8 +3,6 @@
 import base64
 from pathlib import Path
 
-from organiseMyProjects.logUtils import getLogger
-
 from mailAgent.archiveClassification import archiveSenderIndex, senderClassify
 from mailAgent.archiveDiscovery import archiveDiscover
 from mailAgent.configuration import configValidate
@@ -18,8 +16,6 @@ def migrationPlan(config: dict, snapshot: dict, resolutions: dict | None = None)
     """Build a reviewable plan from observed folders and message metadata."""
     resolutions = resolutions or {"schemaVersion": 1, "senderMappings": {}}
     config = configValidate(config, Path.cwd())
-    logger = getLogger()
-    logger.doing("migration planning")
     plan = dict(
         schemaVersion=1,
         liveYear=config["general"]["liveYear"],
@@ -89,7 +85,6 @@ def migrationPlan(config: dict, snapshot: dict, resolutions: dict | None = None)
             for r in plan["reviewQueue"]
         ),
     )
-    logger.done("migration planning")
     return plan
 
 
