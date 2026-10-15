@@ -6,24 +6,25 @@ from mailAgent.filingView import (
     _headingText,
     _rowAction,
     _rowStatus,
+    _statusRowsApply,
     _tableCells,
 )
 
 
-def testUnresolvedRowUsesChooseAction() -> None:
+def testUnresolvedRowUsesChooseActionAndStatus() -> None:
     row = {
         "domain": "example.com",
         "archive": "kathyMail",
         "inboxCount": 2,
-        "status": "Needs choice",
+        "status": "Choose",
         "disposition": "file",
     }
 
     assert _rowAction(row) == "Choose"
-    assert _rowStatus(row) == ""
+    assert _rowStatus(row) == "Choose"
     cells = _tableCells(row, 12)
     assert str(cells[6]) == "Choose"
-    assert str(cells[7]) == ""
+    assert str(cells[7]) == "Choose"
 
 
 def testFileRowSeparatesActionFromStatus() -> None:
@@ -34,17 +35,90 @@ def testFileRowSeparatesActionFromStatus() -> None:
         "parent": "Health",
         "folder": "Southern Trust",
         "canonical": "Health/Southern Trust",
-        "status": "Proposed child",
+        "status": "Local",
         "disposition": "file",
     }
 
     assert _rowAction(row) == "File"
-    assert _rowStatus(row) == "Proposed child"
+    assert _rowStatus(row) == "Local"
+
+
+def testStatusVocabularyIsRestricted() -> None:
+    for value in ("Choose", "IMAP", "Local", "Existing", "Moved"):
+        assert _rowStatus({"status": value}) == value
+    assert _rowStatus({"status": "Proposed child"}) == ""
+    assert _rowStatus({"status": "Proposed parent + child"}) == ""
+
+
+def testTopologyStatusesUseLocalAndImapPresence() -> None:
+    rows = [
+        dict(
+            mailbox="andy",
+            domain="local.example",
+            canonical="Finance/Local",
+            disposition="file",
+        ),
+        dict(
+            mailbox="andy",
+            domain="imap.example",
+            canonical="Finance/Imap",
+            disposition="file",
+        ),
+        dict(
+            mailbox="andy",
+            domain="both.example",
+            canonical="Finance/Both",
+            disposition="file",
+        ),
+        dict(mailbox="andy", domain="choose.example", disposition="file"),
+    ]
+    snapshot = {
+        "filingContext": {
+            "accounts": [dict(id="andy", role="personal", folderMappings={})]
+        },
+        "localArchives": [
+            {
+                "mailbox": "andy",
+                "available": True,
+                "complete": True,
+                "folders": [
+                    dict(path="Finance/Local", selectable=True, storage="/tmp/local"),
+                    dict(path="Finance/Both", selectable=True, storage="/tmp/both"),
+                ],
+            }
+        ],
+        "mailboxes": [
+            {
+                "id": "andy",
+                "folders": [
+                    dict(
+                        path="Finance/Imap",
+                        delimiter="/",
+                        attributes=[],
+                    ),
+                    dict(
+                        path="Finance/Both",
+                        delimiter="/",
+                        attributes=[],
+                    ),
+                ],
+            }
+        ],
+    }
+
+    _statusRowsApply(rows, {"proposals": []}, snapshot)
+
+    assert [row["status"] for row in rows] == [
+        "Local",
+        "IMAP",
+        "Existing",
+        "Choose",
+    ]
 
 
 def testIgnoreAndJunkAreActionsNotStatuses() -> None:
-    ignored = {"disposition": "ignore", "status": "Ignore"}
-    junk = {"disposition": "junk", "status": "Junk"}
+    ignored = {"disposition": "ignore", "status": ""}
+    junk = {"disposition": "junk", "status": ""}
 
     assert _rowAction(ignored) == "Ignore"
     assert _rowStatus(ignored) == ""
@@ -59,7 +133,7 @@ def testActionColumnIsBeforeStatus() -> None:
 
 
 def testActionBannerExplainsKeyboardChoices() -> None:
-    text = _actionText([{"status": "Needs choice", "disposition": "file"}])
+    text = _actionText([{"status": "Choose", "disposition": "file"}])
 
     assert "1 domains need an action" in text
     assert "i Ignore" in text
@@ -98,7 +172,7 @@ def testEditorMountAndActionTransitionsKeepFieldsConsistent(monkeypatch) -> None
                 str(editor.query_one("#filing-disposition", Static).render())
                 == "Choose"
             )
-            row = dict(domain="example.com", mailbox="andy", status="Needs choice")
+            row = dict(domain="example.com", mailbox="andy", status="Choose")
             editor.rowShow(row, plan)
             assert (
                 str(editor.query_one("#filing-disposition", Static).render())
