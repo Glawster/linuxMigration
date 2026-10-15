@@ -296,6 +296,7 @@ def executionRunOne(
                 account["host"], account.get("port", 993), timeout=30
             )
             client.login(account["username"], password)
+            _capabilitiesRefresh(client)
         finally:
             del password
 
@@ -319,6 +320,23 @@ def executionRunOne(
                 client.logout()
             except Exception:
                 pass
+
+
+def _capabilitiesRefresh(client: Any) -> tuple:
+    """Refresh capabilities after login because servers may advertise more then."""
+    status, rows = client.capability()
+    if status != "OK" or not rows:
+        raise ValueError("IMAP post-login capabilities are unavailable")
+    capabilities = []
+    for row in rows:
+        if isinstance(row, bytes):
+            capabilities.extend(row.split())
+        elif isinstance(row, str):
+            capabilities.extend(row.split())
+    if not capabilities:
+        raise ValueError("IMAP post-login capabilities are unavailable")
+    client.capabilities = tuple(dict.fromkeys(capabilities))
+    return client.capabilities
 
 
 def filingPlanFresh(config: dict, thunderbird: Path) -> dict:
