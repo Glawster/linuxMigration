@@ -5,30 +5,32 @@ def executionBatchRun(review: dict, reviewRefresh, execute, progress=None) -> di
     """Execute the currently reviewed candidates one at a time with revalidation.
 
     The candidate set is captured at button press. Before every mutation the review
-    is rebuilt and the exact action id must still be executable. Newly appearing
-    candidates are never added to the running batch. The batch stops immediately
-    on a changed/blocked action or any execution failure.
+    is rebuilt and the same reviewed intent must still be executable. Newly appearing
+    candidates are never added to the running batch. A destination folder changing
+    from missing to existing is allowed because that is an expected idempotent effect
+    of an earlier action in the same batch. Other intent changes stop the batch.
     """
-    actionIds = [candidate["actionId"] for candidate in review.get("candidates", [])]
-    if len(actionIds) != len(set(actionIds)):
+    batchIds = [candidate["batchId"] for candidate in review.get("candidates", [])]
+    if len(batchIds) != len(set(batchIds)):
         raise ValueError("Bulk execution requires unique reviewed actions")
 
-    requested = len(actionIds)
+    requested = len(batchIds)
     completed = 0
     if progress is not None:
         progress(completed, requested)
 
-    for actionId in actionIds:
+    for batchId in batchIds:
         fresh = reviewRefresh()
         matches = [
             candidate
             for candidate in fresh.get("candidates", [])
-            if candidate.get("actionId") == actionId
+            if candidate.get("batchId") == batchId
         ]
         if len(matches) != 1:
             raise ValueError(
                 "Bulk execution stopped because a reviewed action changed or is no longer executable"
             )
+        actionId = matches[0]["actionId"]
         result = execute(actionId, fresh)
         if not isinstance(result, dict) or result.get("state") != "completed":
             raise ValueError("Bulk execution stopped because an action did not complete")
