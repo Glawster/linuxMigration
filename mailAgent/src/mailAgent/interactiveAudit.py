@@ -131,6 +131,8 @@ def auditAppBuild(
                     self.query_one(FilingView).planShow()
                     progress.styles.display = "none"
                     status.update("Moving Mail refreshed.")
+                    if logger is not None:
+                        logger.info("Moving Mail review refreshed")
                     return
 
                 review = await asyncio.to_thread(filingExecution["reviewRefresh"])
@@ -181,12 +183,18 @@ def auditAppBuild(
                 snapshot.clear()
                 snapshot.update(refreshedSnapshot)
                 self.query_one(FilingView).planShow()
-                status.update(
+                message = (
                     f'Execute {label} finished: {result.get("completed", 0)}/'
                     f'{result.get("requested", 0)} completed.'
                 )
+                status.update(message)
+                if logger is not None:
+                    logger.info("Moving Mail " + message)
             except Exception as error:
-                status.update("Moving Mail execution blocked or failed: " + str(error))
+                message = "Moving Mail execution blocked or failed: " + str(error)
+                status.update(message)
+                if logger is not None:
+                    logger.error(message)
             finally:
                 for identity in (
                     "#filing-execution-refresh",
