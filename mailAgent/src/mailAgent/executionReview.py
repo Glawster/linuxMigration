@@ -47,6 +47,7 @@ def executionReviewBuild(filingPlan: dict, config: dict) -> dict:
         candidates.append(
             dict(
                 actionId=action["actionId"],
+                batchId=_batchIdentity(action),
                 mailbox=source["mailbox"],
                 uid=source["uid"],
                 year=action["year"],
@@ -86,6 +87,13 @@ def executionReviewSelect(review: dict, identity: str) -> tuple[str, dict]:
     if len(approved["entries"]) != 1:
         raise ValueError("Execution approval could not be selected")
     return actionId, approved
+
+
+def _batchIdentity(action: dict) -> str:
+    """Return a stable reviewed intent while destination existence changes safely."""
+    stable = dict(action)
+    stable["folderCreationApproved"] = False
+    return executionActionId(stable)
 
 
 def _filingEvidence(filingPlan: dict) -> dict:
