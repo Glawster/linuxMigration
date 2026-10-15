@@ -16,6 +16,7 @@ from mailAgent.executionApp import (
     parserBuild,
     thunderbirdRoot,
 )
+from mailAgent.executionRetry import executionWithReconnect
 from mailAgent.executionReview import executionReviewBuild
 from mailAgent.version import applicationVersion
 
@@ -82,12 +83,16 @@ def main() -> None:
 
     def execute(actionId: str, selectedReview: dict) -> dict:
         logger.info(f"Execution requested: {actionId[:12]}")
-        return executionRunOne(
-            actionId,
-            selectedReview,
-            config,
-            thunderbird,
-            clientFactory=imaplib.IMAP4_SSL,
+        return executionWithReconnect(
+            lambda: executionRunOne(
+                actionId,
+                selectedReview,
+                config,
+                thunderbird,
+                clientFactory=imaplib.IMAP4_SSL,
+                logger=logger,
+            ),
+            logger,
         )
 
     logger.info(
