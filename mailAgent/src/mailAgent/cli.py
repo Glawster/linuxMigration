@@ -2,6 +2,7 @@
 
 import argparse
 from datetime import datetime, timezone
+from inspect import signature
 import json
 import logging
 from pathlib import Path
@@ -127,7 +128,10 @@ def _interactiveShow(
         refresh = planRefresh if snapshot.get("migrationPlan") else None
         quiet = _consoleQuiet(logger)
         try:
-            result = auditShow(snapshot, refresh, filingExecution)
+            if len(signature(auditShow).parameters) >= 3:
+                result = auditShow(snapshot, refresh, filingExecution)
+            else:
+                result = auditShow(snapshot, refresh)
         finally:
             _consoleRestore(logger, quiet)
         if result != "runPlanning":
