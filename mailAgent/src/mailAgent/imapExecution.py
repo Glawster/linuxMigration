@@ -296,13 +296,17 @@ def _sourceRead(client: Any, action: dict, writable: bool = False):
     return _uidFetch(client, action["source"]["uid"])
 
 
-def _sourceValidate(source: tuple[bytes, bytes], action: dict, allowDeleted=False) -> None:
-    flags, body = source
-    parsed = messageParse(body)
-    if not parsed.get("seen"):
-        raise ImapExecutionBlocked("stale-source")
-    deleted = b"\\Deleted" in flags or b"\\deleted" in flags.lower()
-    if deleted and not allowDeleted:
+def _sourceValidate(
+    source: tuple[bytes, bytes], action: dict, allowDeleted: bool = False
+) -> None:
+    parsed = messageParse(
+        *source, action["source"]["folder"], action["source"]["uidValidity"]
+    )
+    if (
+        not parsed["seen"]
+        or parsed["year"] != action["year"]
+        or (not allowDeleted and "\\deleted" in {flag.lower() for flag in parsed["flags"]})
+    ):
         raise ImapExecutionBlocked("stale-source")
 
 
