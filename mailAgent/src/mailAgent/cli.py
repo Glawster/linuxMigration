@@ -32,6 +32,7 @@ def main() -> None:
         if args.plan:
             from mailAgent.planSummary import planSummaryShow
 
+            logger.info("Migration plan refreshed")
             planSummaryShow(snapshot["migrationPlan"], logger)
         if args.json is None:
             snapshot = _interactiveShow(args, config, snapshot, logger)
@@ -92,7 +93,9 @@ def _interactiveShow(
         planningArgs.plan = True
         planningArgs.confirm = False
         planningArgs.json = None
-        return _snapshotBuild(planningArgs, config, logger)
+        refreshed = _snapshotBuild(planningArgs, config, logger)
+        logger.info("Migration plan refreshed")
+        return refreshed
 
     def filingReviewRefresh() -> dict:
         return executionReviewBuild(
