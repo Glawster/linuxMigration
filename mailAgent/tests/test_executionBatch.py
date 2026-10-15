@@ -6,7 +6,12 @@ from mailAgent.executionBatch import executionBatchRun
 
 
 def review(*actionIds):
-    return {"candidates": [{"actionId": actionId} for actionId in actionIds]}
+    return {
+        "candidates": [
+            {"actionId": actionId, "batchId": f"batch-{actionId}"}
+            for actionId in actionIds
+        ]
+    }
 
 
 def testBulkExecutesCapturedActionsInOrderWithFreshReview():
@@ -31,6 +36,21 @@ def testBulkExecutesCapturedActionsInOrderWithFreshReview():
         ("refresh", None),
         ("execute", "b", ["b", "new"]),
     ]
+
+
+def testBulkUsesFreshActionIdWhenStableIntentRemains():
+    initial = {"candidates": [{"actionId": "before", "batchId": "stable"}]}
+    fresh = {"candidates": [{"actionId": "after", "batchId": "stable"}]}
+    executed = []
+
+    result = executionBatchRun(
+        initial,
+        lambda: fresh,
+        lambda actionId, current: executed.append(actionId) or {"state": "completed"},
+    )
+
+    assert result == {"state": "completed", "completed": 1, "requested": 1}
+    assert executed == ["after"]
 
 
 def testBulkReportsInitialAndCompletedProgress():
@@ -70,8 +90,14 @@ def testBulkStopsWhenExecutionDoesNotComplete():
 
 
 def testBulkRejectsDuplicateReviewedActionIds():
+    duplicate = {
+        "candidates": [
+            {"actionId": "a", "batchId": "same"},
+            {"actionId": "b", "batchId": "same"},
+        ]
+    }
     with pytest.raises(ValueError, match="unique reviewed actions"):
-        executionBatchRun(review("a", "a"), lambda: review("a"), lambda *_: None)
+        executionBatchRun(duplicate, lambda: duplicate, lambda *_: None)
 
 
 def testEmptyBulkIsACompletedNoOp():
