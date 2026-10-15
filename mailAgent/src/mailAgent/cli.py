@@ -77,8 +77,12 @@ def _interactiveShow(
     snapshot: dict,
     logger: Any,
 ) -> dict:
-    """Run the TUI and execute requested read-only follow-up workflows."""
+    """Run the TUI with read-only audit views and explicit Moving Mail execution."""
+    from mailAgent.executionApp import executionRunOne, filingPlanFresh
+    from mailAgent.executionReview import executionReviewBuild
     from mailAgent.interactiveAudit import auditShow
+
+    thunderbird = _thunderbirdRoot(args.thunderbird)
 
     def planRefresh() -> dict:
         planningArgs = argparse.Namespace(**vars(args))
@@ -87,11 +91,36 @@ def _interactiveShow(
         planningArgs.json = None
         return _snapshotBuild(planningArgs, config, logger)
 
+    def filingReviewRefresh() -> dict:
+        return executionReviewBuild(filingPlanFresh(config, thunderbird), config)
+
+    def filingExecute(actionId: str, review: dict) -> dict:
+        return executionRunOne(
+            actionId,
+            review,
+            config,
+            thunderbird,
+            logger=logger,
+        )
+
+    def filingSnapshotRefresh() -> dict:
+        refreshArgs = argparse.Namespace(**vars(args))
+        refreshArgs.plan = False
+        refreshArgs.confirm = False
+        refreshArgs.json = None
+        return _snapshotBuild(refreshArgs, config, logger)
+
+    filingExecution = dict(
+        reviewRefresh=filingReviewRefresh,
+        execute=filingExecute,
+        snapshotRefresh=filingSnapshotRefresh,
+    )
+
     while True:
         refresh = planRefresh if snapshot.get("migrationPlan") else None
         quiet = _consoleQuiet(logger)
         try:
-            result = auditShow(snapshot, refresh)
+            result = auditShow(snapshot, refresh, filingExecution)
         finally:
             _consoleRestore(logger, quiet)
         if result != "runPlanning":
@@ -103,9 +132,9 @@ def _interactiveShow(
 
 
 def parserBuild() -> argparse.ArgumentParser:
-    """Define read-only audit and planning options."""
+    """Define audit, planning and explicitly invoked filing options."""
     parser = argparse.ArgumentParser(
-        description="Read-only mailbox audit and archive/migration planning"
+        description="Mailbox audit, planning and explicitly reviewed Inbox filing"
     )
     parser.add_argument(
         "--config", type=Path, default=Path.home() / ".config/mailAgent/config.toml"
@@ -120,7 +149,7 @@ def parserBuild() -> argparse.ArgumentParser:
         "--confirm",
         "-y",
         action="store_true",
-        help="persist audit and plan snapshot (never changes mail)",
+        help="persist audit and plan snapshot; mail changes still require TUI execution",
     )
     parser.add_argument(
         "--json",
@@ -135,7 +164,7 @@ def parserBuild() -> argparse.ArgumentParser:
     parser.add_argument(
         "--plan",
         action="store_true",
-        help="inspect Date headers and build archive/migration proposals; execution disabled",
+        help="inspect Date headers and build archive/migration proposals",
     )
     return parser
 
