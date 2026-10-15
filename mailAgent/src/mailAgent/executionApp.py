@@ -8,7 +8,7 @@ from pathlib import Path
 import tomllib
 from typing import Any
 
-from organiseMyProjects.logUtils import setApplication
+from organiseMyProjects.logUtils import getLogger, setApplication
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
@@ -31,6 +31,7 @@ def main() -> None:
     parser = parserBuild()
     args = parser.parse_args()
     setApplication("mailAgent")
+    logger = getLogger()
     path = args.config.expanduser().absolute()
     try:
         config = configValidate(tomllib.loads(path.read_text()), path.parent)
@@ -50,6 +51,7 @@ def main() -> None:
             config,
             thunderbird,
             clientFactory=imaplib.IMAP4_SSL,
+            logger=logger,
         )
 
     ExecutionApp(review, reviewRefresh, execute).run()
@@ -270,6 +272,7 @@ def executionRunOne(
     thunderbird: Path,
     *,
     clientFactory=imaplib.IMAP4_SSL,
+    logger=None,
 ) -> dict:
     """Execute one reviewed action after fresh revalidation on an owned connection."""
     fullId, approved = executionReviewSelect(review, actionId)
@@ -307,6 +310,7 @@ def executionRunOne(
             observe,
             fullId,
             confirm=True,
+            logger=logger,
         )
     finally:
         credentials.clear()
