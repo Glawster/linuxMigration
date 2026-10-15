@@ -83,6 +83,7 @@ def testTopologyStatusesUseLocalAndImapPresence() -> None:
                 "complete": True,
                 "folders": [
                     dict(path="Finance/Local", selectable=True, storage="/tmp/local"),
+                    dict(path="Finance/Imap", selectable=False, storage=None),
                     dict(path="Finance/Both", selectable=True, storage="/tmp/both"),
                 ],
             }
