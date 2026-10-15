@@ -81,6 +81,7 @@ def _interactiveShow(
     """Run the TUI with read-only audit views and explicit Moving Mail execution."""
     from mailAgent.executionApp import executionRunOne, filingPlanFresh
     from mailAgent.executionJournal import executionJournalLoad
+    from mailAgent.executionRetry import executionWithReconnect
     from mailAgent.executionReview import executionReviewBuild
     from mailAgent.interactiveAudit import auditShow
 
@@ -105,12 +106,15 @@ def _interactiveShow(
         )
 
     def filingExecute(actionId: str, review: dict) -> dict:
-        return executionRunOne(
-            actionId,
-            review,
-            config,
-            thunderbird,
-            logger=logger,
+        return executionWithReconnect(
+            lambda: executionRunOne(
+                actionId,
+                review,
+                config,
+                thunderbird,
+                logger=logger,
+            ),
+            logger,
         )
 
     def filingSnapshotRefresh() -> dict:
