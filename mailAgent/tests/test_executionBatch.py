@@ -14,6 +14,18 @@ def review(*actionIds):
     }
 
 
+class LogCapture:
+    def __init__(self):
+        self.infoMessages = []
+        self.errorMessages = []
+
+    def info(self, message):
+        self.infoMessages.append(message)
+
+    def error(self, message):
+        self.errorMessages.append(message)
+
+
 def testBulkExecutesCapturedActionsInOrderWithFreshReview():
     initial = review("a", "b")
     refreshed = [review("a", "b", "new"), review("b", "new")]
@@ -65,6 +77,51 @@ def testBulkReportsInitialAndCompletedProgress():
 
     assert result == {"state": "completed", "completed": 2, "requested": 2}
     assert updates == [(0, 2), (1, 2), (2, 2)]
+
+
+def testBulkLogsVerifiedSubjectAndHumanDestination():
+    candidate = {
+        "actionId": "a",
+        "batchId": "batch-a",
+        "subject": "Your Apple\nreceipt",
+        "canonical": "Software & Web/Apple",
+        "sender": "no_reply@email.apple.com",
+        "mailbox": "kathy",
+        "uid": "7475",
+    }
+    selected = {"candidates": [candidate]}
+    logger = LogCapture()
+
+    result = executionBatchRun(
+        selected,
+        lambda: selected,
+        lambda actionId, fresh: {"state": "completed"},
+        logger=logger,
+    )
+
+    assert result == {"state": "completed", "completed": 1, "requested": 1}
+    assert "Mail Your Apple receipt moved to Software & Web/Apple" in logger.infoMessages
+
+
+def testBulkDoesNotLogMoveWhenExecutionDoesNotComplete():
+    candidate = {
+        "actionId": "a",
+        "batchId": "batch-a",
+        "subject": "Statement",
+        "canonical": "Finance/Banking",
+    }
+    selected = {"candidates": [candidate]}
+    logger = LogCapture()
+
+    with pytest.raises(ValueError, match="did not complete"):
+        executionBatchRun(
+            selected,
+            lambda: selected,
+            lambda actionId, fresh: {"state": "blocked"},
+            logger=logger,
+        )
+
+    assert "Mail Statement moved to Finance/Banking" not in logger.infoMessages
 
 
 def testBulkStopsWhenReviewedActionDisappears():
