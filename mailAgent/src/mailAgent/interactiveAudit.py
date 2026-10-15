@@ -1,10 +1,11 @@
-"""Interactive audit wrapper that refreshes plans without dropping the TUI."""
+"""Interactive audit wrapper that refreshes plans and executes reviewed filing."""
 
 import asyncio
 from typing import Callable
 
 from rich.text import Text
-from textual.widgets import Button, DataTable, Input, Select, Static
+from textual.containers import Horizontal
+from textual.widgets import Button, DataTable, Input, ProgressBar, Select, Static
 
 import mailAgent.auditUi as auditUi
 from mailAgent.auditUi import (
@@ -16,33 +17,220 @@ from mailAgent.auditUi import (
     auditAppBuild as _auditAppBuild,
 )
 from mailAgent.digestInteraction import DigestPolicyTable
+from mailAgent.executionBatch import executionBatchRun
+from mailAgent.filingView import FilingView
 from mailAgent.planSummary import planSummaryLines
+from mailAgent.version import applicationVersion
 
 
 def auditAppBuild(
     snapshot: dict,
     planRefresh: Callable[[], dict] | None = None,
+    filingExecution: dict | None = None,
 ):
-    """Build the audit app and optionally add in-place plan refresh support."""
+    """Build the audit app with optional plan refresh and Moving Mail execution."""
     # Keep the presentation module UI-independent from this richer keyboard layer.
     # _interestPane resolves this class at composition time, so the interactive CLI
     # consistently gets the standardized digest controls whether or not a plan exists.
     auditUi._DigestPolicyTable = DigestPolicyTable
     baseApp = _auditAppBuild(snapshot)
-    if planRefresh is None:
+    baseApp.TITLE = f"Mailbox Audit · mailAgent {applicationVersion()}"
+    if planRefresh is None and filingExecution is None:
         return baseApp
 
     baseClass = type(baseApp)
 
     class InteractiveMailboxAudit(baseClass):
-        """Mailbox audit with an in-place refresh handler registered on the class."""
+        """Mailbox audit with refresh and explicitly invoked filing execution."""
+
+        TITLE = f"Mailbox Audit · mailAgent {applicationVersion()}"
+
+        async def on_mount(self) -> None:
+            if filingExecution is None:
+                return
+            pane = self.query_one("#inboxFiling")
+            refresh = Button("Refresh review", id="filing-execution-refresh")
+            selected = Button("Execute Selected", id="filing-execution-selected")
+            runAll = Button("Execute All", id="filing-execution-all")
+            for button in (refresh, selected, runAll):
+                button.styles.width = "1fr"
+            actions = Horizontal(
+                refresh,
+                selected,
+                runAll,
+                id="filing-execution-actions",
+            )
+            actions.styles.height = 3
+            actions.styles.padding = (1, 1)
+            progress = ProgressBar(
+                total=1,
+                show_eta=False,
+                id="filing-execution-progress",
+            )
+            progress.styles.height = 1
+            progress.styles.display = "none"
+            await pane.mount(actions)
+            await pane.mount(progress)
+            await pane.mount(Static("", id="filing-execution-status", markup=False))
+            self.query_one("#safety", Static).update(
+                "Audit views are read-only · Moving Mail can execute explicitly reviewed moves"
+            )
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
-            if event.button.id == "refresh-planning":
+            if event.button.id == "refresh-planning" and planRefresh is not None:
                 # Textual dispatches to base-class handlers unless prevented.
                 event.prevent_default()
                 _planRefreshStart(self, snapshot, planRefresh)
                 return
+            if filingExecution is None:
+                return
+            if event.button.id == "filing-execution-refresh":
+                event.prevent_default()
+                self._filingExecutionStart("refresh")
+                return
+            if event.button.id == "filing-execution-selected":
+                event.prevent_default()
+                self._filingExecutionStart("selected")
+                return
+            if event.button.id == "filing-execution-all":
+                event.prevent_default()
+                self._filingExecutionStart("all")
+                return
+
+        def _filingExecutionStart(self, mode: str) -> None:
+            for identity in (
+                "#filing-execution-refresh",
+                "#filing-execution-selected",
+                "#filing-execution-all",
+            ):
+                self.query_one(identity, Button).disabled = True
+            status = self.query_one("#filing-execution-status", Static)
+            message = {
+                "refresh": "Refreshing Moving Mail…",
+                "selected": "Preparing selected Moving Mail row(s)…",
+                "all": "Preparing all reviewed Moving Mail…",
+            }[mode]
+            status.update(message)
+            self.run_worker(
+                self._filingExecutionRun(mode),
+                group="moving-mail-execution",
+                exclusive=True,
+            )
+
+        async def _filingExecutionRun(self, mode: str) -> None:
+            status = self.query_one("#filing-execution-status", Static)
+            progress = self.query_one("#filing-execution-progress", ProgressBar)
+            logger = filingExecution.get("logger") if filingExecution else None
+            try:
+                if mode == "refresh":
+                    refreshedSnapshot = await asyncio.to_thread(
+                        filingExecution["snapshotRefresh"]
+                    )
+                    snapshot.clear()
+                    snapshot.update(refreshedSnapshot)
+                    self.query_one(FilingView).planShow()
+                    progress.styles.display = "none"
+                    status.update("Moving Mail refreshed.")
+                    if logger is not None:
+                        logger.info("Moving Mail review refreshed")
+                    return
+
+                review = await asyncio.to_thread(filingExecution["reviewRefresh"])
+                if mode == "selected":
+                    review = self._filingSelectedReview(review)
+                requested = len(review.get("candidates", []))
+                domains = {
+                    (
+                        str(candidate.get("mailbox") or ""),
+                        str(candidate.get("domain") or ""),
+                    )
+                    for candidate in review.get("candidates", [])
+                }
+                if requested == 0:
+                    progress.styles.display = "none"
+                    status.update("No executable reviewed mail matches this selection.")
+                    if logger is not None:
+                        logger.info("Moving Mail Execute Selected: no executable messages matched")
+                    return
+
+                label = "Selected" if mode == "selected" else "All"
+                domainText = "domain" if len(domains) == 1 else "domains"
+                status.update(
+                    f"Execute {label}: {requested} messages across "
+                    f"{len(domains)} {domainText}."
+                )
+                if logger is not None:
+                    logger.info(
+                        f"Moving Mail Execute {label}: {requested} messages across "
+                        f"{len(domains)} {domainText}"
+                    )
+                progress.styles.display = "block"
+                progress.update(total=requested, progress=0)
+
+                result = await asyncio.to_thread(
+                    executionBatchRun,
+                    review,
+                    filingExecution["reviewRefresh"],
+                    filingExecution["execute"],
+                    lambda completed, total: self.call_from_thread(
+                        self._filingProgressUpdate, completed, total
+                    ),
+                    logger,
+                )
+                refreshedSnapshot = await asyncio.to_thread(
+                    filingExecution["snapshotRefresh"]
+                )
+                snapshot.clear()
+                snapshot.update(refreshedSnapshot)
+                self.query_one(FilingView).planShow()
+                message = (
+                    f'Execute {label} finished: {result.get("completed", 0)}/'
+                    f'{result.get("requested", 0)} completed.'
+                )
+                status.update(message)
+                if logger is not None:
+                    logger.info("Moving Mail " + message)
+            except Exception as error:
+                message = "Moving Mail execution blocked or failed: " + str(error)
+                status.update(message)
+                if logger is not None:
+                    logger.error(message)
+            finally:
+                for identity in (
+                    "#filing-execution-refresh",
+                    "#filing-execution-selected",
+                    "#filing-execution-all",
+                ):
+                    self.query_one(identity, Button).disabled = False
+
+        def _filingSelectedReview(self, review: dict) -> dict:
+            """Restrict execution to messages represented by selected domain row(s)."""
+            view = self.query_one(FilingView)
+            rows = view.selectedRows()
+            if not rows:
+                selected = view._selectedRow()
+                rows = [selected] if selected else []
+            identities = {
+                (str(row.get("mailbox") or ""), str(row.get("domain") or ""))
+                for row in rows
+                if row
+            }
+            selectedReview = dict(review)
+            selectedReview["candidates"] = [
+                candidate
+                for candidate in review.get("candidates", [])
+                if (
+                    str(candidate.get("mailbox") or ""),
+                    str(candidate.get("domain") or ""),
+                )
+                in identities
+            ]
+            return selectedReview
+
+        def _filingProgressUpdate(self, completed: int, requested: int) -> None:
+            progress = self.query_one("#filing-execution-progress", ProgressBar)
+            progress.styles.display = "block"
+            progress.update(total=max(requested, 1), progress=completed)
 
     return InteractiveMailboxAudit()
 
@@ -50,9 +238,10 @@ def auditAppBuild(
 def auditShow(
     snapshot: dict,
     planRefresh: Callable[[], dict] | None = None,
+    filingExecution: dict | None = None,
 ) -> str | None:
-    """Display the audit TUI and keep it active while refreshing a stored plan."""
-    return auditAppBuild(snapshot, planRefresh).run()
+    """Display audit TUI with optional refresh and reviewed filing execution."""
+    return auditAppBuild(snapshot, planRefresh, filingExecution).run()
 
 
 def _planRefreshStart(

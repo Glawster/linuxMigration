@@ -1,6 +1,7 @@
 [general]
 credentialsSessionCache = true # reuse mailbox passwords until logout (Linux PAM/keyutils)
 liveYear = 2026
+imapRetentionMonths = 12 # rolling IMAP retention policy; MA-012 does not replace liveYear yet
 # Optional override; default is ~/.config/mailAgent/credentials.json.gpg
 # credentialsFile = "~/.config/mailAgent/credentials.json.gpg"
 

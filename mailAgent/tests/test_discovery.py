@@ -81,7 +81,12 @@ def testImapReadOnly(quota):
     assert result["folders"][0]["unseen"] == 2
     assert client.status.call_count == 1
     assert bool(result["quota"]) == quota
-    assert {call[0] for call in client.mock_calls} <= {"list", "status", "getquotaroot"}
+    assert {call[0] for call in client.mock_calls} <= {
+        "list",
+        "status",
+        "namespace",
+        "getquotaroot",
+    }
     if not quota:
         assert result["issues"] == ["Quota unsupported"]
 

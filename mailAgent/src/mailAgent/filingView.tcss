@@ -141,3 +141,9 @@ FilingEditor #filing-heading {
     margin: 0;
     padding: 0;
 }
+
+/* Keep row-level guidance compact. The top ACTION NEEDED banner owns the
+   warning background; an empty row-status line must not render as a brown bar. */
+FilingEditor #filing-row-status.warning {
+    background: transparent;
+}

@@ -37,6 +37,7 @@ def imapFileExecute(
     *,
     confirm: bool = False,
     path: Path | None = None,
+    logger=None,
 ) -> dict:
     """File exactly one action on an exclusively owned authenticated connection.
 
@@ -57,26 +58,31 @@ def imapFileExecute(
             raise ImapExecutionBlocked("environment-untrusted")
         fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         return _fileExecute(
-            client, approved, config, currentObserve, actionId, selected
+            client, approved, config, currentObserve, actionId, selected, logger
         )
     finally:
         os.close(descriptor)
 
 
-def imapFolderEnsure(client: Any, action: dict) -> None:
-    """Create only the exact approved path; existing selectable paths succeed."""
+def imapFolderEnsure(client: Any, action: dict, logger=None) -> bool:
+    """Create only the exact approved path; return whether it was created."""
     action = executionActionValidate(action)
     if action["disposition"] != "file" or action["destination"]["kind"] != "imap":
         raise ImapExecutionBlocked("unsupported")
     folder = action["destination"]["folder"]
     if _folderExists(client, folder):
-        return
+        return False
     if not action["folderCreationApproved"]:
         raise ImapExecutionBlocked("unapproved")
     # A failed CREATE may race another creator. Re-observe the exact path.
     client.create(_pathQuote(folder))
     if not _folderExists(client, folder):
         raise ImapExecutionBlocked("destination-changed")
+    if logger is not None:
+        logger.info(
+            f'Mailbox created: {action["source"]["mailbox"]} -> {folder}'
+        )
+    return True
 
 
 ## workflow
@@ -89,6 +95,7 @@ def _fileExecute(
     observe: Callable[[], dict],
     actionId: str,
     path: Path,
+    logger=None,
 ) -> dict:
     action, result = _actionSelect(approved, config, observe, actionId)
     executionJournalRegister([action], path)
@@ -99,7 +106,7 @@ def _fileExecute(
     try:
         source = _attemptPrepare(client, action, result, record, proof, path)
         if proof is None:
-            proof = _copyStart(client, action, source, path)
+            proof = _copyStart(client, action, source, path, logger)
         _destinationVerify(client, action, proof)
         proof = _sourceRemove(client, action, proof, path)
         if _sourceRead(client, action) is not None:
@@ -108,6 +115,14 @@ def _fileExecute(
         executionJournalFinish(
             actionId, "completed", verification="destination-verified", path=path
         )
+        if logger is not None:
+            sourceId = action["source"]
+            destination = action["destination"]
+            logger.info(
+                "Mail moved: "
+                f'{sourceId["mailbox"]}:{sourceId["folder"]} '
+                f'UID {sourceId["uid"]} -> {destination["folder"]}'
+            )
     except Exception as error:
         _failureRecord(actionId, error, path)
         raise
@@ -180,10 +195,14 @@ def _attemptPrepare(
 
 
 def _copyStart(
-    client: Any, action: dict, source: tuple[bytes, bytes], path: Path
+    client: Any,
+    action: dict,
+    source: tuple[bytes, bytes],
+    path: Path,
+    logger=None,
 ) -> dict:
     actionId = action["actionId"]
-    imapFolderEnsure(client, action)
+    imapFolderEnsure(client, action, logger=logger)
     _folderSelect(client, action["destination"]["folder"])
     proof = dict(
         digest=sha256(source[1]).hexdigest(),
@@ -258,63 +277,25 @@ def _sourceRemove(client: Any, action: dict, proof: dict, path: Path) -> dict:
 
 
 def _destinationVerify(client: Any, action: dict, proof: dict) -> None:
-    _folderSelect(client, action["destination"]["folder"])
+    folder = action["destination"]["folder"]
+    _folderSelect(client, folder)
     if _responseNumber(client, "UIDVALIDITY") != proof["uidValidity"]:
         raise ImapExecutionBlocked("destination-changed")
-    rows = _responseOk(client.uid("SEARCH", None, "UID", proof["uidNext"] + ":*"))
-    if len(rows) != 1 or not isinstance(rows[0], bytes):
-        raise ImapExecutionBlocked("verification-failed")
+    rows = _uidSearch(client, proof["uidNext"])
     matches = []
-    for raw in rows[0].split():
-        if not raw.isdigit():
-            raise ImapExecutionBlocked("verification-failed")
-        # IMAP reversed ranges can include the previous last UID in an empty range.
-        if int(raw) < int(proof["uidNext"]):
-            continue
-        message = _messageRead(client, raw.decode())
-        if message and sha256(message[1]).hexdigest() == proof["digest"]:
-            matches.append(raw)
+    for uid in rows:
+        fetched = _uidFetch(client, uid)
+        if fetched is not None and sha256(fetched[1]).hexdigest() == proof["digest"]:
+            matches.append(uid)
     if len(matches) != 1:
         raise ImapExecutionBlocked("verification-failed")
 
 
-def _folderExists(client: Any, folder: str) -> bool:
-    rows = _responseOk(client.list())
-    for row in rows or []:
-        if row is None:
-            continue
-        parsed = folderParse(row)
-        if parsed["path"] == folder:
-            if "\\noselect" in {flag.lower() for flag in parsed["attributes"]}:
-                raise ImapExecutionBlocked("destination-changed")
-            return True
-    return False
-
-
-def _messageRead(client: Any, uid: str) -> tuple[bytes, bytes] | None:
-    rows = _responseOk(client.uid("FETCH", uid, "(UID FLAGS BODY.PEEK[])"))
-    messages = [r for r in rows or [] if isinstance(r, tuple)]
-    if not messages:
-        return None
-    if (
-        len(messages) != 1
-        or len(messages[0]) != 2
-        or not all(isinstance(v, bytes) for v in messages[0])
-    ):
-        raise ImapExecutionBlocked("verification-failed")
-    parsed = messageParse(*messages[0], "INBOX", "1")
-    if parsed["uid"] != uid:
-        raise ImapExecutionBlocked("stale-source")
-    return messages[0]
-
-
-def _sourceRead(
-    client: Any, action: dict, writable: bool = False
-) -> tuple[bytes, bytes] | None:
-    _folderSelect(client, action["source"]["folder"], writable)
+def _sourceRead(client: Any, action: dict, writable: bool = False):
+    _folderSelect(client, action["source"]["folder"], readonly=not writable)
     if _responseNumber(client, "UIDVALIDITY") != action["source"]["uidValidity"]:
         raise ImapExecutionBlocked("stale-source")
-    return _messageRead(client, action["source"]["uid"])
+    return _uidFetch(client, action["source"]["uid"])
 
 
 def _sourceValidate(
@@ -326,30 +307,74 @@ def _sourceValidate(
     if (
         not parsed["seen"]
         or parsed["year"] != action["year"]
-        or (not allowDeleted and "\\deleted" in {f.lower() for f in parsed["flags"]})
+        or (not allowDeleted and "\\deleted" in {flag.lower() for flag in parsed["flags"]})
     ):
         raise ImapExecutionBlocked("stale-source")
 
 
-def _folderSelect(client: Any, folder: str, writable: bool = False) -> None:
-    _responseOk(client.select(_pathQuote(folder), readonly=not writable))
+def _folderExists(client: Any, folder: str) -> bool:
+    status, rows = client.list()
+    if status != "OK":
+        raise ImapExecutionBlocked("environment-untrusted")
+    matches = []
+    for row in rows or []:
+        parsed = folderParse(row)
+        if parsed and parsed["path"] == folder:
+            matches.append(parsed)
+    if len(matches) > 1:
+        raise ImapExecutionBlocked("destination-changed")
+    if not matches:
+        return False
+    if "\\noselect" in {flag.lower() for flag in matches[0].get("attributes", [])}:
+        raise ImapExecutionBlocked("destination-changed")
+    return True
+
+
+def _folderSelect(client: Any, folder: str, readonly: bool = True) -> None:
+    _responseOk(client.select(_pathQuote(folder), readonly=readonly))
+
+
+def _uidFetch(client: Any, uid: str):
+    status, rows = client.uid("FETCH", uid, "(UID FLAGS BODY.PEEK[])")
+    if status != "OK":
+        raise ImapExecutionBlocked("environment-untrusted")
+    if not rows or rows == [None]:
+        return None
+    body = None
+    flags = b""
+    for row in rows:
+        if isinstance(row, tuple) and len(row) == 2:
+            flags, body = row
+    if body is None:
+        return None
+    return flags, body
+
+
+def _uidSearch(client: Any, start: str) -> list[str]:
+    status, rows = client.uid("SEARCH", None, "UID", f"{start}:*")
+    if status != "OK" or len(rows or []) != 1 or not isinstance(rows[0], bytes):
+        raise ImapExecutionBlocked("environment-untrusted")
+    result = []
+    for value in rows[0].split():
+        if not value.isdigit():
+            raise ImapExecutionBlocked("verification-failed")
+        # A reversed empty UID range may include the previous last UID.
+        if int(value) >= int(start):
+            result.append(value.decode())
+    return result
 
 
 def _responseNumber(client: Any, name: str) -> str:
     _, rows = client.response(name)
-    if (
-        not rows
-        or len(rows) != 1
-        or not isinstance(rows[0], bytes)
-        or not rows[0].isdigit()
-        or not 0 < int(rows[0]) <= 4294967295
-    ):
+    if not rows or len(rows) != 1:
         raise ImapExecutionBlocked("environment-untrusted")
-    return str(int(rows[0]))
+    value = rows[0]
+    if not isinstance(value, bytes) or not value.isdigit():
+        raise ImapExecutionBlocked("environment-untrusted")
+    return str(int(value))
 
 
-def _responseOk(response: tuple) -> list:
-    status, rows = response
+def _responseOk(response) -> None:
+    status = response[0] if isinstance(response, tuple) else response
     if status != "OK":
-        raise ImapExecutionBlocked("verification-failed")
-    return rows
+        raise ImapExecutionBlocked("environment-untrusted")

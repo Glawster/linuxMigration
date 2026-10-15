@@ -21,6 +21,9 @@ def configValidate(config: dict, base: Path) -> dict:
     year = general.setdefault("liveYear", 2026)
     if type(year) is not int or not 1900 <= year <= 9999:
         raise ValueError("liveYear must be a year between 1900 and 9999")
+    retentionMonths = general.setdefault("imapRetentionMonths", 12)
+    if type(retentionMonths) is not int or not 1 <= retentionMonths <= 120:
+        raise ValueError("imapRetentionMonths must be between 1 and 120")
     if "credentialsFile" in general:
         value = general["credentialsFile"]
         if (
