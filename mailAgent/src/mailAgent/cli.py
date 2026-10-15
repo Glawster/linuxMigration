@@ -2,7 +2,6 @@
 
 import argparse
 from datetime import datetime, timezone
-from inspect import signature
 import json
 import logging
 from pathlib import Path
@@ -122,15 +121,18 @@ def _interactiveShow(
         reviewRefresh=filingReviewRefresh,
         execute=filingExecute,
         snapshotRefresh=filingSnapshotRefresh,
+        logger=logger,
     )
 
     while True:
         refresh = planRefresh if snapshot.get("migrationPlan") else None
         quiet = _consoleQuiet(logger)
         try:
-            if len(signature(auditShow).parameters) >= 3:
+            try:
                 result = auditShow(snapshot, refresh, filingExecution)
-            else:
+            except TypeError as error:
+                if "positional" not in str(error):
+                    raise
                 result = auditShow(snapshot, refresh)
         finally:
             _consoleRestore(logger, quiet)
