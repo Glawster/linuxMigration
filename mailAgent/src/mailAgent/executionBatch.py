@@ -57,6 +57,8 @@ def executionBatchRun(
             raise ValueError("Bulk execution stopped because an action did not complete")
 
         completed += 1
+        if logger is not None:
+            logger.info(_successLog(current))
         if progress is not None:
             progress(completed, requested)
 
@@ -66,7 +68,7 @@ def executionBatchRun(
 
 
 def _candidateLog(prefix: str, candidate: dict, index: int, requested: int) -> str:
-    """Return useful movement context without logging message bodies or subjects."""
+    """Return useful movement context for preparation and failure diagnostics."""
     sender = candidate.get("sender") or candidate.get("domain") or "unknown sender"
     mailbox = candidate.get("mailbox", "unknown mailbox")
     uid = candidate.get("uid", "?")
@@ -75,3 +77,20 @@ def _candidateLog(prefix: str, candidate: dict, index: int, requested: int) -> s
         f"{prefix} {index}/{requested}: mailbox={mailbox} source=INBOX UID={uid} "
         f"sender={sender} destination={destination}"
     )
+
+
+def _successLog(candidate: dict) -> str:
+    """Return a concise, human-readable message only after verified completion."""
+    subject = _logText(candidate.get("subject"), "(no subject)")
+    destination = _logText(
+        candidate.get("canonical") or candidate.get("destination"), "unknown destination"
+    )
+    return f"Mail {subject} moved to {destination}"
+
+
+def _logText(value, fallback: str) -> str:
+    """Collapse control whitespace so message metadata cannot create fake log lines."""
+    if value is None:
+        return fallback
+    text = " ".join(str(value).split())
+    return text or fallback
