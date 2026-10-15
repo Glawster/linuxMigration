@@ -38,6 +38,7 @@ def _filing() -> dict:
                     uid="10",
                     seen=True,
                     sender="shop@example.com",
+                    subject="Your Example receipt",
                     domain="example.com",
                 ),
                 disposition="file",
@@ -66,6 +67,7 @@ def testReviewShowsExecutableLiveFileAndExactCreation(tmp_path) -> None:
     assert len(review["candidates"]) == 1
     candidate = review["candidates"][0]
     assert candidate["sender"] == "shop@example.com"
+    assert candidate["subject"] == "Your Example receipt"
     assert candidate["canonical"] == "Shopping/Example"
     assert candidate["createFolder"] is True
     assert not review["blocked"]
