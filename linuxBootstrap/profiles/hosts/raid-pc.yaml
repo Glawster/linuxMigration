@@ -1,0 +1,15 @@
+hostname: raid-pc
+master: false
+
+# Phase 1: minimal headless storage server. Five 4 TB HDDs are attached to
+# motherboard SATA; the 500 GB SSD is reserved for the operating system.
+# Storage disks are intentionally not mapped here until their serial numbers
+# have been inventoried and reviewed.
+profiles:
+  - raid-server
+
+repositories:
+  - warp
+
+apt:
+  - warp-terminal
