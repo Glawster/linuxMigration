@@ -1,18 +1,19 @@
 """Server capability compatibility probes for explicit IMAP execution."""
 
+from collections.abc import Callable
+from typing import Any
+
 from mailAgent.imapExecution import ImapExecutionBlocked, imapFileExecute as _imapFileExecute
 
 _MAX_UID = "4294967295"
 
 
-def imapFileExecute(client, approved, config, currentObserve, actionId, **kwargs):
-    """Run the existing executor after safely verifying exact UID EXPUNGE support.
+def exactExpungeRun(client: Any, operation: Callable[[], dict]) -> dict:
+    """Run an operation only when exact UID EXPUNGE support is verified.
 
-    Some servers accept UID EXPUNGE but fail to advertise UIDPLUS. The core
-    executor deliberately requires UIDPLUS because it must never use global
-    EXPUNGE. For such servers, probe the exact command against the maximum UID
-    while INBOX is read-only; only then expose UIDPLUS to the unchanged core
-    executor for this connection.
+    Some servers accept UID EXPUNGE but fail to advertise UIDPLUS. Probe the
+    exact command against the maximum impossible current UID while INBOX is
+    read-only, then expose UIDPLUS only for the duration of the operation.
     """
     capabilities = tuple(client.capabilities)
     advertised = {
@@ -20,9 +21,7 @@ def imapFileExecute(client, approved, config, currentObserve, actionId, **kwargs
         for value in capabilities
     }
     if "UIDPLUS" in advertised:
-        return _imapFileExecute(
-            client, approved, config, currentObserve, actionId, **kwargs
-        )
+        return operation()
 
     status, _ = client.select('"INBOX"', readonly=True)
     if status != "OK":
@@ -45,8 +44,16 @@ def imapFileExecute(client, approved, config, currentObserve, actionId, **kwargs
 
     client.capabilities = capabilities + (b"UIDPLUS",)
     try:
-        return _imapFileExecute(
-            client, approved, config, currentObserve, actionId, **kwargs
-        )
+        return operation()
     finally:
         client.capabilities = capabilities
+
+
+def imapFileExecute(client, approved, config, currentObserve, actionId, **kwargs):
+    """Run the existing executor with verified exact UID EXPUNGE compatibility."""
+    return exactExpungeRun(
+        client,
+        lambda: _imapFileExecute(
+            client, approved, config, currentObserve, actionId, **kwargs
+        ),
+    )

@@ -9,8 +9,12 @@ from mailAgent.executionPlan import (
 )
 
 
-def executionReviewBuild(filingPlan: dict, config: dict) -> dict:
-    """Return currently executable live-year IMAP File actions for TUI review."""
+def executionReviewBuild(
+    filingPlan: dict,
+    config: dict,
+    journalEntries: list[dict] | None = None,
+) -> dict:
+    """Return executable live-year IMAP File actions plus verified completed moves."""
     current = executionPlanPrepare(filingPlan, config)
     approved = deepcopy(current)
     approved["executionEnabled"] = True
@@ -37,7 +41,14 @@ def executionReviewBuild(filingPlan: dict, config: dict) -> dict:
         )
         approved["entries"].append(selected)
 
-    result = executionPlanBuild(approved, config, current)
+    completedIds = {
+        entry["action"]["actionId"]
+        for entry in journalEntries or []
+        if entry.get("state") == "completed"
+        and isinstance(entry.get("action"), dict)
+        and isinstance(entry["action"].get("actionId"), str)
+    }
+    result = executionPlanBuild(approved, config, current, completedIds)
     evidence = _filingEvidence(filingPlan)
     candidates = []
     for action in result["actions"]:
@@ -47,6 +58,7 @@ def executionReviewBuild(filingPlan: dict, config: dict) -> dict:
         candidates.append(
             dict(
                 actionId=action["actionId"],
+                batchId=_batchIdentity(action),
                 mailbox=source["mailbox"],
                 uid=source["uid"],
                 year=action["year"],
@@ -55,13 +67,16 @@ def executionReviewBuild(filingPlan: dict, config: dict) -> dict:
                 canonical=action["canonical"],
                 destination=action["destination"]["folder"],
                 createFolder=bool(action.get("requiresFolderCreation")),
+                status="Ready",
             )
         )
+    moved = _movedRows(journalEntries or [], current["configFingerprint"], liveYear)
     return dict(
         schemaVersion=1,
         current=current,
         approved=approved,
         candidates=candidates,
+        moved=moved,
         blocked=result["blocked"],
     )
 
@@ -86,6 +101,56 @@ def executionReviewSelect(review: dict, identity: str) -> tuple[str, dict]:
     if len(approved["entries"]) != 1:
         raise ValueError("Execution approval could not be selected")
     return actionId, approved
+
+
+def _batchIdentity(action: dict) -> str:
+    """Return a stable reviewed intent while destination existence changes safely."""
+    stable = dict(action)
+    stable["folderCreationApproved"] = False
+    return executionActionId(stable)
+
+
+def _movedRows(entries: list[dict], fingerprint: str, liveYear: int) -> list[dict]:
+    """Present only journal-verified live IMAP moves as Moved."""
+    moved = []
+    for entry in entries:
+        action = entry.get("action")
+        destination = action.get("destination") if isinstance(action, dict) else None
+        if (
+            entry.get("state") != "completed"
+            or entry.get("verification") != "destination-verified"
+            or not isinstance(action, dict)
+            or action.get("configFingerprint") != fingerprint
+            or action.get("disposition") != "file"
+            or action.get("year") != liveYear
+            or not isinstance(destination, dict)
+            or destination.get("kind") != "imap"
+        ):
+            continue
+        source = action.get("source", {})
+        moved.append(
+            dict(
+                actionId=action["actionId"],
+                batchId=_batchIdentity(action),
+                mailbox=source.get("mailbox", ""),
+                uid=source.get("uid", ""),
+                year=action["year"],
+                sender="",
+                domain="",
+                canonical=action["canonical"],
+                destination=destination["folder"],
+                createFolder=False,
+                status="Moved",
+            )
+        )
+    return sorted(
+        moved,
+        key=lambda row: (
+            str(row["mailbox"]).casefold(),
+            str(row["canonical"]).casefold(),
+            str(row["actionId"]),
+        ),
+    )
 
 
 def _filingEvidence(filingPlan: dict) -> dict:

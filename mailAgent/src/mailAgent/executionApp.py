@@ -1,4 +1,4 @@
-"""Explicit TUI for executing one reviewed live-year filing action at a time."""
+"""Explicit TUI for executing reviewed mail filing actions."""
 
 import argparse
 import asyncio
@@ -8,15 +8,17 @@ from pathlib import Path
 import tomllib
 from typing import Any
 
-from organiseMyProjects.logUtils import setApplication
+from organiseMyProjects.logUtils import getLogger, setApplication
 from rich.text import Text
 from textual.app import App, ComposeResult
-from textual.widgets import Button, DataTable, Footer, Header, Static
+from textual.containers import Horizontal
+from textual.widgets import Button, DataTable, Footer, Header, ProgressBar, Static
 
 from mailAgent.archiveDiscovery import archiveDiscover
 from mailAgent.configuration import configValidate
 from mailAgent.credentials import credentialGet, credentialsLoad
 from mailAgent.discovery import discoveryRun
+from mailAgent.executionBatch import executionBatchRun
 from mailAgent.executionPlan import executionPlanPrepare
 from mailAgent.executionReview import executionReviewBuild, executionReviewSelect
 from mailAgent.filing import filingContextBuild, filingPlanBuild, filingRulesLoad
@@ -29,6 +31,7 @@ def main() -> None:
     parser = parserBuild()
     args = parser.parse_args()
     setApplication("mailAgent")
+    logger = getLogger()
     path = args.config.expanduser().absolute()
     try:
         config = configValidate(tomllib.loads(path.read_text()), path.parent)
@@ -48,6 +51,7 @@ def main() -> None:
             config,
             thunderbird,
             clientFactory=imaplib.IMAP4_SSL,
+            logger=logger,
         )
 
     ExecutionApp(review, reviewRefresh, execute).run()
@@ -56,7 +60,7 @@ def main() -> None:
 def parserBuild() -> argparse.ArgumentParser:
     """Define the separate mutation-capable TUI arguments."""
     parser = argparse.ArgumentParser(
-        description="Review and explicitly execute one safe mail filing action"
+        description="Review and explicitly execute safe mail filing actions"
     )
     parser.add_argument(
         "--config", type=Path, default=Path.home() / ".config/mailAgent/config.toml"
@@ -68,7 +72,7 @@ def parserBuild() -> argparse.ArgumentParser:
 
 
 class ExecutionApp(App):
-    """Review one live-year filing action and execute only the selected row."""
+    """Review filing actions and execute one row or the captured reviewed set."""
 
     TITLE = f"mailAgent Execute · {applicationVersion()}"
     BINDINGS = [("q", "quit", "Quit")]
@@ -83,8 +87,8 @@ class ExecutionApp(App):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(
-            "EXECUTION MODE · selected mail can be moved. Only one reviewed live-year "
-            "File action is executed at a time.",
+            "EXECUTION MODE · reviewed mail can be moved. Execute one selected action "
+            "or the complete currently reviewed set.",
             id="execution-safety",
             markup=False,
         )
@@ -95,23 +99,42 @@ class ExecutionApp(App):
         for row in self.tableRows():
             table.add_row(*(Text(value) for value in row))
         yield table
-        yield Button("Refresh review", id="execution-refresh")
-        yield Button(
-            "Execute selected mail change",
+
+        refresh = Button("Refresh review", id="execution-refresh")
+        run = Button(
+            "Execute Selected",
             id="execution-run",
-            variant="error",
             disabled=not bool(self.review.get("candidates")),
         )
+        runAll = Button(
+            "Execute All",
+            id="execution-run-all",
+            disabled=not bool(self.review.get("candidates")),
+        )
+        # Button height, colours and adjacent gaps come from OMPR myStyles.css.
+        for button in (refresh, run, runAll):
+            button.styles.width = "1fr"
+
+        actions = Horizontal(refresh, run, runAll, id="execution-actions")
+        actions.styles.height = 3
+        actions.styles.padding = (1, 1)
+        yield actions
+
+        progress = ProgressBar(total=1, show_eta=False, id="execution-progress")
+        progress.styles.height = 1
+        progress.styles.display = "none"
+        yield progress
         yield Static("", id="execution-status", markup=False)
         yield Footer()
 
     def summaryText(self) -> str:
-        """Explain exactly what this first execution increment can change."""
+        """Explain exactly what the current execution review can change."""
         count = len(self.review.get("candidates", []))
         blocked = len(self.review.get("blocked", []))
         return (
             f"{count} executable live-year File actions · {blocked} blocked. "
-            "Older/local archive filing, Ignore and Junk execution are not enabled here."
+            "Bulk execution processes only the currently reviewed rows, one at a time, "
+            "with fresh revalidation before every action."
         )
 
     def tableRows(self) -> list[tuple[str, ...]]:
@@ -129,12 +152,30 @@ class ExecutionApp(App):
         ]
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Refresh safely or explicitly execute the currently selected action."""
+        """Refresh safely or explicitly execute selected/reviewed actions."""
         if event.button.id == "execution-refresh":
+            self.progressHide()
             self.workerStart("Refreshing execution review…", self.reviewRefresh, False)
+            return
+        if event.button.id == "execution-run-all":
+            selectedReview = self.review
+            self.progressStart(len(selectedReview.get("candidates", [])))
+            self.workerStart(
+                "Executing reviewed mail changes one at a time…",
+                lambda: executionBatchRun(
+                    selectedReview,
+                    self.reviewRefresh,
+                    self.execute,
+                    progress=lambda completed, requested: self.call_from_thread(
+                        self.progressUpdate, completed, requested
+                    ),
+                ),
+                True,
+            )
             return
         if event.button.id != "execution-run":
             return
+        self.progressHide()
         table = self.query_one("#execution-table", DataTable)
         row = table.cursor_row
         candidates = self.review.get("candidates", [])
@@ -154,6 +195,7 @@ class ExecutionApp(App):
     def workerStart(self, message: str, operation, executed: bool) -> None:
         """Run blocking IMAP work away from the Textual event loop."""
         self.query_one("#execution-run", Button).disabled = True
+        self.query_one("#execution-run-all", Button).disabled = True
         self.query_one("#execution-refresh", Button).disabled = True
         self.query_one("#execution-status", Static).update(message)
         self.run_worker(
@@ -171,17 +213,47 @@ class ExecutionApp(App):
             self.review = refreshed
             self.reviewShow()
             if executed:
-                state = result.get("state", "unknown") if isinstance(result, dict) else "unknown"
-                status.update(f"Execution finished: {state}. Review refreshed.")
+                if isinstance(result, dict) and "requested" in result:
+                    status.update(
+                        f"Bulk execution finished: {result.get('completed', 0)}/"
+                        f"{result.get('requested', 0)} completed. Review refreshed."
+                    )
+                else:
+                    state = (
+                        result.get("state", "unknown")
+                        if isinstance(result, dict)
+                        else "unknown"
+                    )
+                    status.update(f"Execution finished: {state}. Review refreshed.")
             else:
                 status.update("Execution review refreshed.")
         except Exception as error:
             status.update(f"Execution blocked or failed: {error}")
         finally:
-            self.query_one("#execution-refresh", Button).disabled = False
-            self.query_one("#execution-run", Button).disabled = not bool(
-                self.review.get("candidates")
-            )
+            self.buttonStateSync()
+
+    def buttonStateSync(self) -> None:
+        """Synchronise controls with the current review after every operation."""
+        hasCandidates = bool(self.review.get("candidates"))
+        self.query_one("#execution-refresh", Button).disabled = False
+        self.query_one("#execution-run", Button).disabled = not hasCandidates
+        self.query_one("#execution-run-all", Button).disabled = not hasCandidates
+
+    def progressStart(self, requested: int) -> None:
+        """Show a determinate bulk progress bar from zero."""
+        progress = self.query_one("#execution-progress", ProgressBar)
+        progress.styles.display = "block"
+        progress.update(total=max(requested, 1), progress=0)
+
+    def progressUpdate(self, completed: int, requested: int) -> None:
+        """Update bulk progress on the Textual event-loop thread."""
+        progress = self.query_one("#execution-progress", ProgressBar)
+        progress.styles.display = "block"
+        progress.update(total=max(requested, 1), progress=completed)
+
+    def progressHide(self) -> None:
+        """Hide stale bulk progress for non-bulk operations."""
+        self.query_one("#execution-progress", ProgressBar).styles.display = "none"
 
     def reviewShow(self) -> None:
         """Replace the review rows without leaving execution mode."""
@@ -190,6 +262,7 @@ class ExecutionApp(App):
         for row in self.tableRows():
             table.add_row(*(Text(value) for value in row))
         self.query_one("#execution-summary", Static).update(self.summaryText())
+        self.buttonStateSync()
 
 
 def executionRunOne(
@@ -199,6 +272,7 @@ def executionRunOne(
     thunderbird: Path,
     *,
     clientFactory=imaplib.IMAP4_SSL,
+    logger=None,
 ) -> dict:
     """Execute one reviewed action after fresh revalidation on an owned connection."""
     fullId, approved = executionReviewSelect(review, actionId)
@@ -222,6 +296,7 @@ def executionRunOne(
                 account["host"], account.get("port", 993), timeout=30
             )
             client.login(account["username"], password)
+            _capabilitiesRefresh(client)
         finally:
             del password
 
@@ -236,6 +311,7 @@ def executionRunOne(
             observe,
             fullId,
             confirm=True,
+            logger=logger,
         )
     finally:
         credentials.clear()
@@ -244,6 +320,23 @@ def executionRunOne(
                 client.logout()
             except Exception:
                 pass
+
+
+def _capabilitiesRefresh(client: Any) -> tuple:
+    """Refresh capabilities after login because servers may advertise more then."""
+    status, rows = client.capability()
+    if status != "OK" or not rows:
+        raise ValueError("IMAP post-login capabilities are unavailable")
+    capabilities = []
+    for row in rows:
+        if isinstance(row, bytes):
+            capabilities.extend(row.split())
+        elif isinstance(row, str):
+            capabilities.extend(row.split())
+    if not capabilities:
+        raise ValueError("IMAP post-login capabilities are unavailable")
+    client.capabilities = tuple(dict.fromkeys(capabilities))
+    return client.capabilities
 
 
 def filingPlanFresh(config: dict, thunderbird: Path) -> dict:
