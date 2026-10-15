@@ -105,11 +105,12 @@ def auditAppBuild(
             ):
                 self.query_one(identity, Button).disabled = True
             status = self.query_one("#filing-execution-status", Static)
-            status.update(
-                "Refreshing Moving Mail…"
-                if mode == "refresh"
-                else "Executing reviewed mail changes one at a time…"
-            )
+            message = {
+                "refresh": "Refreshing Moving Mail…",
+                "selected": "Preparing selected Moving Mail row(s)…",
+                "all": "Preparing all reviewed Moving Mail…",
+            }[mode]
+            status.update(message)
             self.run_worker(
                 self._filingExecutionRun(mode),
                 group="moving-mail-execution",
@@ -119,6 +120,7 @@ def auditAppBuild(
         async def _filingExecutionRun(self, mode: str) -> None:
             status = self.query_one("#filing-execution-status", Static)
             progress = self.query_one("#filing-execution-progress", ProgressBar)
+            logger = filingExecution.get("logger") if filingExecution else None
             try:
                 if mode == "refresh":
                     refreshedSnapshot = await asyncio.to_thread(
@@ -135,10 +137,31 @@ def auditAppBuild(
                 if mode == "selected":
                     review = self._filingSelectedReview(review)
                 requested = len(review.get("candidates", []))
+                domains = {
+                    (
+                        str(candidate.get("mailbox") or ""),
+                        str(candidate.get("domain") or ""),
+                    )
+                    for candidate in review.get("candidates", [])
+                }
                 if requested == 0:
                     progress.styles.display = "none"
                     status.update("No executable reviewed mail matches this selection.")
+                    if logger is not None:
+                        logger.info("Moving Mail Execute Selected: no executable messages matched")
                     return
+
+                label = "Selected" if mode == "selected" else "All"
+                domainText = "domain" if len(domains) == 1 else "domains"
+                status.update(
+                    f"Execute {label}: {requested} messages across "
+                    f"{len(domains)} {domainText}."
+                )
+                if logger is not None:
+                    logger.info(
+                        f"Moving Mail Execute {label}: {requested} messages across "
+                        f"{len(domains)} {domainText}"
+                    )
                 progress.styles.display = "block"
                 progress.update(total=requested, progress=0)
 
@@ -150,6 +173,7 @@ def auditAppBuild(
                     lambda completed, total: self.call_from_thread(
                         self._filingProgressUpdate, completed, total
                     ),
+                    logger,
                 )
                 refreshedSnapshot = await asyncio.to_thread(
                     filingExecution["snapshotRefresh"]
@@ -158,7 +182,7 @@ def auditAppBuild(
                 snapshot.update(refreshedSnapshot)
                 self.query_one(FilingView).planShow()
                 status.update(
-                    f'Moving Mail execution finished: {result.get("completed", 0)}/'
+                    f'Execute {label} finished: {result.get("completed", 0)}/'
                     f'{result.get("requested", 0)} completed.'
                 )
             except Exception as error:
@@ -172,6 +196,7 @@ def auditAppBuild(
                     self.query_one(identity, Button).disabled = False
 
         def _filingSelectedReview(self, review: dict) -> dict:
+            """Restrict execution to messages represented by selected domain row(s)."""
             view = self.query_one(FilingView)
             rows = view.selectedRows()
             if not rows:
