@@ -293,6 +293,8 @@ def _destinationVerify(client: Any, action: dict, proof: dict) -> None:
 
 def _sourceRead(client: Any, action: dict, writable: bool = False):
     _folderSelect(client, action["source"]["folder"], readonly=not writable)
+    if _responseNumber(client, "UIDVALIDITY") != action["source"]["uidValidity"]:
+        raise ImapExecutionBlocked("stale-source")
     return _uidFetch(client, action["source"]["uid"])
 
 
@@ -349,10 +351,17 @@ def _uidFetch(client: Any, uid: str):
 
 
 def _uidSearch(client: Any, start: str) -> list[str]:
-    status, rows = client.uid("SEARCH", None, f"UID {start}:*")
-    if status != "OK" or len(rows or []) != 1:
+    status, rows = client.uid("SEARCH", None, "UID", f"{start}:*")
+    if status != "OK" or len(rows or []) != 1 or not isinstance(rows[0], bytes):
         raise ImapExecutionBlocked("environment-untrusted")
-    return [value.decode() for value in rows[0].split()]
+    result = []
+    for value in rows[0].split():
+        if not value.isdigit():
+            raise ImapExecutionBlocked("verification-failed")
+        # A reversed empty UID range may include the previous last UID.
+        if int(value) >= int(start):
+            result.append(value.decode())
+    return result
 
 
 def _responseNumber(client: Any, name: str) -> str:
