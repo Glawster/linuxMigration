@@ -79,10 +79,13 @@ def _interactiveShow(
 ) -> dict:
     """Run the TUI with read-only audit views and explicit Moving Mail execution."""
     from mailAgent.executionApp import executionRunOne, filingPlanFresh
+    from mailAgent.executionJournal import executionJournalLoad
     from mailAgent.executionReview import executionReviewBuild
     from mailAgent.interactiveAudit import auditShow
 
-    thunderbird = _thunderbirdRoot(args.thunderbird)
+    thunderbird = _thunderbirdRoot(
+        getattr(args, "thunderbird", Path.home() / ".thunderbird")
+    )
 
     def planRefresh() -> dict:
         planningArgs = argparse.Namespace(**vars(args))
@@ -92,7 +95,11 @@ def _interactiveShow(
         return _snapshotBuild(planningArgs, config, logger)
 
     def filingReviewRefresh() -> dict:
-        return executionReviewBuild(filingPlanFresh(config, thunderbird), config)
+        return executionReviewBuild(
+            filingPlanFresh(config, thunderbird),
+            config,
+            executionJournalLoad(),
+        )
 
     def filingExecute(actionId: str, review: dict) -> dict:
         return executionRunOne(
