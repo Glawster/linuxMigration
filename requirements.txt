@@ -1,0 +1,3 @@
+# OMP-MANAGED-BEGIN
+# Production dependencies belong to the project. OMP does not add any.
+# OMP-MANAGED-END
