@@ -1,6 +1,11 @@
 # Roadmap
 
-## Foundation
+linuxMigration sequencing and priorities. Current increment status is kept in
+[currentIncrement.md](currentIncrement.md).
+
+## linuxBootstrap
+
+### Foundation
 
 - [x] Profile composition and host inheritance
 - [x] YAML-driven Apt, Flatpak, and Snap package installer abstraction
@@ -10,7 +15,7 @@
 - [x] Validate all supported profile keys and reject misspellings
 - [ ] Deduplicate merged lists before module execution
 
-## Package and development tooling
+### Package and development tooling
 
 - [x] Flatpak backend and Flathub remote management
 - [ ] Snap, Homebrew, Pip, Cargo, and npm backends
@@ -19,7 +24,7 @@
 - [ ] VS Code extension management
 - [ ] Miniconda, Docker, and Podman modules
 
-## Desktop and specialist roles
+### Desktop and specialist roles
 
 - [ ] GNOME settings, fonts, wallpapers, and mount points
 - [ ] Gaming launchers, ProtonUp-Qt, and controller configuration
@@ -28,15 +33,15 @@
 - [ ] Samba configuration
 - [x] NFS exports and persistent NFSv4 mounts
 
-## Storage migration
+### Storage migration
 
-- [x] `migrateToRaid`: copy, verify and record andy-pc storage on raid-pc ([LB-001](requirements/features/LB-001-raidMigration.md))
+- [x] `migrateToRaid`: copy, verify and record andy-pc storage on raid-pc ([001](requirements/features/001-raidMigration.md))
 - [ ] Confirm the raid-pc storage layout and enable mappings
 - [ ] Configure the raid-pc parity protection check once SnapRAID parity is synced
 - [ ] Add `raid-pc` to the managed SSH host configuration
 - [ ] Declare `rsync` and `jq` in the andy-pc and raid-server profiles
 
-## Operations
+### Operations
 
 - [x] Subcommand CLI with install, update, status, and profile operations
 - [x] Managed, unmanaged, and system package update reporting

@@ -1,8 +1,8 @@
-# ADR-001 Safety model for migrating storage to raid-pc
+# 001: Safety model for migrating storage to raid-pc
 
 - Status: Accepted
 - Date: 2026-10-18
-- Requirement: [LB-001](../requirements/features/LB-001-raidMigration.md)
+- Requirement: [001 raid-pc storage migration](../requirements/features/001-raidMigration.md)
 
 ## Context
 

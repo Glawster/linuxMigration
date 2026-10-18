@@ -13,8 +13,8 @@ COPY  ->  VERIFY  ->  RECORD  ->  (separately, on request)  REMOVE SOURCE
 Source data is never deleted by a migration run. Deletion is a separate
 command that refuses to run unless the disk has been proven safe to remove.
 
-Requirement: [LB-001](../../project/requirements/features/LB-001-raidMigration.md).
-Safety decisions: [ADR-001](../../project/adr/ADR-001-raidMigrationSafety.md).
+Requirement: [001 raid-pc storage migration](../../project/requirements/features/001-raidMigration.md).
+Safety decisions: [ADR 001](../../project/adr/001-raidMigrationSafety.md).
 
 ## Contents
 
@@ -40,7 +40,7 @@ Mappings live in a JSON file, separate from the code:
 ```
 
 Start from the reviewed template in this repository,
-[`configs/migrateToRaid/config.json`](../../configs/migrateToRaid/config.json).
+[`configs/migrateToRaid/config.json`](../configs/migrateToRaid/config.json).
 `--config FILE` uses another file.
 
 | Key | Meaning |

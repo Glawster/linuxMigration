@@ -6,13 +6,29 @@ and launchers are on `PATH`.
 
 ## Documentation
 
-- [Repository layout](.github/repositoryLayout.md)
-- [Development guidelines](.github/agent-instructions.md)
-- [Repository-specific instructions](.github/additional-instructions.md)
 - [linuxBootstrap: machine configuration](linuxBootstrap/README.md)
-  - [Migrating andy-pc storage to raid-pc (migrateToRaid)](linuxBootstrap/documentation/raidMigration/migrateToRaid.md)
+  - [Migrating andy-pc storage to raid-pc (migrateToRaid)](linuxBootstrap/documentation/migrateToRaid.md)
   - [raid-pc storage server](linuxBootstrap/documentation/raidPc.md)
 - [runpodTools: RunPod bootstrap](runpodTools/README.md)
+- [Repository-specific instructions](.github/additional-instructions.md)
+- [Development guidelines](.github/agent-instructions.md)
+
+Shared OMP guides:
+
+- [Repository layout](documentation/repositoryLayout.md)
+- [Requirements management](documentation/requirementsManagement.md)
+- [Agent implementation workflow](documentation/agentImplementationWorkflow.md)
+- [Testing process](documentation/testingProcess.md)
+- [Release process](documentation/howToRelease.md)
+- [OMP linter](documentation/linter.md)
+- [Shared TUI styling](documentation/tuiStyling.md)
+
+Project records:
+
+- [Current increment](project/currentIncrement.md)
+- [Roadmap](project/roadmap.md)
+- [Requirements](project/requirements/requirementsIndex.md)
+- [Architecture decisions](project/adr/adrIndex.md)
 
 ## Subprojects
 
@@ -27,7 +43,7 @@ and launchers are on `PATH`.
 
 | Command | Purpose |
 | --- | --- |
-| `migrateToRaid` | Copy, verify and record migration of andy-pc disks to raid-pc ([guide](linuxBootstrap/documentation/raidMigration/migrateToRaid.md)) |
+| `migrateToRaid` | Copy, verify and record migration of andy-pc disks to raid-pc ([guide](linuxBootstrap/documentation/migrateToRaid.md)) |
 | `linuxBootstrap/bootstrap.sh` | Preview or apply a machine profile |
 | `omv` | Launch organiseMyVideo |
 

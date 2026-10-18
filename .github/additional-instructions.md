@@ -2,7 +2,7 @@
 
 ## Project-Specific Information
 
-This file contains project-specific details for the **linuxMigration** repository. For the universal development rules, see `agent-instructions.md`; for directory placement, see `repositoryLayout.md`.
+This file contains project-specific details for the **linuxMigration** repository. For the universal development rules, see `agent-instructions.md`; for directory placement, see `documentation/repositoryLayout.md`.
 
 ## Project Overview
 
@@ -28,19 +28,23 @@ This file contains project-specific details for the **linuxMigration** repositor
 ```
 linuxMigration/
 ├── .github/
-│   ├── agent-instructions.md             # Universal guidelines (synced from Glawster/organiseMyProjects)
-│   ├── repositoryLayout.md               # Shared layout rules (synced)
+│   ├── agent-instructions.md             # Universal guidelines (deployed by OMP)
 │   └── additional-instructions.md        # Project-specific (this file)
 ├── README.md                             # Repository entry point and documentation index
+├── documentation/                        # Repository-wide guides (OMP-managed: repositoryLayout.md, requirementsManagement.md, ...)
+├── project/                              # Project records for the whole repository
+│   ├── currentIncrement.md               # Transient status of the active increment
+│   ├── roadmap.md                        # Sequencing and priorities
+│   ├── requirements/                     # requirementsIndex.md, features/nnn-name.md, prompt/nnn-name.md
+│   └── adr/                              # adrIndex.md, nnn-decisionName.md
 ├── linuxBootstrap/                       # Profile-driven Linux machine configuration (subproject)
 │   ├── bootstrap.sh                      # Bootstrap CLI (install, update, status, profile, capture)
-│   ├── migrateToRaid.sh                  # andy-pc → raid-pc storage migration (LB-001)
+│   ├── migrateToRaid.sh                  # andy-pc → raid-pc storage migration (requirement 001)
 │   ├── pullRemote.sh, pullTvPcVideos.sh  # Remote rsync pulls
 │   ├── lib/                              # Modules and standalone-script libraries
 │   ├── profiles/                         # Role and host profiles (YAML)
 │   ├── configs/                          # Managed files and templates (incl. migrateToRaid/config.json)
-│   ├── documentation/                    # Living guides
-│   ├── project/                          # Requirements (LB-ddd), ADRs, roadmap
+│   ├── documentation/                    # linuxBootstrap guides (incl. migrateToRaid.md)
 │   └── tests/                            # Bash test suite (runTests.sh)
 ├── recoveryTools/                        # Photo/video recovery pipeline (subproject)
 │   ├── recoveryPipeline.py               # Main recovery orchestration
@@ -176,14 +180,16 @@ This repository contains four major subprojects, each with its own focus and too
   standalone tools `migrateToRaid.sh`, `pullRemote.sh`, `pullTvPcVideos.sh`.
 - Standalone tools source `organiseMyProjects` `logUtils.sh`; tests substitute
   it via `LOG_UTILS`.
-- Project records live in `linuxBootstrap/project/` (nearest owning boundary):
-  requirements use the `LB` prefix, decisions are `ADR-ddd`, and the roadmap is
-  `project/roadmap.md`.
+- linuxMigration is one OMP-managed project rooted at the repository root.
+  Requirements, ADRs, the roadmap and `currentIncrement.md` for every subproject,
+  linuxBootstrap included, live in the root `project/` folder
+  (`project/requirements/features/nnn-name.md`, `project/adr/nnn-name.md`). Do
+  not create `project/` folders inside subprojects.
 - Tests: `./tests/runTests.sh` (all) or `./tests/migrateToRaidTests.sh` (storage
   migration only). Tests use command doubles and temporary directories and must
   never touch real mounts, raid-pc or user data.
 - `migrateToRaid` safety rules are recorded in
-  `linuxBootstrap/project/adr/ADR-001-raidMigrationSafety.md`; changes must keep
+  `project/adr/001-raidMigrationSafety.md`; changes must keep
   copy → verify → record → explicit removal, and must never weaken the
   SAFE TO REMOVE checks.
 
