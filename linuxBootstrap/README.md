@@ -12,13 +12,21 @@ Debian where their documented package/configuration contract supports it.
 - [Network naming and static addresses](documentation/networking.md)
 - [NFS exports and mounts](documentation/nfs.md)
 - [raid-pc storage server](documentation/raidPc.md)
-- [Migrating andy-pc storage to raid-pc (migrateToRaid)](documentation/raidMigration.md)
+- [Migrating andy-pc storage to raid-pc (migrateToRaid)](documentation/raidMigration/migrateToRaid.md)
+- [Media library workflow](documentation/mediaLibraryWorkflow.md)
 - [Offline bootable bootstrap USB](documentation/offlineBootstrapUsb.md)
 - [User configuration and VS Code extensions](documentation/userConfiguration.md)
 - [DCS World standalone on Linux](documentation/dcsWorld.md)
 - [World of Warcraft through Battle.net](documentation/worldOfWarcraft.md)
 - [Media Center Master through Wine](documentation/mediaCenterMaster.md)
 - [DaVinci Resolve host-specific setup](documentation/davinciResolve.md)
+- [Design](documentation/design.md)
+
+Project records:
+
+- [Roadmap](project/roadmap.md)
+- [Requirements](project/requirements/README.md)
+- [Architecture decisions](project/adr/README.md)
 
 ## Command line
 

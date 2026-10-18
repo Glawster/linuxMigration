@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Migrate andy-pc storage to raid-pc: copy, verify, record, and remove source
 # data only when explicitly requested and proven safe. See
-# documentation/raidMigration.md.
+# documentation/raidMigration/migrateToRaid.md.
 
 set -euo pipefail
 

@@ -28,6 +28,14 @@
 - [ ] Samba configuration
 - [x] NFS exports and persistent NFSv4 mounts
 
+## Storage migration
+
+- [x] `migrateToRaid`: copy, verify and record andy-pc storage on raid-pc ([LB-001](requirements/features/LB-001-raidMigration.md))
+- [ ] Confirm the raid-pc storage layout and enable mappings
+- [ ] Configure the raid-pc parity protection check once SnapRAID parity is synced
+- [ ] Add `raid-pc` to the managed SSH host configuration
+- [ ] Declare `rsync` and `jq` in the andy-pc and raid-server profiles
+
 ## Operations
 
 - [x] Subcommand CLI with install, update, status, and profile operations

@@ -161,7 +161,7 @@ must be performed by complete media folders, not by splitting one title across
 multiple stores.
 
 Copying, verification and source removal are performed by `migrateToRaid`; see
-the [migration guide](raidMigration.md).
+the [migration guide](raidMigration/migrateToRaid.md).
 
 ## Maintenance
 
