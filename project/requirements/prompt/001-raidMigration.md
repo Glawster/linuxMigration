@@ -35,7 +35,7 @@ Satisfy every acceptance criterion in the requirement.
 - Tests: `linuxBootstrap/tests/migrateToRaidTests.sh`, registered in
   `linuxBootstrap/tests/runTests.sh`.
 - Documentation: `linuxBootstrap/documentation/migrateToRaid.md`, linked from
-  the READMEs.
+  the root `README.md` and `linuxBootstrap/linuxBootstrapIndex.md`.
 
 ## Verification
 

@@ -177,6 +177,6 @@ conda activate runpod
 bash /workspace/runpodTools/runpodBootstrap.sh --help
 
 # Read documentation
-cat bin/runpod/README.md
+cat runpodTools/runpodToolsIndex.md
 cat kohyaTools/MIGRATION.md
 ```

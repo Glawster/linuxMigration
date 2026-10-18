@@ -38,6 +38,7 @@ linuxMigration/
 │   ├── requirements/                     # requirementsIndex.md, features/nnn-name.md, prompt/nnn-name.md
 │   └── adr/                              # adrIndex.md, nnn-decisionName.md
 ├── linuxBootstrap/                       # Profile-driven Linux machine configuration (subproject)
+│   ├── linuxBootstrapIndex.md            # linuxBootstrap guide and documentation index
 │   ├── bootstrap.sh                      # Bootstrap CLI (install, update, status, profile, capture)
 │   ├── migrateToRaid.sh                  # andy-pc → raid-pc storage migration (requirement 001)
 │   ├── pullRemote.sh, pullTvPcVideos.sh  # Remote rsync pulls
@@ -92,7 +93,7 @@ linuxMigration/
 │   │   └── 60_upload_models.sh           # Model uploads
 │   ├── test/                             # Test suite
 │   ├── documentation/                    # RunPod docs
-│   └── README.md                         # Full documentation
+│   └── runpodToolsIndex.md               # Full documentation
 ├── sidecarEditor/                        # EXIF metadata editor
 ├── organiseHome.sh                       # Main home directory migration
 ├── organiseOfficeFiles.sh                # Office document organization
@@ -531,7 +532,7 @@ runpodTools/
 │   ├── 50_kohya.sh         # Kohya SS setup
 │   └── 60_upload_models.sh # Model upload instructions
 ├── runpodBootstrap.sh      # Remote-side step runner
-└── README.md               # Comprehensive documentation
+└── runpodToolsIndex.md     # Comprehensive documentation
 ```
 
 #### Usage Examples
@@ -970,7 +971,7 @@ def process_in_batches(files, batch_size=100):
 - Use `run` wrapper for dry-run support
 - Log with `log()`, `warn()`, `error()` functions
 - Test with `--dry-run` before production
-- Document new steps in README.md
+- Document new steps in runpodToolsIndex.md
 
 ## Resources
 

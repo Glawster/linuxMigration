@@ -41,7 +41,7 @@ runpodTools/
 ├── runpodFromSSH.sh        (202 lines - orchestrator)
 ├── comfyStart.sh         (44 lines)
 ├── generateUploadScript.sh (153 lines)
-├── README.md               (5,225 chars)
+├── runpodToolsIndex.md     (5,225 chars)
 ├── SUMMARY.md              (6,012 chars)
 └── logs/                   (auto-created)
 ```
