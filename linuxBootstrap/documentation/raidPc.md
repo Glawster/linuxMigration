@@ -160,6 +160,9 @@ catalogue and organisation workflows can span local and remote media. Migration
 must be performed by complete media folders, not by splitting one title across
 multiple stores.
 
+Copying, verification and source removal are performed by `migrateToRaid`; see
+the [migration guide](raidMigration.md).
+
 ## Maintenance
 
 The eventual server configuration should provide systemd-managed maintenance

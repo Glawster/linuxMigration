@@ -12,6 +12,7 @@ Debian where their documented package/configuration contract supports it.
 - [Network naming and static addresses](documentation/networking.md)
 - [NFS exports and mounts](documentation/nfs.md)
 - [raid-pc storage server](documentation/raidPc.md)
+- [Migrating andy-pc storage to raid-pc (migrateToRaid)](documentation/raidMigration.md)
 - [Offline bootable bootstrap USB](documentation/offlineBootstrapUsb.md)
 - [User configuration and VS Code extensions](documentation/userConfiguration.md)
 - [DCS World standalone on Linux](documentation/dcsWorld.md)
