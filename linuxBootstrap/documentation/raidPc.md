@@ -71,8 +71,26 @@ The design target is mergerFS for a single data namespace with SnapRAID for
 snapshot parity. This suits predominantly static media and allows disks to be
 added progressively without rebuilding a conventional striped RAID array.
 
-The initial five 4 TB HDDs are expected to become four data disks plus one
-parity disk, subject to review during provisioning:
+The five 4 TB HDDs become four data disks plus one parity disk. All five
+passed extended SMART self-tests before assignment:
+
+| Role | Disk | Notes |
+| --- | --- | --- |
+| `parity01` | Seagate IronWolf `ST4000VN006` | CMR, young; preferred for parity because SnapRAID sync rewrites parity across the whole disk |
+| `data01`–`data04` | three WD Red `WD40EFAX` and one Seagate BarraCuda `ST4000DM004` | SMR; mostly static media, written once, read often |
+
+Roles are assigned by serial number, never by `/dev/sdX`. Confirm them on
+raid-pc with `lsblk -o NAME,MODEL,SERIAL,SIZE` before provisioning:
+
+| Role | Model | Serial | Recording |
+| --- | --- | --- | --- |
+| `parity01` | `ST4000VN006-3CW104` | `WW662Z03` | CMR |
+| `data01` | `WD40EFAX-68JH4N0` | `WD-WX22D10FNUEA` | SMR |
+| `data02` | `WD40EFAX-68JH4N0` | `WD-WX62D105VVJ9` | SMR |
+| `data03` | `WD40EFAX-68JH4N0` | `WD-WX22D10FNVCU` | SMR |
+| `data04` | `ST4000DM004-2CV104` | `ZFN4TS8H` | SMR |
+
+The layout:
 
 ```text
 /mnt/disks/data01
@@ -88,8 +106,9 @@ This yields approximately 16 TB of raw data-disk capacity plus one 4 TB parity
 disk before filesystem overhead. SnapRAID parity is snapshot parity and must
 not be represented as real-time RAID protection.
 
-The exact serial-to-role mapping must not be committed until the physical disks
-have been inventoried on `raid-pc`.
+Provisioning (partitioning, filesystems, mergerFS and SnapRAID configuration)
+is a separate, explicitly confirmed workflow. `migrateToRaid` does not
+provision any disk.
 
 ## Network service
 
@@ -112,29 +131,31 @@ The router should reserve a stable DHCP address for `raid-pc`. The bootstrap
 should validate that expected address rather than forcing a local static address,
 matching the existing network-management model.
 
-The initial storage namespace will expose a dedicated media path, expected to be:
+The storage pool is exported whole:
 
 ```text
-raid-pc:/mnt/storage/video
+raid-pc:/mnt/storage
 ```
 
-On Linux media clients this should be mounted at a stable path such as:
+On andy-pc it is mounted at:
 
 ```text
-/mnt/raidVideo
+/mnt/raid
 ```
 
-The first consumers are expected to be:
+so the pool's `Movies` and `TV` folders are `/mnt/raid/Movies` and
+`/mnt/raid/TV`. The first consumers are expected to be:
 
-- organiseMyVideo (OMV), which should treat `/mnt/raidVideo` as another managed
-  media location rather than as a special network-only case;
-- Media Center Master (MCM), which should receive a Wine drive mapping for the
-  same Linux mount (provisionally `R:` -> `/mnt/raidVideo`).
+- organiseMyVideo (OMV), which should treat `/mnt/raid/Movies` and
+  `/mnt/raid/TV` as other managed media locations rather than as a special
+  network-only case;
+- Media Center Master (MCM), whose Wine drives `R:` and `T:` map to
+  `/mnt/raid/Movies` and `/mnt/raid/TV` (see [Media drives](mediaCenterMaster.md#media-drives)).
 
-The NFS export should initially be restricted to the known media hosts. Client
-mounts should use the existing linux-bootstrap NFS mechanism and systemd
-automount behavior. The exact export addresses are deferred until `raid-pc` has
-its router reservation.
+The export is declared in `profiles/hosts/raid-pc.yaml` for the local network
+(`192.168.1.0/24`) with an explicit `fsid`, which a FUSE filesystem such as
+mergerFS needs. The andy-pc mount is declared in `profiles/hosts/andy-pc.yaml`
+and uses the linux-bootstrap NFS mechanism with systemd automount.
 
 ### Initial migration strategy
 
@@ -159,6 +180,15 @@ OMV and MCM must be able to see both locations at the same time so existing
 catalogue and organisation workflows can span local and remote media. Migration
 must be performed by complete media folders, not by splitting one title across
 multiple stores.
+
+raid-pc is the bulk destination for Movies, TV and archive media. Personal
+Pictures and personal/home Video do not move to raid-pc: they stay on andy-pc
+on the internal `/mnt/media` disk.
+
+Copying, verification and source removal to both are performed by
+`migrateToRaid`, run on andy-pc; see the [migration guide](migrateToRaid.md).
+A disk attached directly to raid-pc, such as the old 2 TB video1 disk on USB at
+`/mnt/oldVideo1`, is copied into the pool by hand with rsync on raid-pc.
 
 ## Maintenance
 

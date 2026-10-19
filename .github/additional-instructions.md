@@ -1,8 +1,8 @@
-# Additional Copilot Instructions for linuxMigration
+# Additional Instructions for linuxMigration
 
 ## Project-Specific Information
 
-This file contains project-specific details for the **linuxMigration** repository. For generic Bash scripting and Python development guidelines, see `copilot-instructions.md`.
+This file contains project-specific details for the **linuxMigration** repository. For the universal development rules, see `agent-instructions.md`; for directory placement, see `documentation/repositoryLayout.md`.
 
 ## Project Overview
 
@@ -28,8 +28,25 @@ This file contains project-specific details for the **linuxMigration** repositor
 ```
 linuxMigration/
 ├── .github/
-│   ├── copilot-instructions.md           # Generic guidelines (synced from Glawster/organiseMyProjects)
-│   └── additional-copilot-instructions.md # Project-specific (this file)
+│   ├── agent-instructions.md             # Universal guidelines (deployed by OMP)
+│   └── additional-instructions.md        # Project-specific (this file)
+├── README.md                             # Repository entry point and documentation index
+├── documentation/                        # Repository-wide guides (OMP-managed: repositoryLayout.md, requirementsManagement.md, ...)
+├── project/                              # Project records for the whole repository
+│   ├── currentIncrement.md               # Transient status of the active increment
+│   ├── roadmap.md                        # Sequencing and priorities
+│   ├── requirements/                     # requirementsIndex.md, features/nnn-name.md, prompt/nnn-name.md
+│   └── adr/                              # adrIndex.md, nnn-decisionName.md
+├── linuxBootstrap/                       # Profile-driven Linux machine configuration (subproject)
+│   ├── linuxBootstrapIndex.md            # linuxBootstrap guide and documentation index
+│   ├── bootstrap.sh                      # Bootstrap CLI (install, update, status, profile, capture)
+│   ├── migrateToRaid.sh                  # andy-pc → raid-pc storage migration (requirement 001)
+│   ├── pullRemote.sh, pullTvPcVideos.sh  # Remote rsync pulls
+│   ├── lib/                              # Modules and standalone-script libraries
+│   ├── profiles/                         # Role and host profiles (YAML)
+│   ├── configs/                          # Managed files and templates (incl. migrateToRaid/config.json)
+│   ├── documentation/                    # linuxBootstrap guides (incl. migrateToRaid.md)
+│   └── tests/                            # Bash test suite (runTests.sh)
 ├── recoveryTools/                        # Photo/video recovery pipeline (subproject)
 │   ├── recoveryPipeline.py               # Main recovery orchestration
 │   ├── dedupeImages.py                   # Perceptual hash image deduplication
@@ -76,7 +93,7 @@ linuxMigration/
 │   │   └── 60_upload_models.sh           # Model uploads
 │   ├── test/                             # Test suite
 │   ├── documentation/                    # RunPod docs
-│   └── README.md                         # Full documentation
+│   └── runpodToolsIndex.md               # Full documentation
 ├── sidecarEditor/                        # EXIF metadata editor
 ├── organiseHome.sh                       # Main home directory migration
 ├── organiseOfficeFiles.sh                # Office document organization
@@ -84,6 +101,7 @@ linuxMigration/
 ├── pdfFiler.sh                           # PDF organization
 ├── installLinuxApps.sh                   # Application installer
 ├── setupBattlenetPrefix.sh               # Gaming setup
+├── migrateToRaid                         # Launcher for linuxBootstrap/migrateToRaid.sh
 └── [other scripts]                       # Various utilities
 ```
 
@@ -93,7 +111,7 @@ linuxMigration/
 
 Primary script for organizing home directory structure.
 
-> **Note:** For generic Bash scripting safety patterns and common functions, see [Bash Scripting](../copilot-instructions.md#bash-scripting) in the generic guidelines.
+> **Note:** For generic Bash scripting safety patterns and common functions, see [Bash Scripting](agent-instructions.md#bash-scripting) in the generic guidelines.
 
 **Key Features:**
 - Creates standard directory structure
@@ -131,7 +149,7 @@ bash organiseHome.sh --source /old/home --target /new/home
 
 **Project-Specific Bash Patterns:**
 
-The scripts in this repository follow the generic bash patterns documented in [Bash Scripting](../copilot-instructions.md#bash-scripting). Examples specific to organiseHome.sh:
+The scripts in this repository follow the generic bash patterns documented in [Bash Scripting](agent-instructions.md#bash-scripting). Examples specific to organiseHome.sh:
 ```bash
 echo "=== Starting Home Directory Organization ==="
 echo "source: $sourceDir"
@@ -149,15 +167,36 @@ echo "=== Organization Complete ==="
 
 ## Subprojects
 
-This repository contains three major subprojects, each with its own focus and tooling:
+This repository contains four major subprojects, each with its own focus and tooling:
 
 1. **recoveryTools**: Photo/video recovery pipeline for PhotoRec output
 2. **kohyaTools**: Image processing and AI model training workflows
 3. **runpodTools**: Cloud computing environment bootstrap for RunPod
+4. **linuxBootstrap**: Profile-driven configuration of the Linux machines and
+   storage migration to raid-pc
+
+### linuxBootstrap - Machine Configuration and Storage Migration
+
+- Entry points: `bootstrap.sh` (preview by default, `--confirm` to apply) and
+  standalone tools `migrateToRaid.sh`, `pullRemote.sh`, `pullTvPcVideos.sh`.
+- Standalone tools source `organiseMyProjects` `logUtils.sh`; tests substitute
+  it via `LOG_UTILS`.
+- linuxMigration is one OMP-managed project rooted at the repository root.
+  Requirements, ADRs, the roadmap and `currentIncrement.md` for every subproject,
+  linuxBootstrap included, live in the root `project/` folder
+  (`project/requirements/features/nnn-name.md`, `project/adr/nnn-name.md`). Do
+  not create `project/` folders inside subprojects.
+- Tests: `./tests/runTests.sh` (all) or `./tests/migrateToRaidTests.sh` (storage
+  migration only). Tests use command doubles and temporary directories and must
+  never touch real mounts, raid-pc or user data.
+- `migrateToRaid` safety rules are recorded in
+  `project/adr/001-raidMigrationSafety.md`; changes must keep
+  copy → verify → record → explicit removal, and must never weaken the
+  SAFE TO REMOVE checks.
 
 ### recoveryTools - Photo/Video Recovery Pipeline
 
-> **Note:** For generic recovery pipeline patterns, see [Recovery Pipeline Pattern](../copilot-instructions.md#recovery-pipeline-pattern) in the generic guidelines.
+> **Note:** For generic recovery pipeline patterns, see [Recovery Pipeline Pattern](agent-instructions.md#recovery-pipeline-pattern) in the generic guidelines.
 
 All recoveryTools follow the standard in-place processing pattern: work in directory, move filtered items to subdirectories.
 
@@ -493,7 +532,7 @@ runpodTools/
 │   ├── 50_kohya.sh         # Kohya SS setup
 │   └── 60_upload_models.sh # Model upload instructions
 ├── runpodBootstrap.sh      # Remote-side step runner
-└── README.md               # Comprehensive documentation
+└── runpodToolsIndex.md     # Comprehensive documentation
 ```
 
 #### Usage Examples
@@ -826,7 +865,7 @@ set -euo pipefail
 
 ## Safety Guidelines
 
-> **Note:** For generic safety patterns, see [Bash Scripting](../copilot-instructions.md#bash-scripting) and [Security Considerations](../copilot-instructions.md#security-considerations) in the generic guidelines.
+> **Note:** For generic safety patterns, see [Bash Scripting](agent-instructions.md#bash-scripting) and [Security Considerations](agent-instructions.md#security-considerations) in the generic guidelines.
 
 ### Project-Specific Safety Considerations
 
@@ -932,7 +971,7 @@ def process_in_batches(files, batch_size=100):
 - Use `run` wrapper for dry-run support
 - Log with `log()`, `warn()`, `error()` functions
 - Test with `--dry-run` before production
-- Document new steps in README.md
+- Document new steps in runpodToolsIndex.md
 
 ## Resources
 

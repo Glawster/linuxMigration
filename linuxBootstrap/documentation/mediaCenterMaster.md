@@ -43,14 +43,10 @@ Bootstrap creates that launcher under `~/bin`. The repository's legacy
 
 | Wine drive | Linux path |
 | --- | --- |
-| `H:` | `/mnt/home` |
-| `M:` | `/mnt/movie1` |
-| `N:` | `/mnt/movie2` |
-| `P:` | `/mnt/myPictures` |
-| `V:` | `/mnt/myVideo` |
-| `W:` | `/mnt/video1` |
-| `X:` | `/mnt/video2` |
-| `Y:` | `/mnt/video3` |
+| `M:` | `/mnt/movies` |
+| `V:` | `/mnt/video` |
+| `R:` | `/mnt/raid/Movies` |
+| `T:` | `/mnt/raid/TV` |
 
 Edit `profiles/media.yaml` if the mount layout or preferred Windows letters
 changes. A mapping uses the format `letter|/absolute/Linux/path`.

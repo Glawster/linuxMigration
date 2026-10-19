@@ -642,5 +642,9 @@ testPullTvPcVideosAllCopiesCompleteFiles
 testPullRemoteRequiresExtOrAll
 testPullTvPcVideosConfirmRemovesSource
 
+# shellcheck source=/dev/null
+source "$projectDir/tests/migrateToRaidTests.sh"
+migrateToRaidTestsRun
+
 printf '\n%d passed, %d failed\n' "$passed" "$failed"
 ((failed == 0))

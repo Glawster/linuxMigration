@@ -171,4 +171,4 @@ bash /workspace/runpodTools/steps/40_comfyui.sh
 
 ## Need Help?
 
-See `bin/runpod/README.md` for full documentation.
+See `runpodTools/runpodToolsIndex.md` for full documentation.

@@ -24,7 +24,10 @@ services:
   - nfs-kernel-server
 
 nfsExports:
-  - /mnt/video2 192.168.1.201(rw,sync,no_subtree_check)
+  - /mnt/video 192.168.1.201(rw,sync,no_subtree_check)
+
+nfsMounts:
+  - raid-pc:/mnt/storage /mnt/raid rw,_netdev,nofail,x-systemd.automount
 
 managedFiles:
   - ssh/media-hosts.conf|.ssh/config.d/media-hosts.conf

@@ -155,7 +155,7 @@ tmux kill-session -t llava_adapter
 
 ---
 
-# LLaVA Installation Smoke Test
+## LLaVA Installation Smoke Test
 
 This document describes the **end‑to‑end smoke test** used to validate a LLaVA deployment (controller, worker, and adapter) on **RunPod** as well as from a **local machine** via the RunPod proxy.
 
@@ -169,9 +169,9 @@ It is intentionally **non‑destructive**: it only performs read‑only HTTP req
 
 ---
 
-## What the test validates
+### What the test validates
 
-### On the pod
+#### On the pod
 
 When the script detects `/workspace`, it assumes it is running **inside the pod** and checks:
 
@@ -196,7 +196,7 @@ When the script detects `/workspace`, it assumes it is running **inside the pod*
 
    * `POST /analyze` using multipart image upload
 
-### On a local machine
+#### On a local machine
 
 When `/workspace` is not present, the script assumes **local execution** and:
 
@@ -205,7 +205,7 @@ When `/workspace` is not present, the script assumes **local execution** and:
 
 ---
 
-## Image handling
+### Image handling
 
 * On the pod:
 
@@ -216,21 +216,21 @@ When `/workspace` is not present, the script assumes **local execution** and:
 
 ---
 
-## Usage
+### Usage
 
-### Pod (automatic image selection)
+#### Pod (automatic image selection)
 
 ```
 ./testLlavaInstall.sh
 ```
 
-### Pod (explicit image)
+#### Pod (explicit image)
 
 ```
 ./testLlavaInstall.sh --img /workspace/bp-13.png
 ```
 
-### Local machine (build adapter URL from PODID)
+#### Local machine (build adapter URL from PODID)
 
 ```
 ./testLlavaInstall.sh \
@@ -238,7 +238,7 @@ When `/workspace` is not present, the script assumes **local execution** and:
   --img /home/andy/.../bp-13.png
 ```
 
-### Local machine (explicit adapter URL)
+#### Local machine (explicit adapter URL)
 
 ```
 ./testLlavaInstall.sh \
@@ -248,7 +248,7 @@ When `/workspace` is not present, the script assumes **local execution** and:
 
 ---
 
-## Command‑line options
+### Command‑line options
 
 ```
 --img PATH                 Image file to test
@@ -267,7 +267,7 @@ When `/workspace` is not present, the script assumes **local execution** and:
 
 ---
 
-## Expected success output
+### Expected success output
 
 A successful run will end with:
 
@@ -279,7 +279,7 @@ Each section prints its raw or `jq`‑formatted JSON output so failures can be d
 
 ---
 
-## Common failure hints
+### Common failure hints
 
 * **Models list is empty**
 
@@ -297,7 +297,7 @@ Each section prints its raw or `jq`‑formatted JSON output so failures can be d
 
 ---
 
-## Design notes
+### Design notes
 
 * The adapter is intentionally tested **without Gradio** to avoid version skew between:
 
@@ -313,7 +313,7 @@ If this smoke test passes, the LLaVA stack is considered **operational** and rea
 
 ---
 
-## LLaVA Installation Smoke Test
+### LLaVA Installation Smoke Test
 
 Before debugging higher-level tools (e.g. `promptFromPhoto.py`, adapters, or batch pipelines), always verify the **core LLaVA stack** is healthy.
 
@@ -323,7 +323,7 @@ Use the smoke test script:
 testLlavaInstall.sh
 ```
 
-### When to run this
+#### When to run this
 
 Run this test:
 
@@ -332,7 +332,7 @@ Run this test:
 * After changing **model paths**, **conda envs**, or **dependencies**
 * Before investigating adapter- or client-side errors
 
-### What it checks
+#### What it checks
 
 Depending on where it is run, the script automatically performs:
 
@@ -355,12 +355,12 @@ Depending on where it is run, the script automatically performs:
 
 * Adapter API via RunPod proxy
 
-### Image handling
+#### Image handling
 
 * On the pod, if `--img` is not supplied, the script automatically selects the **first `*.png`** in `/workspace`.
 * On local, `--img` is required.
 
-### Typical usage
+#### Typical usage
 
 **Pod (automatic image):**
 
@@ -380,7 +380,7 @@ Depending on where it is run, the script automatically performs:
 ./testLlavaInstall.sh --podid <PODID> --img /path/to/image.png
 ```
 
-### Expected result
+#### Expected result
 
 A healthy system ends with:
 

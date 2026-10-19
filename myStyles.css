@@ -1,0 +1,278 @@
+/* deployed from Glawster/organiseMyProjects release 0.9 -- do not edit directly */
+/* Shared OMP application theme.
+   Canonical visual palette for Glawster applications.
+   Toolkit-specific consumers should use these semantic colour roles rather
+   than defining their own application palette. Clann Eolas intentionally
+   retains its own stylesheet.
+
+   Shared palette
+   --------------
+   canvas:            #f7f7f5  overall application background
+   surface:           #101f2e  primary panels, cards and containers
+   surfaceRaised:     #243545  nested panels, list items and validation rows
+   accentStrong:      #239b78  active tabs, headings and strong emphasis
+   accent:            #31b98f  primary actions and highlights
+   accentHover:       #56d6b0  hover/focus state; deliberately lighter
+   onAccent:          #061510  text/icons displayed on accent colours
+   textPrimary:       #f5f8fb  primary text on dark surfaces
+   textSecondary:     #d9e5ef  secondary text on dark surfaces
+   textMuted:         #8fa3b8  muted text on dark surfaces
+   canvasText:        #101f2e  primary text on the light canvas
+   border:            #263b4e  normal dark-surface border
+   borderStrong:      #30465a  emphasized dark-surface border
+   successSurface:    #163b38
+   successText:       #75e0bf
+   successBorder:     #28675e
+   warningSurface:    #40351c
+   warningText:       #f0c76a
+   warningBorder:     #735f2d
+   errorSurface:      #442329
+   errorText:         #ff9da7
+   errorBorder:       #7b3943
+*/
+
+/* Light application canvas. */
+Screen {
+    background: #f7f7f5;
+    color: #101f2e;
+}
+
+Header,
+Footer {
+    background: #f7f7f5;
+    color: #101f2e;
+}
+
+/* Quit and Palette use the same ink as the canvas headings. */
+FooterKey,
+FooterKey .footer-key--key,
+FooterKey .footer-key--description {
+    color: #101f2e;
+    background: transparent;
+}
+
+FooterKey:hover {
+    color: #101f2e;
+    background: #f7f7f5;
+}
+
+TabbedContent,
+Tabs,
+TabPane {
+    background: #f7f7f5;
+    color: #101f2e;
+}
+
+Tab {
+    background: #f7f7f5;
+    color: #60788e;
+}
+
+Tab:hover {
+    color: #14b8a6;
+}
+
+Tab.-active {
+    color: #239b78;
+    text-style: bold;
+}
+
+TabPane {
+    padding: 1;
+}
+
+/* Ordinary content follows the light canvas unless explicitly placed on a
+   shared dark surface. */
+Static,
+Label {
+    background: transparent;
+    color: #101f2e;
+}
+
+/* Semantic reusable surfaces. */
+.surface {
+    background: #101f2e;
+    color: #f5f8fb;
+    border: solid #263b4e;
+}
+
+.surface-raised {
+    background: #243545;
+    color: #f5f8fb;
+    border: solid #30465a;
+}
+
+.surface Label,
+.surface Static,
+.surface-raised Label,
+.surface-raised Static {
+    color: #d9e5ef;
+}
+
+.muted {
+    color: #8fa3b8;
+}
+
+/* Scroll areas stay clear of the canvas. DataTable is itself a
+   ScrollableContainer, so its dark surface has to follow this rule or the
+   transparent background wins and the light table text disappears. */
+VerticalScroll,
+HorizontalScroll,
+ScrollableContainer {
+    background: transparent;
+}
+
+/* Tables and entry controls are dark working surfaces on the light canvas. */
+DataTable {
+    background: #101f2e;
+    color: #f5f8fb;
+    border: solid #30465a;
+}
+
+DataTable > .datatable--header {
+    background: #101f2e;
+    color: #d9e5ef;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: #163b38;
+    color: #75e0bf;
+}
+
+DataTable > .datatable--hover {
+    background: #243545;
+    color: #f5f8fb;
+}
+
+DataTable:focus {
+    border: solid #14b8a6;
+}
+
+Input,
+TextArea,
+Select {
+    height: 3;
+    background: #101f2e;
+    color: #f5f8fb;
+    border: solid #30465a;
+    content-align: left middle;
+}
+
+Input:focus,
+TextArea:focus,
+Select:focus {
+    border: solid #14b8a6;
+}
+
+/* The current value and arrow are Static children. The canvas Static colour
+   would hide them on this dark surface. */
+SelectCurrent {
+    background: #101f2e;
+    color: #f5f8fb;
+    /* The Select border is the outline. The inner border would draw a second box. */
+    border: none;
+}
+
+SelectCurrent #label {
+    color: #8fa3b8;
+    background: transparent;
+}
+
+SelectCurrent.-has-value #label {
+    color: #f5f8fb;
+}
+
+SelectCurrent .arrow {
+    color: #8fa3b8;
+    background: transparent;
+}
+
+/* Primary actions use the darker accent; hover/focus deliberately moves to
+   the lighter accent colour. */
+Button {
+    height: 1;
+    min-height: 1;
+    padding: 0 1;
+    background: #31b98f;
+    color: #061510;
+    border: none;
+    text-style: bold;
+    content-align: center middle;
+}
+
+Button:hover,
+Button:focus {
+    background: #56d6b0;
+    color: #061510;
+    border: none;
+}
+
+Button.-primary {
+    background: #31b98f;
+    color: #061510;
+}
+
+.heading {
+    text-style: bold;
+}
+
+Button.-success,
+.success {
+    background: #163b38;
+    color: #75e0bf;
+    border: solid #28675e;
+}
+
+Button.-warning,
+.warning {
+    background: #40351c;
+    color: #f0c76a;
+    border: solid #735f2d;
+}
+
+Button.-error,
+.error {
+    background: #442329;
+    color: #ff9da7;
+    border: solid #7b3943;
+}
+
+/* Geometry applies to semantic and interaction states as well as plain buttons.
+   Widget defaults may otherwise restore top/bottom borders on focus or press. */
+Button, Button:hover, Button:focus, Button:disabled, Button.-active,
+Button.-primary, Button.-success, Button.-warning, Button.-error {
+    border: none !important;
+    padding: 0 1;
+    height: 1;
+    min-height: 1;
+}
+
+/* Opt-in logical horizontal groups share width and keep surrounding rows free.
+   Only non-final buttons receive a margin, avoiding an extra trailing gap. */
+.button-group {
+    layout: horizontal;
+    height: auto;
+    margin: 1 0;
+    padding: 0;
+}
+
+.button-group > Button {
+    width: 1fr;
+    min-width: 0;
+    margin: 0 1 0 0;
+}
+
+.button-group > Button:last-child {
+    margin-right: 0;
+}
+
+/* Existing screens commonly use plain Horizontal rows. Give those controls
+   the same adjacent gap without requiring button-group adoption first. */
+Horizontal > Button {
+    margin-right: 1;
+}
+
+Horizontal > Button:last-child {
+    margin-right: 0;
+}

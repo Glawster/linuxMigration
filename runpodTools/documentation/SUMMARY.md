@@ -28,7 +28,7 @@ runpodTools/
 ├── runpodFromSSH.sh              # Local-side orchestrator
 ├── comfyStart.sh               # Start ComfyUI helper
 ├── generateUploadScript.sh       # Upload script generator
-└── README.md                     # Full documentation
+└── runpodToolsIndex.md           # Full documentation
 ```
 
 ## Key Features Implemented
@@ -133,7 +133,7 @@ Users can continue using old paths while migrating.
 
 ## Documentation Provided
 
-1. **runpod/README.md** - Complete usage guide
+1. **runpodTools/runpodToolsIndex.md** - Complete usage guide
 2. **MIGRATION.md** - Migration guide from old to new
 3. **Inline comments** - All scripts well-documented
 4. **Help text** - All scripts have `--help`

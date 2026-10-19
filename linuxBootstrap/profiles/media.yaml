@@ -13,13 +13,9 @@ mcm:
   prefix: ~/.wine-mcm
 
 mcmDrives:
-  - h|/mnt/home
-  - m|/mnt/movie1
-  - n|/mnt/movie2
-  - p|/mnt/myPictures
-  - v|/mnt/myVideo
-  - w|/mnt/video1
-  - x|/mnt/video2
-  - y|/mnt/video3
+  - m|/mnt/movies
+  - v|/mnt/video
+  - r|/mnt/raid/Movies
+  - t|/mnt/raid/TV
 
 services:

@@ -1,0 +1,10 @@
+name: linuxMigration
+channels:
+  - conda-forge
+dependencies:
+  # OMP-MANAGED-BEGIN
+  - python>=3.10
+  # OMP-MANAGED-END
+  - pip
+  - pip:
+      - -r dev-requirements.txt

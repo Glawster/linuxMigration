@@ -1,0 +1,18 @@
+default_language_version:
+  python: python3
+
+repos:
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+
+  # OMP-MANAGED-BEGIN
+  - repo: local
+    hooks:
+      - id: gui-naming-linter
+        name: GUI Naming Linter
+        entry: runLinter
+        language: python
+        types: [python]
+  # OMP-MANAGED-END

@@ -13,3 +13,7 @@ repositories:
 
 apt:
   - warp-terminal
+
+# The mergerFS pool is FUSE, so its export needs an explicit fsid.
+nfsExports:
+  - /mnt/storage 192.168.1.0/24(rw,sync,no_subtree_check,fsid=10)

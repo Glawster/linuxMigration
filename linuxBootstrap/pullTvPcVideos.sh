@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copy video files from andy@tv-pc ~/downloads to /mnt/video2/toFile.
+# Copy video files from andy@tv-pc ~/downloads to /mnt/video/toFile.
 # Other file types can reuse lib/remotePull.sh or pass --ext / --all.
 
 set -euo pipefail
@@ -11,8 +11,8 @@ source "$_scriptDir/lib/remotePull.sh"
 applicationName="pullTvPcVideos"
 remoteUser="andy"
 remoteHost="tv-pc"
-dest="/mnt/video2/toFile"
-mountPath="/mnt/video2"
+dest="/mnt/video/toFile"
+mountPath="/mnt/video"
 includeExts=(3gp avi flv m2ts m4v mkv mov mp4 mpeg mpg mts ts webm wmv)
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
