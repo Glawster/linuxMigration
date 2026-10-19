@@ -774,7 +774,7 @@ testMigrateToRaidTemplateMappings() {
     local template="$projectDir/configs/migrateToRaid/config.json"
     _mtrCheck 'template keeps myPictures remainder local' test "$(jq -r '.mappings[] | select(.name == "myPictures") | [.target, .destination, (.excludes | join(","))] | join(" ")' "$template")" = 'local /mnt/media/Pictures Movies'
     _mtrCheck 'template sends myPictures Movies to raid-pc' test "$(jq -r '.mappings[] | select(.source == "/mnt/myPictures/Movies") | [(.target // "remote"), .destination] | join(" ")' "$template")" = 'remote /mnt/storage/Movies'
-    _mtrCheck 'template keeps myVideo remainder local without TV or encrypted' test "$(jq -r '.mappings[] | select(.name == "myVideo") | [.target, .destination, (.excludes | join(","))] | join(" ")' "$template")" = 'local /mnt/media/homeVideo TV,encrypted'
+    _mtrCheck 'template keeps myVideo remainder local without TV, encrypted or decrypted' test "$(jq -r '.mappings[] | select(.name == "myVideo") | [.target, .destination, (.excludes | join(","))] | join(" ")' "$template")" = 'local /mnt/media/homeVideo TV,encrypted,decrypted'
     _mtrCheck 'template sends myVideo TV to raid-pc' test "$(jq -r '.mappings[] | select(.source == "/mnt/myVideo/TV") | [(.target // "remote"), .destination] | join(" ")' "$template")" = 'remote /mnt/storage/TV'
     _mtrCheck 'template has no permanent /mnt/video1 source' test -z "$(jq -r '.mappings[] | select(.source == "/mnt/video1" or .destination == "/mnt/video1")' "$template")"
     _mtrCheck 'template has no old video1 disk mapping' test -z "$(jq -r '.mappings[] | select(.name == "video1" or (.source | startswith("/mnt/oldVideo1")))' "$template")"

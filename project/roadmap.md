@@ -39,10 +39,13 @@ linuxMigration sequencing and priorities. Current increment status is kept in
 - [x] `migrateToRaid` local destination for personal media on `/mnt/media` ([ADR 002](adr/002-localMigrationDestination.md))
 - [ ] Install the SkyHawk as `/mnt/media` and migrate the `myPictures` and `myVideo` remainders
 - [ ] Copy the old video1 disk (USB on raid-pc) into the pool TV folder by hand ([ADR 004](adr/004-migrateOnlyOnAndyPc.md))
-- [ ] Update the media drive mappings (`profiles/media.yaml`) for `/mnt/media` and the retired `/mnt/video1`
+- [x] Remove the retired `/mnt/video1` from the media drive mappings and aliases
+- [x] Set the media drive mappings to `M:` `/mnt/movies`, `V:` `/mnt/video`, `R:` `/mnt/raid/Movies` and `T:` `/mnt/raid/TV`
+- [x] Remove the drive mappings and aliases of the retiring disks (`myPictures`, `myVideo`, `movie2`, `video3`)
+- [x] Manage the `raid-pc:/mnt/storage` NFS export and the andy-pc `/mnt/raid` mount in the host profiles
 - [x] Confirm the raid-pc storage layout (`/mnt/storage`)
 - [ ] Enable the raid-pc mappings
-- [ ] Rename `/mnt/movie1` and `/mnt/video2` to `/mnt/movies` and `/mnt/video`
+- [ ] Rename `/mnt/movie1` and `/mnt/video2` to `/mnt/movies` and `/mnt/video` (profiles, qBittorrent, `pullTvPcVideos` and docs already use the new paths)
 - [ ] Configure the raid-pc parity protection check once SnapRAID parity is synced
 - [ ] Add `raid-pc` to the managed SSH host configuration
 - [ ] Declare `rsync` and `jq` in the andy-pc and raid-server profiles

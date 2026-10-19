@@ -64,8 +64,7 @@ configLoad() {
     protectionCommand="$(jq -r '.protection.command // ""' "$file")"
     mapfile -t protectionSuccessCodes < <(jq -r '(.protection.successExitCodes // [0])[] | tostring' "$file")
     mapfile -t excludeNames < <(jq -r '(.excludes // ["lost+found", "$RECYCLE.BIN", "System Volume Information"])[]' "$file")
-    # The optional local destination is a disk on the machine running the tool
-    # (/mnt/media on andy-pc, or the /mnt/storage pool on raid-pc). Its
+    # The optional local destination is a disk on andy-pc (/mnt/media). Its
     # protection is required unless explicitly set to false.
     localMount="$(jq -r '.localDestination.mount // "" | sub("/+$"; "")' "$file")"
     localFsType="$(jq -r '.localDestination.fsType // ""' "$file")"

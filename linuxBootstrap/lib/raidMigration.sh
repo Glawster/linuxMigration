@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# migrateToRaid workflow: copy andy-pc storage to raid-pc (or to a local
-# destination disk on the machine running it: /mnt/media on andy-pc, or the
-# /mnt/storage pool for a disk attached to raid-pc), verify it independently,
+# migrateToRaid workflow: copy andy-pc storage to raid-pc (or to the local
+# destination disk, /mnt/media on andy-pc), verify it independently,
 # record the result, and remove source data only when explicitly requested and
 # proven safe. Not a bootstrap module; sourced by migrateToRaid.sh.
 #
@@ -125,9 +124,9 @@ argsUsage() {
     cat <<'EOF'
 Usage: migrateToRaid [--all | --source NAME ... | --type TYPE ...] [options]
 
-Copy andy-pc storage to raid-pc, or to the local destination on this machine
-(localDestination: /mnt/media on andy-pc, /mnt/storage on raid-pc) for
-mappings with "target": "local", verify it, and record the result. Preview only unless --confirm is given.
+Copy andy-pc storage to raid-pc, or to the local destination on andy-pc
+(localDestination: /mnt/media) for mappings with "target": "local", verify
+it, and record the result. Preview only unless --confirm is given.
 Source data is never removed unless --remove-source is requested separately.
 
 Selection:

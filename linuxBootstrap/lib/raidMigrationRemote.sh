@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Destination, rsync, checksum and progress helpers for migrateToRaid. A
-# destination is raid-pc over SSH (the default) or a disk mounted on the
-# machine running the tool (andy-pc /mnt/media, or the raid-pc pool when run on
-# raid-pc); both run the same scripts and pass the same checks.
+# destination is raid-pc over SSH (the default) or a disk mounted on andy-pc
+# (/mnt/media); both run the same scripts and pass the same checks.
 # Sourced by lib/raidMigration.sh; not a bootstrap module.
 
 destFsType=""

@@ -19,7 +19,7 @@ pool is NFS-mounted at `/mnt/raid`, so `/mnt/storage/TV` is `/mnt/raid/TV` there
 | `/mnt/video3/TV` | `video3` | raid-pc `/mnt/storage/TV` | TV content moves to RAID |
 | `/mnt/movie2/Movies` | `movie2` | raid-pc `/mnt/storage/Movies` | Movie content moves to RAID; `Fraps` is not migrated |
 | `/mnt/myVideo/TV` | `myVideoTV` | raid-pc `/mnt/storage/TV` | TV content moves to RAID |
-| `/mnt/myVideo` excluding `TV` and `encrypted` | `myVideo` | `/mnt/media/homeVideo` | Personal/home video retained locally on `andy-pc` |
+| `/mnt/myVideo` excluding `TV`, `encrypted` and `decrypted` | `myVideo` | `/mnt/media/homeVideo` | Personal/home video retained locally on `andy-pc` |
 | `/mnt/myPictures/Movies` | `myPicturesMovies` | raid-pc `/mnt/storage/Movies` | Movie content moves to RAID |
 | `/mnt/myPictures` excluding `Movies` | `myPictures` | `/mnt/media/Pictures` | Personal pictures retained locally on `andy-pc` |
 | `/mnt/oldVideo1/TV` on raid-pc | — | raid-pc `/mnt/storage/TV` | Old `video1` disk, attached to raid-pc by USB and copied there by hand with rsync, outside this tool |
@@ -27,7 +27,9 @@ pool is NFS-mounted at `/mnt/raid`, so `/mnt/storage/TV` is `/mnt/raid/TV` there
 | `/mnt/movie1` | — | `/mnt/movies` | Rename existing local disk; retain about 50% usage. Not handled by this tool |
 
 Once their content is verified in the right destinations, the USB `myPictures`
-and `myVideo` disks can be retired. `/mnt/video1` does not survive the
+and `myVideo` disks and the `movie2` and `video3` disks are retired. `movie2`
+also holds `Fraps`, which no mapping covers, so that disk stays NOT SAFE TO
+REMOVE DISK until `Fraps` is moved or deleted. `/mnt/video1` does not survive the
 migration: the old 2 TB disk is replaced by the internal `/mnt/media` disk.
 
 `migrateToRaid` never provisions disks or filesystems. raid-pc storage and the
@@ -121,10 +123,11 @@ are rejected when the configuration is loaded. The folders of one disk may go
 to different destinations: `/mnt/myPictures/Movies` goes to raid-pc while the
 rest of `/mnt/myPictures` stays on `/mnt/media`.
 
-`myVideo` also excludes `encrypted`. That folder is handled separately and is
-never copied to raid-pc or `/mnt/media` by this tool. Because no mapping covers
-it, `--check` keeps reporting the `myVideo` disk as NOT SAFE TO REMOVE DISK
-while `encrypted` is still on it.
+`myVideo` also excludes `encrypted` and `decrypted`, where the encrypted
+content is unlocked. Those folders are handled separately and are never copied
+to raid-pc or `/mnt/media` by this tool. Because no mapping covers them,
+`--check` keeps reporting the `myVideo` disk as NOT SAFE TO REMOVE DISK while
+they are still on it.
 
 The template ships with **every mapping disabled** and placeholders such as
 `<RAID_PROTECTION_CHECK_COMMAND>` and `<MEDIA_FS_UUID>`. A placeholder is refused

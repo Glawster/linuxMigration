@@ -12,19 +12,19 @@ The `media-library` profile provides a Linux workflow comparable to a Media Cent
 
 ## Storage layout
 
-On `andy-pc`, `/mnt/video2` is exported over NFS to `tv-pc`.
+On `andy-pc`, `/mnt/video` is exported over NFS to `tv-pc`.
 
 On `tv-pc`, bootstrap mounts it at the same path:
 
 ```text
-/mnt/video2
+/mnt/video
 ```
 
 qBittorrent is preconfigured with:
 
 ```text
-Incomplete downloads: /mnt/video2/Downloads
-Completed downloads:  /mnt/video2/toFile
+Incomplete downloads: /mnt/video/Downloads
+Completed downloads:  /mnt/video/toFile
 ```
 
 Keeping both paths on the same underlying filesystem avoids an unnecessary cross-filesystem copy between incomplete and completed downloads. Sonarr/Radarr library roots should remain separate from the download directory even when they live on the same filesystem.
@@ -95,4 +95,4 @@ Sonarr: tv
 Radarr: movies
 ```
 
-The download client completed path is `/mnt/video2/toFile`. Configure separate TV and movie library roots elsewhere under the NFS-backed storage once their final directory layout is decided.
+The download client completed path is `/mnt/video/toFile`. Configure separate TV and movie library roots elsewhere under the NFS-backed storage once their final directory layout is decided.

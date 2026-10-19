@@ -60,7 +60,7 @@ _installerSonarrInstall() {
     temporary="$(mktemp -d)"
     script="$temporary/install-sonarr.sh"
     curl -fsSL https://raw.githubusercontent.com/Sonarr/Sonarr/develop/distribution/debian/install.sh -o "$script"
-    logInfo "Sonarr installer: use user 'andy' and group 'andy' when prompted so it can access /mnt/video2"
+    logInfo "Sonarr installer: use user 'andy' and group 'andy' when prompted so it can access /mnt/video"
     sudo bash "$script"
     rm -rf "$temporary"
 }

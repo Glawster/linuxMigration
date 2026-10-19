@@ -40,9 +40,11 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 - The old 2 TB video1 disk holds only TV. It is attached by USB to raid-pc at
   `/mnt/oldVideo1`, and its `TV` folder is copied into the raid-pc pool's TV
   folder (`/mnt/storage/TV`) by hand with rsync on raid-pc, outside this tool.
-  The USB `myPictures` and `myVideo` disks are retired
+  The USB `myPictures` and `myVideo` disks and the `movie2` and `video3` disks
+  are retired
   once their content is verified in the right destinations.
-- `/mnt/myVideo/encrypted` is handled separately and is not migrated.
+- `/mnt/myVideo/encrypted`, and `/mnt/myVideo/decrypted` where it is unlocked,
+  are handled separately and are not migrated.
 - Transfers run for many hours over the LAN and may be interrupted. Some sources
   are written to while in use (for example `/mnt/video2` by tv-pc).
 - The tool is implemented in `linuxBootstrap/`
@@ -71,7 +73,7 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 
 - Deciding or provisioning the raid-pc storage layout, mergerFS or SnapRAID,
   or partitioning, formatting or mounting the `/mnt/media` disk.
-- Migrating `/mnt/myVideo/encrypted`.
+- Migrating `/mnt/myVideo/encrypted` or `/mnt/myVideo/decrypted`.
 - Deduplicating media or reorganising library folder structures.
 - Two-way synchronisation, or updating destination files that differ from the
   source.
@@ -144,8 +146,8 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
     destination and the disk is SAFE only when all of them are.
 19. Given the template configuration, then `/mnt/myPictures/Movies` maps to
     raid-pc Movies, the rest of `/mnt/myPictures` to `/mnt/media/Pictures`,
-    `/mnt/myVideo/TV` to raid-pc TV, the rest of `/mnt/myVideo` except `TV` and
-    `encrypted` to `/mnt/media/homeVideo`, `/mnt/movie2/Movies` and
+    `/mnt/myVideo/TV` to raid-pc TV, the rest of `/mnt/myVideo` except `TV`,
+    `encrypted` and `decrypted` to `/mnt/media/homeVideo`, `/mnt/movie2/Movies` and
     `/mnt/video3/TV` to raid-pc `/mnt/storage/Movies` and `/mnt/storage/TV`,
     no mapping uses `/mnt/movie1`, `/mnt/video2`, `/mnt/video1` or the old
     video1 disk, and `/mnt/media` is accepted as single-copy storage.
@@ -206,3 +208,5 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
   and `/mnt/movie1` and `/mnt/video2` stay local (criterion 19).
 - 2026-10-19: the `myVideo` remainder goes to `/mnt/media/homeVideo`
   (criterion 19).
+- 2026-10-19: the `movie2` and `video3` disks are retired once migrated, and
+  `decrypted` is excluded from `myVideo` (criterion 19).

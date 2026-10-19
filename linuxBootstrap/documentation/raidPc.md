@@ -131,29 +131,31 @@ The router should reserve a stable DHCP address for `raid-pc`. The bootstrap
 should validate that expected address rather than forcing a local static address,
 matching the existing network-management model.
 
-The initial storage namespace will expose a dedicated media path, expected to be:
+The storage pool is exported whole:
 
 ```text
-raid-pc:/mnt/storage/video
+raid-pc:/mnt/storage
 ```
 
-On Linux media clients this should be mounted at a stable path such as:
+On andy-pc it is mounted at:
 
 ```text
-/mnt/raidVideo
+/mnt/raid
 ```
 
-The first consumers are expected to be:
+so the pool's `Movies` and `TV` folders are `/mnt/raid/Movies` and
+`/mnt/raid/TV`. The first consumers are expected to be:
 
-- organiseMyVideo (OMV), which should treat `/mnt/raidVideo` as another managed
-  media location rather than as a special network-only case;
-- Media Center Master (MCM), which should receive a Wine drive mapping for the
-  same Linux mount (provisionally `R:` -> `/mnt/raidVideo`).
+- organiseMyVideo (OMV), which should treat `/mnt/raid/Movies` and
+  `/mnt/raid/TV` as other managed media locations rather than as a special
+  network-only case;
+- Media Center Master (MCM), whose Wine drives `R:` and `T:` map to
+  `/mnt/raid/Movies` and `/mnt/raid/TV` (see [Media drives](mediaCenterMaster.md#media-drives)).
 
-The NFS export should initially be restricted to the known media hosts. Client
-mounts should use the existing linux-bootstrap NFS mechanism and systemd
-automount behavior. The exact export addresses are deferred until `raid-pc` has
-its router reservation.
+The export is declared in `profiles/hosts/raid-pc.yaml` for the local network
+(`192.168.1.0/24`) with an explicit `fsid`, which a FUSE filesystem such as
+mergerFS needs. The andy-pc mount is declared in `profiles/hosts/andy-pc.yaml`
+and uses the linux-bootstrap NFS mechanism with systemd automount.
 
 ### Initial migration strategy
 
