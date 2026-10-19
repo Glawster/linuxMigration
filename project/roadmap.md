@@ -36,6 +36,11 @@ linuxMigration sequencing and priorities. Current increment status is kept in
 ### Storage migration
 
 - [x] `migrateToRaid`: copy, verify and record andy-pc storage on raid-pc ([001](requirements/features/001-raidMigration.md))
+- [x] `migrateToRaid` local destination for personal media on `/mnt/media` ([ADR 002](adr/002-localMigrationDestination.md))
+- [x] `migrateToRaid` run on raid-pc for disks attached there ([ADR 003](adr/003-migrateOnRaidPc.md))
+- [ ] Install the SkyHawk as `/mnt/media` and migrate the `myPictures` and `myVideo` remainders
+- [ ] Migrate the old video1 disk (USB on raid-pc) into the pool TV folder once the pool exists
+- [ ] Update the media drive mappings (`profiles/media.yaml`) for `/mnt/media` and the retired `/mnt/video1`
 - [ ] Confirm the raid-pc storage layout and enable mappings
 - [ ] Configure the raid-pc parity protection check once SnapRAID parity is synced
 - [ ] Add `raid-pc` to the managed SSH host configuration

@@ -1,16 +1,36 @@
 #!/usr/bin/env bash
-# SSH, rsync, checksum and progress helpers for migrateToRaid.
+# Destination, rsync, checksum and progress helpers for migrateToRaid. A
+# destination is raid-pc over SSH (the default) or a disk mounted on the
+# machine running the tool (andy-pc /mnt/media, or the raid-pc pool when run on
+# raid-pc); both run the same scripts and pass the same checks.
 # Sourced by lib/raidMigration.sh; not a bootstrap module.
 
+destFsType=""
+destHost=""
+destKind=""
+destMount=""
+destPlace=""
+destRsyncPrefix=""
+destSource=""
+destUuid=""
+destinationProblem=""
 progressActive=0
+protectionBasis=""
+protectionDetail=""
 protectionProblem=""
 protectionResult=""
+protectionVerdict=""
 remoteTarget=""
 rsyncArgs=()
+declare -gA _protectionBases=()
+declare -gA _protectionDetails=()
+declare -gA _protectionProblems=()
+declare -gA _protectionResults=()
+declare -gA _protectionVerdicts=()
 sshOptions=(-o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=10)
 
-# Remote scripts receive their values as positional arguments; never splice
-# paths into script text.
+# Destination scripts receive their values as positional arguments; never
+# splice paths into script text.
 _remoteHashScript='
 cd -- "$1" || exit 3
 while IFS= read -r -d "" path; do
@@ -38,6 +58,8 @@ fi
 if command -v "$checksum" >/dev/null 2>&1; then echo checksum=yes; else echo checksum=no; fi
 if findmnt -n --mountpoint "$mount" >/dev/null 2>&1; then echo mounted=yes; else echo mounted=no; fi
 echo "mountFsType=$(findmnt -n -o FSTYPE --mountpoint "$mount" 2>/dev/null)"
+echo "mountUuid=$(findmnt -n -o UUID --mountpoint "$mount" 2>/dev/null)"
+echo "mountSource=$(findmnt -n -o SOURCE --mountpoint "$mount" 2>/dev/null)"
 path=$dest
 while [ ! -e "$path" ]; do path=$(dirname -- "$path"); done
 echo "ancestor=$path"
@@ -61,7 +83,7 @@ checksumVerify() {
     : >"$localOut"
     : >"$prefix.checksum-mismatches"
 
-    remoteRun "$_remoteHashScript" "$dest" "$checksumCommand" <"$list" >"$remoteOut" 2>"$remoteErr" &
+    destinationRun "$_remoteHashScript" "$dest" "$checksumCommand" <"$list" >"$remoteOut" 2>"$remoteErr" &
     pid=$!
     while IFS= read -r -d '' path; do
         hash="$(_checksumFile "$source/$path")" || hash=ERROR
@@ -80,7 +102,7 @@ checksumVerify() {
     _checksumProgress "$remoteOut"
     progressFinish
     if ((remoteStatus != 0)); then
-        log_warn "remote checksum pass exited with status $remoteStatus: $(tail -n 3 "$remoteErr" 2>/dev/null)"
+        log_warn "destination checksum pass exited with status $remoteStatus: $(tail -n 3 "$remoteErr" 2>/dev/null)"
     fi
     _checksumCompare "$localOut" "$remoteOut" "$prefix.checksum-mismatches"
 }
@@ -115,7 +137,113 @@ _checksumProgress() {
     if ((checksumTotal > 0)); then
         percent=$(((checksumDone + remoteDone) * 100 / (checksumTotal * 2)))
     fi
-    progressBar "$percent" "andy-pc ${checksumDone}/${checksumTotal}  raid-pc ${remoteDone}/${checksumTotal}"
+    progressBar "$percent" "source ${checksumDone}/${checksumTotal}  destination ${remoteDone}/${checksumTotal}"
+}
+
+## destination
+
+destinationDescribe() {
+    if [[ "$destKind" == local ]]; then
+        printf '%s (local)' "$1"
+    else
+        printf '%s%s' "$destRsyncPrefix" "$1"
+    fi
+}
+
+destinationMakeDirectory() {
+    destinationRun 'mkdir -p -- "$1"' "$1"
+}
+
+destinationManifest() {
+    destinationRun "$_remoteManifestScript" "$1" >"$2" 2>"$2.err"
+}
+
+# Confirms, from the last probe, that the expected filesystem is genuinely
+# mounted at the destination mount and that the destination resolves inside
+# it, so a copy can never land in an empty mount-point directory on the
+# operating-system disk. A local destination must also carry its configured
+# UUID or mount source and must not be the source filesystem. Sets
+# destinationProblem.
+destinationMountCheck() {
+    local fsTarget="${probeFsTarget%"${probeFsTarget##*[![:space:]]}"}" where="raid-pc $destMount"
+    destinationProblem=""
+    [[ "$destKind" == local ]] && where="local destination $destMount"
+    if [[ "$probeMounted" != yes ]]; then
+        if [[ "$destKind" == local ]]; then
+            destinationProblem="no filesystem is mounted at $destMount (refusing to copy into the mount-point directory)"
+        else
+            destinationProblem="raid-pc storage is not mounted at $destMount"
+        fi
+    elif [[ -n "$destFsType" && "$probeMountFsType" != "$destFsType" ]]; then
+        destinationProblem="$where is $probeMountFsType, expected $destFsType"
+    elif [[ -n "$destUuid" && "$probeMountUuid" != "$destUuid" ]]; then
+        destinationProblem="$where has UUID ${probeMountUuid:-unknown}, configuration expects $destUuid"
+    elif [[ -n "$destSource" && "$probeMountSource" != "$destSource" ]]; then
+        destinationProblem="$where is mounted from ${probeMountSource:-unknown}, configuration expects $destSource"
+    elif [[ "$destKind" == local && -n "${srcUuid:-}" && "$probeMountUuid" == "$srcUuid" ]]; then
+        destinationProblem="$where is the source filesystem (UUID $srcUuid); refusing"
+    elif [[ "$destKind" == local && -n "${srcDevice:-}" && "$probeMountSource" == "$srcDevice" ]]; then
+        destinationProblem="$where is the source filesystem ($srcDevice); refusing"
+    elif [[ "$fsTarget" != "$destMount" ]]; then
+        destinationProblem="destination would be created outside $destMount (on ${fsTarget:-unknown}); refusing"
+    fi
+    [[ -z "$destinationProblem" ]]
+}
+
+# Sets probe* globals describing the destination.
+destinationProbe() {
+    local dest="$1" output key value
+    probeAncestor="" probeAvail="" probeChecksum="" probeDestExists="" probeError=""
+    probeFsTarget="" probeMounted="" probeMountFsType="" probeMountSource="" probeMountUuid="" probeRsync="" probeWritable=""
+    if ! output="$(destinationRun "$_remoteProbeScript" "$dest" "$destMount" "$checksumCommand" 2>&1 </dev/null)"; then
+        probeError="$(tail -n 2 <<<"$output" | tr '\n' ' ')"
+        return 1
+    fi
+    while IFS= read -r key; do
+        [[ "$key" == *=* ]] || continue
+        value="${key#*=}"
+        case "${key%%=*}" in
+            ancestor) probeAncestor="$value" ;;
+            avail) probeAvail="$value" ;;
+            checksum) probeChecksum="$value" ;;
+            destExists) probeDestExists="$value" ;;
+            fsTarget) probeFsTarget="$value" ;;
+            mounted) probeMounted="$value" ;;
+            mountFsType) probeMountFsType="${value%"${value##*[![:space:]]}"}" ;;
+            mountSource) probeMountSource="${value%"${value##*[![:space:]]}"}" ;;
+            mountUuid) probeMountUuid="${value%"${value##*[![:space:]]}"}" ;;
+            rsync) probeRsync="$value" ;;
+            writable) probeWritable="$value" ;;
+        esac
+    done <<<"$output"
+}
+
+# Runs a destination script locally or on raid-pc over SSH.
+destinationRun() {
+    local script="$1" command arg
+    shift
+    if [[ "$destKind" == local ]]; then
+        bash -c "$script" migrateToRaid "$@"
+        return
+    fi
+    printf -v command 'bash -c %q migrateToRaid' "$script"
+    for arg in "$@"; do
+        printf -v command '%s %q' "$command" "$arg"
+    done
+    ssh "${sshOptions[@]}" "$remoteTarget" "$command"
+}
+
+# Selects a mapping's destination and sets the dest* globals used by every
+# destination helper: raid-pc over SSH unless the mapping targets the local
+# destination on this machine.
+destinationSelect() {
+    if [[ "${mapTarget[$1]}" == local ]]; then
+        destKind=local destHost="$(hostname -s 2>/dev/null || printf 'this machine')" destMount="$localMount" destPlace="$localMount"
+        destFsType="$localFsType" destSource="$localSource" destUuid="$localUuid" destRsyncPrefix=""
+    else
+        destKind=remote destHost=raid-pc destMount="$destinationMount" destPlace=raid-pc
+        destFsType="$destinationFsType" destSource="" destUuid="" destRsyncPrefix="$remoteTarget:"
+    fi
 }
 
 ## progress
@@ -161,22 +289,53 @@ progressRender() {
 
 ## protection
 
-# Runs the configured raid-pc protection readiness command (for example a
-# SnapRAID "diff" that succeeds only when parity is in sync). The result is
-# cached for the rest of this run and recorded in protection.state.
+# Runs the protection readiness command for the selected destination: on
+# raid-pc, for example a SnapRAID "diff" that succeeds only when parity is in
+# sync; locally, whatever the owner configured for the local destination. A
+# local destination needs no command only when the owner has explicitly
+# accepted it as a single authoritative copy with "required": false. Results are cached per destination kind for the rest of
+# this run and recorded in protection.state / protection-local.state.
+# protectionVerdict names the basis of a SAFE verdict so that verified
+# protection and accepted single-copy storage are never confused;
+# protectionBasis is protected or singleCopy.
 protectionCheck() {
-    local output status=0 code
-    if [[ -n "${protectionResult:-}" ]]; then
+    local kind="$destKind" name="$protectionName" command="$protectionCommand" codes=("${protectionSuccessCodes[@]}")
+    local output status=0 code stateName=protection.state
+    if [[ "$kind" == local ]]; then
+        name="$localProtectionName" command="$localProtectionCommand" codes=("${localProtectionSuccessCodes[@]}")
+        stateName=protection-local.state
+    fi
+    if [[ -n "${_protectionResults[$kind]:-}" ]]; then
+        protectionResult="${_protectionResults[$kind]}"
+        protectionProblem="${_protectionProblems[$kind]}"
+        protectionDetail="${_protectionDetails[$kind]}"
+        protectionVerdict="${_protectionVerdicts[$kind]}"
+        protectionBasis="${_protectionBases[$kind]}"
         [[ "$protectionResult" == ok ]]
         return
     fi
     protectionProblem=""
-    if _configIsPlaceholder "$protectionCommand"; then
-        protectionProblem="$protectionName check is not configured (protection.command); parity has not been established"
+    protectionDetail="$name is established and in sync"
+    protectionVerdict="${name^^} VERIFIED"
+    protectionBasis=protected
+    if [[ "$kind" == local && "$localProtectionRequired" == false ]]; then
+        protectionDetail="single-copy local storage is accepted for $localMount (localDestination.protection.required is false); it is not backed up or redundant"
+        protectionVerdict="DESTINATION ACCEPTED AS AUTHORITATIVE (single copy, not redundant)"
+        protectionBasis=singleCopy
+    elif _configIsPlaceholder "$command"; then
+        if [[ "$kind" == local ]]; then
+            protectionProblem="$name check is not configured (localDestination.protection.command)"
+        else
+            protectionProblem="$name check is not configured (protection.command); parity has not been established"
+        fi
     else
-        output="$(ssh "${sshOptions[@]}" "$remoteTarget" "$protectionCommand" 2>&1 </dev/null)" || status=$?
-        protectionProblem="$protectionName check failed (exit $status): $(tail -n 1 <<<"$output")"
-        for code in "${protectionSuccessCodes[@]}"; do
+        if [[ "$kind" == local ]]; then
+            output="$(bash -c "$command" 2>&1 </dev/null)" || status=$?
+        else
+            output="$(ssh "${sshOptions[@]}" "$remoteTarget" "$command" 2>&1 </dev/null)" || status=$?
+        fi
+        protectionProblem="$name check failed (exit $status): $(tail -n 1 <<<"$output")"
+        for code in "${codes[@]}"; do
             [[ "$status" == "$code" ]] && protectionProblem=""
         done
     fi
@@ -185,55 +344,14 @@ protectionCheck() {
     else
         protectionResult=failed
     fi
+    _protectionResults[$kind]="$protectionResult"
+    _protectionProblems[$kind]="$protectionProblem"
+    _protectionDetails[$kind]="$protectionDetail"
+    _protectionVerdicts[$kind]="$protectionVerdict"
+    _protectionBases[$kind]="$protectionBasis"
     printf 'checked=%s\nresult=%s\ndetail=%s\n' "$(date -Is)" "$protectionResult" "${protectionProblem//$'\n'/ }" \
-        >"$stateDir/protection.state"
+        >"$stateDir/$stateName"
     [[ "$protectionResult" == ok ]]
-}
-
-## remote
-
-remoteMakeDirectory() {
-    remoteRun 'mkdir -p -- "$1"' "$1"
-}
-
-remoteManifest() {
-    remoteRun "$_remoteManifestScript" "$1" >"$2" 2>"$2.err"
-}
-
-# Sets probe* globals describing the destination on raid-pc.
-remoteProbe() {
-    local dest="$1" output key value
-    probeAncestor="" probeAvail="" probeChecksum="" probeDestExists="" probeError=""
-    probeFsTarget="" probeMounted="" probeMountFsType="" probeRsync="" probeWritable=""
-    if ! output="$(remoteRun "$_remoteProbeScript" "$dest" "$destinationMount" "$checksumCommand" 2>&1 </dev/null)"; then
-        probeError="$(tail -n 2 <<<"$output" | tr '\n' ' ')"
-        return 1
-    fi
-    while IFS= read -r key; do
-        [[ "$key" == *=* ]] || continue
-        value="${key#*=}"
-        case "${key%%=*}" in
-            ancestor) probeAncestor="$value" ;;
-            avail) probeAvail="$value" ;;
-            checksum) probeChecksum="$value" ;;
-            destExists) probeDestExists="$value" ;;
-            fsTarget) probeFsTarget="$value" ;;
-            mounted) probeMounted="$value" ;;
-            mountFsType) probeMountFsType="${value%"${value##*[![:space:]]}"}" ;;
-            rsync) probeRsync="$value" ;;
-            writable) probeWritable="$value" ;;
-        esac
-    done <<<"$output"
-}
-
-remoteRun() {
-    local script="$1" command arg
-    shift
-    printf -v command 'bash -c %q migrateToRaid' "$script"
-    for arg in "$@"; do
-        printf -v command '%s %q' "$command" "$arg"
-    done
-    ssh "${sshOptions[@]}" "$remoteTarget" "$command"
 }
 
 ## transfer
@@ -255,8 +373,8 @@ transferArgsBuild() {
         --stats
         --log-file="$rsyncLog"
         --log-file-format='%i %n%L'
-        -e "ssh ${sshOptions[*]}"
     )
+    [[ "$destKind" == local ]] || rsyncArgs+=(-e "ssh ${sshOptions[*]}")
     case "$fsType" in
         ntfs | ntfs3 | fuseblk | vfat | exfat | msdos) rsyncArgs+=(--chmod=D755,F644) ;;
         *) rsyncArgs+=(--perms --hard-links) ;;
@@ -266,7 +384,7 @@ transferArgsBuild() {
 transferDescribe() {
     local source="$1" dest="$2"
     printf 'rsync'
-    printf ' %q' "${rsyncArgs[@]}" "$source/" "$remoteTarget:$dest/"
+    printf ' %q' "${rsyncArgs[@]}" "$source/" "$destRsyncPrefix$dest/"
     printf '\n'
 }
 
@@ -276,7 +394,7 @@ transferRun() {
     local source="$1" dest="$2" outFile="$3" errFile="$4" statusFile="$5"
     : >"$outFile"
     {
-        if rsync "${rsyncArgs[@]}" "$source/" "$remoteTarget:$dest/" 2>"$errFile"; then
+        if rsync "${rsyncArgs[@]}" "$source/" "$destRsyncPrefix$dest/" 2>"$errFile"; then
             printf '0' >"$statusFile"
         else
             printf '%s' "$?" >"$statusFile"

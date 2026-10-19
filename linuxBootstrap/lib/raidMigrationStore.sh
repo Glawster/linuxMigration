@@ -12,6 +12,14 @@ configFile=""
 destinationFsType=""
 destinationMount=""
 excludeNames=()
+localFsType=""
+localMount=""
+localProtectionCommand=""
+localProtectionName=""
+localProtectionRequired=true
+localProtectionSuccessCodes=(0)
+localSource=""
+localUuid=""
 protectionCommand=""
 protectionName=""
 protectionSuccessCodes=(0)
@@ -28,6 +36,7 @@ declare -gA mapExcludes=()
 declare -gA mapLabel=()
 declare -gA mapMount=()
 declare -gA mapSource=()
+declare -gA mapTarget=()
 declare -gA mapType=()
 declare -gA mapUuid=()
 declare -gA state=()
@@ -35,7 +44,7 @@ declare -gA state=()
 ## config
 
 configLoad() {
-    local file="$1" name label type source dest enabled uuid mount excludes
+    local file="$1" name label type source dest enabled uuid mount excludes target
     if [[ ! -f "$file" ]]; then
         log_error "configuration not found: $file"
         log_info "copy configs/migrateToRaid/config.json to that path and review it"
@@ -55,10 +64,21 @@ configLoad() {
     protectionCommand="$(jq -r '.protection.command // ""' "$file")"
     mapfile -t protectionSuccessCodes < <(jq -r '(.protection.successExitCodes // [0])[] | tostring' "$file")
     mapfile -t excludeNames < <(jq -r '(.excludes // ["lost+found", "$RECYCLE.BIN", "System Volume Information"])[]' "$file")
+    # The optional local destination is a disk on the machine running the tool
+    # (/mnt/media on andy-pc, or the /mnt/storage pool on raid-pc). Its
+    # protection is required unless explicitly set to false.
+    localMount="$(jq -r '.localDestination.mount // "" | sub("/+$"; "")' "$file")"
+    localFsType="$(jq -r '.localDestination.fsType // ""' "$file")"
+    localSource="$(jq -r '.localDestination.source // ""' "$file")"
+    localUuid="$(jq -r '.localDestination.uuid // ""' "$file")"
+    localProtectionName="$(jq -r '.localDestination.protection.name // "local destination protection"' "$file")"
+    localProtectionCommand="$(jq -r '.localDestination.protection.command // ""' "$file")"
+    localProtectionRequired="$(jq -r 'if .localDestination.protection.required == false then "false" else "true" end' "$file")"
+    mapfile -t localProtectionSuccessCodes < <(jq -r '(.localDestination.protection.successExitCodes // [0])[] | tostring' "$file")
 
     mappingNames=()
-    mapDest=() mapEnabled=() mapExcludes=() mapLabel=() mapMount=() mapSource=() mapType=() mapUuid=()
-    while IFS=$'\x1f' read -r name label type source dest enabled uuid mount excludes; do
+    mapDest=() mapEnabled=() mapExcludes=() mapLabel=() mapMount=() mapSource=() mapTarget=() mapType=() mapUuid=()
+    while IFS=$'\x1f' read -r name label type source dest enabled uuid mount excludes target; do
         if [[ ! "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
             log_error "invalid mapping name in configuration: '$name'"
             return 1
@@ -80,6 +100,10 @@ configLoad() {
             log_error "mapping $name: enabled must be true or false"
             return 1
         fi
+        if [[ "$target" != remote && "$target" != local ]]; then
+            log_error "mapping $name: target must be remote (raid-pc) or local: '$target'"
+            return 1
+        fi
         mappingNames+=("$name")
         mapLabel[$name]="$label"
         mapType[$name]="${type,,}"
@@ -89,11 +113,13 @@ configLoad() {
         mapUuid[$name]="$uuid"
         mapMount[$name]="$mount"
         mapExcludes[$name]="$excludes"
+        mapTarget[$name]="$target"
     done < <(jq -r '.mappings[] | [
             (.name // ""), (.label // .name // ""), (.type // "files"),
             (.source // ""), (.destination // ""),
             ((.enabled // false) | tostring), (.uuid // ""),
-            (.mountPoint // .source // ""), ((.excludes // []) | join("/"))
+            (.mountPoint // .source // ""), ((.excludes // []) | join("/")),
+            (.target // "remote")
         ] | map(tostring | gsub("[\u001f\n]"; " ")) | join("\u001f")' "$file")
     configFile="$file"
     _configOverlapCheck
@@ -112,21 +138,36 @@ configMappingExcludes() {
 
 # Checks that a mapping is complete enough to touch the network or data.
 configValidateOperational() {
-    local name="$1" dest="${mapDest[$1]}" command found=0
-    if [[ -z "$remoteHost" ]]; then
-        _configProblem "remoteHost is empty"
+    local name="$1" dest="${mapDest[$1]}" source="${mapSource[$1]}" root rootKey command found=0
+    if [[ -n "${mapUuid[$name]}" ]] && _configIsPlaceholder "${mapUuid[$name]}"; then
+        _configProblem "uuid for $name is not configured: '${mapUuid[$name]}'"
         return 1
     fi
-    if _configIsPlaceholder "$destinationMount" || [[ "$destinationMount" != /* ]]; then
-        _configProblem "destinationMount is not configured: '$destinationMount'"
-        return 1
+    if [[ "${mapTarget[$name]}" == local ]]; then
+        _configValidateLocal || return 1
+        root="$localMount" rootKey="localDestination.mount"
+    else
+        if [[ -z "$remoteHost" ]]; then
+            _configProblem "remoteHost is empty"
+            return 1
+        fi
+        if _configIsPlaceholder "$destinationMount" || [[ "$destinationMount" != /* ]]; then
+            _configProblem "destinationMount is not configured: '$destinationMount'"
+            return 1
+        fi
+        root="$destinationMount" rootKey="destinationMount"
     fi
     if _configIsPlaceholder "$dest" || [[ "$dest" != /* ]]; then
         _configProblem "destination for $name is not configured: '$dest'"
         return 1
     fi
-    if [[ "$dest" != "${destinationMount%/}/"* || "$dest" == *"/../"* || "$dest" == *"/.." ]]; then
-        _configProblem "destination for $name must be inside destinationMount ($destinationMount): $dest"
+    if [[ "$dest" != "${root%/}/"* || "$dest" == *"/../"* || "$dest" == *"/.." ]]; then
+        _configProblem "destination for $name must be inside $rootKey ($root): $dest"
+        return 1
+    fi
+    # A local copy into or out of its own source tree would loop or overwrite.
+    if [[ "${mapTarget[$name]}" == local && ("$dest" == "$source" || "$dest" == "$source"/* || "$source" == "$dest"/*) ]]; then
+        _configProblem "destination for $name overlaps its source: $dest"
         return 1
     fi
     if [[ ! "$minFreeBytesAfter" =~ ^[0-9]+$ ]]; then
@@ -171,6 +212,29 @@ _configIsPlaceholder() {
 _configProblem() {
     configProblem="$1"
     log_error "$1"
+}
+
+# The local destination must be positively identified, so an empty
+# mount-point directory or another disk can never receive the copy: by its
+# filesystem UUID, or by its mount source for a filesystem without one (a
+# mergerFS pool).
+_configValidateLocal() {
+    if _configIsPlaceholder "$localMount" || [[ "$localMount" != /?* ]]; then
+        _configProblem "localDestination.mount is not configured: '$localMount'"
+        return 1
+    fi
+    if [[ -z "$localUuid" && -z "$localSource" ]]; then
+        _configProblem "localDestination.uuid (or .source for a filesystem without a UUID) is not configured"
+        return 1
+    fi
+    if [[ -n "$localUuid" ]] && _configIsPlaceholder "$localUuid"; then
+        _configProblem "localDestination.uuid is not configured: '$localUuid'"
+        return 1
+    fi
+    if [[ -n "$localSource" ]] && _configIsPlaceholder "$localSource"; then
+        _configProblem "localDestination.source is not configured: '$localSource'"
+        return 1
+    fi
 }
 
 ## manifest

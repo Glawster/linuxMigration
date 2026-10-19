@@ -2,7 +2,7 @@
 
 - Requirement: [001 raid-pc storage migration](../features/001-raidMigration.md)
 - Role: implement and test
-- Decisions: [ADR 001](../../adr/001-raidMigrationSafety.md)
+- Decisions: [ADR 001](../../adr/001-raidMigrationSafety.md), [ADR 002](../../adr/002-localMigrationDestination.md), [ADR 003](../../adr/003-migrateOnRaidPc.md)
 
 ## Assignment
 
@@ -20,6 +20,10 @@ Satisfy every acceptance criterion in the requirement.
   `--yes-delete`.
 - Keep mappings in configuration. Do not assume raid-pc destination paths or
   the number of raid-pc disks.
+- Local destinations follow the same safety model and must be positively
+  identified by filesystem UUID, or by mount source for a filesystem without
+  one (the raid-pc mergerFS pool); never copy into an unmounted mount point.
+- Never provision disks or filesystems.
 - Treat COPY VERIFIED and SAFE TO REMOVE as distinct. SAFE needs a full
   verification of the current source and a passing, configurable raid-pc
   protection check.

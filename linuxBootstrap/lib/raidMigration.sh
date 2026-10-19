@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# migrateToRaid workflow: copy andy-pc storage to raid-pc, verify it
-# independently, record the result, and remove source data only when
-# explicitly requested and proven safe. Not a bootstrap module; sourced by
-# migrateToRaid.sh.
+# migrateToRaid workflow: copy andy-pc storage to raid-pc (or to a local
+# destination disk on the machine running it: /mnt/media on andy-pc, or the
+# /mnt/storage pool for a disk attached to raid-pc), verify it independently,
+# record the result, and remove source data only when explicitly requested and
+# proven safe. Not a bootstrap module; sourced by migrateToRaid.sh.
 #
 #   COPY -> VERIFY -> RECORD -> (explicit, separate) REMOVE SOURCE
 
@@ -27,6 +28,7 @@ verifyLevel="quick"
 workDir=""
 yesDelete=0
 _activeName=""
+declare -gA _checkVerdicts=()
 
 raidMigrationMain() {
     local status=0
@@ -123,9 +125,10 @@ argsUsage() {
     cat <<'EOF'
 Usage: migrateToRaid [--all | --source NAME ... | --type TYPE ...] [options]
 
-Copy andy-pc storage to raid-pc, verify it, and record the result.
-Preview only unless --confirm is given. Source data is never removed
-unless --remove-source is requested separately.
+Copy andy-pc storage to raid-pc, or to the local destination on this machine
+(localDestination: /mnt/media on andy-pc, /mnt/storage on raid-pc) for
+mappings with "target": "local", verify it, and record the result. Preview only unless --confirm is given.
+Source data is never removed unless --remove-source is requested separately.
 
 Selection:
   --all                 Every enabled mapping
@@ -157,15 +160,17 @@ EOF
 
 # Reports whether a mapping's disk is safe to remove. COPY VERIFIED requires
 # a full checksum verification of the source that is mounted now, with no
-# change since. SAFE TO REMOVE additionally requires raid-pc protection.
+# change since. SAFE TO REMOVE additionally requires the protection check of
+# the mapping's destination (raid-pc parity, or the local destination's).
 checkMapping() {
     local name="$1" source="${mapSource[$1]}" dest="${mapDest[$1]}" prefix="$workDir/$1.check"
     local removed copyVerified=1
     checkReasons=()
     _say ""
     _say "${mapLabel[$name]} ($name)"
+    destinationSelect "$name"
     _sayField "Source:" "$source"
-    _sayField "Destination:" "$remoteTarget:$dest"
+    _sayField "Destination:" "$(destinationDescribe "$dest")"
     stateLoad "$name"
     removed="$(stateGet sourceRemoved no)"
 
@@ -187,7 +192,7 @@ checkMapping() {
         _checkDestination "$name" "$prefix" || copyVerified=0
     fi
     if protectionCheck; then
-        _checkResult ok "$protectionName is established and in sync"
+        _checkResult ok "$protectionDetail"
     else
         _checkResult fail "$protectionProblem"
     fi
@@ -198,9 +203,13 @@ checkMapping() {
     else
         _say "COPY NOT VERIFIED"
     fi
+    # A SAFE verdict always states its basis: verified protection, or a
+    # destination deliberately accepted as the single authoritative copy.
     if ((copyVerified == 1)) && [[ "$protectionResult" == ok ]]; then
+        _say "$protectionVerdict"
         _say "SAFE TO REMOVE $(_checkSubject "$name")"
-        stateSave "$name" lastCheck="$(date -Is)" lastCheckResult=safe
+        _checkVerdicts[$name]="$protectionVerdict"
+        stateSave "$name" lastCheck="$(date -Is)" lastCheckResult=safe lastCheckBasis="$protectionBasis"
         return 0
     fi
     _say "NOT SAFE TO REMOVE $(_checkSubject "$name")"
@@ -274,6 +283,9 @@ _checkDisk() {
     _say "Disk $mount (mappings: ${mappings[*]})"
     if ((${#reasons[@]} == 0)); then
         _say "SAFE TO REMOVE DISK"
+        for name in "${mappings[@]}"; do
+            _say "  - $name: ${_checkVerdicts[$name]}"
+        done
         return 0
     fi
     _say "NOT SAFE TO REMOVE DISK"
@@ -297,16 +309,16 @@ _checkDestination() {
         _checkResult fail "$configProblem"
         return 1
     fi
-    if ! remoteProbe "$dest"; then
-        _checkResult fail "raid-pc is not reachable over SSH: $probeError"
+    if ! destinationProbe "$dest"; then
+        _checkResult fail "$(_destinationUnreachable)"
         return 1
     fi
-    if [[ "$probeMounted" != yes ]]; then
-        _checkResult fail "raid-pc storage is not mounted at $destinationMount"
+    if ! destinationMountCheck; then
+        _checkResult fail "$destinationProblem"
         return 1
     fi
-    if ! remoteManifest "$dest" "$prefix.dest"; then
-        _checkResult fail "could not list the destination on raid-pc"
+    if ! destinationManifest "$dest" "$prefix.dest"; then
+        _checkResult fail "could not list the destination on $destHost"
         return 1
     fi
     manifestCompare "$stateDir/$name.manifest" "$prefix.dest" "$prefix.destCompare"
@@ -417,14 +429,15 @@ mappingProcess() {
     _activeName="$name"
     stateLoad "$name"
     _say ""
+    destinationSelect "$name"
     _say "${mapLabel[$name]} ($name, ${mapType[$name]})"
     _sayField "Source:" "$source"
-    _sayField "Destination:" "$remoteTarget:$dest"
+    _sayField "Destination:" "$(destinationDescribe "$dest")"
     configValidateOperational "$name" || { _mappingFail "$name" "$configProblem"; return 1; }
     sourceInspect "$name" || { _mappingFail "$name" "$sourceProblem"; return 1; }
     identityCheck "$name" || { _mappingFail "$name" "$sourceProblem"; return 1; }
     _sayField "Filesystem:" "$srcFsType UUID $srcUuid ($srcDevice)"
-    _mappingPreflightRemote "$name" || return 1
+    _mappingPreflightDestination "$name" || return 1
     _mappingScan "$name" "$prefix" || return 1
     _mappingReport "$name" "$prefix"
     if ((cmpUnsupported > 0)); then
@@ -448,7 +461,7 @@ mappingProcess() {
         return 0
     fi
     stateSave "$name" sourceUuid="$srcUuid" sourceMount="${mapMount[$name]}" sourcePath="$source" sourceFsType="$srcFsType" \
-        sourceDevice="$srcDevice" destination="$remoteTarget:$dest" copyStatus=running \
+        sourceDevice="$srcDevice" destination="$destRsyncPrefix$dest" destinationKind="$destKind" copyStatus=running \
         copyStarted="$(date -Is)" copyCompleted="" verifyStatus=pending pid="$$" lastError=""
     stateHistoryAppend "$name" copyStarted "missing=$cmpMissing conflicts=$cmpConflicts"
     _mappingCopy "$name" "$prefix" || return 1
@@ -463,8 +476,8 @@ _mappingCopy() {
             _mappingFail "$name" "source is still changing: $cmpMissing new entries after $maxCopyPasses copy passes" copyStatus=partial
             return 1
         fi
-        if [[ "$probeDestExists" != yes ]] && ! remoteMakeDirectory "$dest"; then
-            _mappingFail "$name" "could not create destination on raid-pc: $dest" copyStatus=failed
+        if [[ "$probeDestExists" != yes ]] && ! destinationMakeDirectory "$dest"; then
+            _mappingFail "$name" "could not create destination on $destHost: $dest" copyStatus=failed
             return 1
         fi
         probeDestExists=yes
@@ -509,30 +522,25 @@ _mappingFail() {
     return 1
 }
 
-_mappingPreflightRemote() {
+# Inspects the selected destination before anything is copied: reachable (for
+# raid-pc), tools present, and the expected filesystem genuinely mounted.
+_mappingPreflightDestination() {
     local name="$1" dest="${mapDest[$1]}"
-    if ! remoteProbe "$dest"; then
-        _sayField "Reachable:" "no"
-        _mappingFail "$name" "raid-pc is not reachable over SSH as $remoteTarget: $probeError"
+    if ! destinationProbe "$dest"; then
+        [[ "$destKind" == local ]] || _sayField "Reachable:" "no"
+        _mappingFail "$name" "$(_destinationUnreachable)"
         return 1
     fi
-    [[ -n "$probeRsync" ]] || { _mappingFail "$name" "rsync is not installed on raid-pc"; return 1; }
-    [[ "$probeChecksum" == yes ]] || { _mappingFail "$name" "$checksumCommand is not available on raid-pc"; return 1; }
-    _sayField "Reachable:" "yes ($probeRsync)"
-    if [[ "$probeMounted" != yes ]]; then
-        _mappingFail "$name" "raid-pc storage is not mounted at $destinationMount"
+    [[ -n "$probeRsync" ]] || { _mappingFail "$name" "rsync is not installed on $destHost"; return 1; }
+    [[ "$probeChecksum" == yes ]] || { _mappingFail "$name" "$checksumCommand is not available on $destHost"; return 1; }
+    [[ "$destKind" == local ]] || _sayField "Reachable:" "yes ($probeRsync)"
+    if ! destinationMountCheck; then
+        _mappingFail "$name" "$destinationProblem"
         return 1
     fi
-    if [[ -n "$destinationFsType" && "$probeMountFsType" != "$destinationFsType" ]]; then
-        _mappingFail "$name" "raid-pc $destinationMount is $probeMountFsType, expected $destinationFsType"
-        return 1
-    fi
-    if [[ "${probeFsTarget%"${probeFsTarget##*[![:space:]]}"}" != "$destinationMount" ]]; then
-        _mappingFail "$name" "destination would be created outside $destinationMount (on ${probeFsTarget:-unknown}); refusing"
-        return 1
-    fi
+    [[ "$destKind" == local ]] && _sayField "Mounted:" "$destMount ($probeMountFsType $(_destinationIdentity))"
     if [[ "$probeWritable" != yes ]]; then
-        _mappingFail "$name" "destination is not writable on raid-pc: $probeAncestor"
+        _mappingFail "$name" "destination is not writable on $destHost: $probeAncestor"
         return 1
     fi
     if [[ "$probeDestExists" != yes ]]; then
@@ -543,8 +551,8 @@ _mappingPreflightRemote() {
 _mappingReport() {
     local name="$1" prefix="$2"
     _sayField "Size:" "$(_bytesFormat "$cmpBytes") in $cmpFiles files, $cmpDirs directories"
-    _sayField "Available:" "$(_bytesFormat "${probeAvail:-0}") on raid-pc"
-    _sayField "On raid-pc:" "$cmpIdentical entries already identical (skipped)"
+    _sayField "Available:" "$(_bytesFormat "${probeAvail:-0}") on $destPlace"
+    _sayField "On $destPlace:" "$cmpIdentical entries already identical (skipped)"
     _sayField "To copy:" "$cmpMissingFiles files, $cmpMissingDirs directories ($(_bytesFormat "$cmpMissingBytes"))"
     _sayField "Conflicts:" "$cmpConflicts (existing destination files that differ; never overwritten)"
     if ((cmpConflicts > 0)); then
@@ -575,8 +583,8 @@ _mappingScan() {
         _mappingFail "$name" "could not read the complete source tree: $(tail -n 1 "$prefix.source.err")"
         return 1
     fi
-    if ! remoteManifest "${mapDest[$name]}" "$prefix.dest"; then
-        _mappingFail "$name" "could not list the destination on raid-pc: $(tail -n 1 "$prefix.dest.err")"
+    if ! destinationManifest "${mapDest[$name]}" "$prefix.dest"; then
+        _mappingFail "$name" "could not list the destination on $destHost: $(tail -n 1 "$prefix.dest.err")"
         return 1
     fi
     manifestCompare "$prefix.source" "$prefix.dest" "$prefix"
@@ -586,11 +594,11 @@ _mappingSpaceCheck() {
     local name="$1" required
     required=$((cmpMissingBytes + minFreeBytesAfter))
     if [[ ! "$probeAvail" =~ ^[0-9]+$ ]]; then
-        _mappingFail "$name" "could not determine free space on raid-pc"
+        _mappingFail "$name" "could not determine free space on $destPlace"
         return 1
     fi
     if ((required > probeAvail)); then
-        _mappingFail "$name" "insufficient space on raid-pc: need $(_bytesFormat "$cmpMissingBytes") plus $(_bytesFormat "$minFreeBytesAfter") reserve, $(_bytesFormat "$probeAvail") available"
+        _mappingFail "$name" "insufficient space on $destPlace: need $(_bytesFormat "$cmpMissingBytes") plus $(_bytesFormat "$minFreeBytesAfter") reserve, $(_bytesFormat "$probeAvail") available"
         return 1
     fi
 }
@@ -599,7 +607,7 @@ _mappingVerify() {
     local name="$1" prefix="$2" source="${mapSource[$1]}" dest="${mapDest[$1]}"
     stateSave "$name" verifyStatus=running verifyStarted="$(date -Is)" verifyLevel="$verifyLevel" pid="$$"
     if ((cmpMissing > 0 || cmpConflicts > 0)); then
-        _mappingFail "$name" "verification failed: $cmpMissing entries missing and $cmpConflicts differing on raid-pc" verifyStatus=failed
+        _mappingFail "$name" "verification failed: $cmpMissing entries missing and $cmpConflicts differing on $destPlace" verifyStatus=failed
         return 1
     fi
     _say "  Quick check: $cmpIdentical entries match (type, size, modification time)"
@@ -874,8 +882,8 @@ _mountField() {
 statusShow() {
     local name copy verify removed size check pid migrated=0 remaining=0 unknown=0 used
     _say ""
-    _say "$(printf '%-12s %-9s %-12s %-14s %-9s %-14s %10s' Source Type Copy Verify Source 'Last check' Size)"
-    _say "$(printf '%.0s-' {1..86})"
+    _say "$(printf '%-16s %-9s %-12s %-14s %-9s %-14s %10s' Source Type Copy Verify Source 'Last check' Size)"
+    _say "$(printf '%.0s-' {1..90})"
     for name in "${selectedNames[@]}"; do
         stateLoad "$name"
         copy="$(stateGet copyStatus 'not run')"
@@ -891,7 +899,7 @@ statusShow() {
             *) removed=retained ;;
         esac
         case "$(stateGet lastCheckResult)" in
-            safe) check=safe ;;
+            safe) [[ "$(stateGet lastCheckBasis)" == singleCopy ]] && check="safe(1 copy)" || check=safe ;;
             copyVerified) check="copy verified" ;;
             notSafe) check="not safe" ;;
             *) check=- ;;
@@ -909,17 +917,21 @@ statusShow() {
         fi
         [[ -z "$size" && "${mapEnabled[$name]}" == true ]] && unknown=$((unknown + 1))
         [[ "${mapEnabled[$name]}" == true ]] || copy="$copy*"
-        _say "$(printf '%-12s %-9s %-12s %-14s %-9s %-14s %10s' "$name" "${mapType[$name]}" "$copy" \
+        _say "$(printf '%-16s %-9s %-12s %-14s %-9s %-14s %10s' "$name" "${mapType[$name]}" "$copy" \
             "$verify" "$removed" "$check" "$([[ -n "$size" ]] && _bytesFormat "$size" || printf '?')")"
     done
     _say ""
     _say "Migrated:  $(_bytesFormat "$migrated") verified"
     _say "Remaining: $(_bytesFormat "$remaining") used on unverified sources$( ((unknown > 0)) && printf ' (+%s not mounted)' "$unknown")"
     _say "* disabled in configuration"
+    _say "safe(1 copy): the destination is accepted as the single authoritative copy; it is not redundant"
     if [[ -f "$stateDir/protection.state" ]]; then
         _say "Protection: $(sed -n 's/^result=//p' "$stateDir/protection.state") (checked $(sed -n 's/^checked=//p' "$stateDir/protection.state"))"
     else
         _say "Protection: not checked yet (run --check)"
+    fi
+    if [[ -f "$stateDir/protection-local.state" ]]; then
+        _say "Local protection: $(sed -n 's/^result=//p' "$stateDir/protection-local.state") (checked $(sed -n 's/^checked=//p' "$stateDir/protection-local.state"))"
     fi
 }
 
@@ -968,6 +980,22 @@ _argumentRequireValue() {
 
 _bytesFormat() {
     numfmt --to=iec-i --suffix=B --format='%.1f' "${1:-0}" 2>/dev/null || printf '%s bytes' "$1"
+}
+
+_destinationIdentity() {
+    if [[ -n "$probeMountUuid" ]]; then
+        printf 'UUID %s' "$probeMountUuid"
+    else
+        printf 'from %s' "$probeMountSource"
+    fi
+}
+
+_destinationUnreachable() {
+    if [[ "$destKind" == local ]]; then
+        printf 'could not inspect the local destination %s: %s' "$destMount" "$probeError"
+    else
+        printf 'raid-pc is not reachable over SSH as %s: %s' "$remoteTarget" "$probeError"
+    fi
 }
 
 _listAdd() {

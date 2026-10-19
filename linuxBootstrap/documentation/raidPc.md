@@ -71,8 +71,26 @@ The design target is mergerFS for a single data namespace with SnapRAID for
 snapshot parity. This suits predominantly static media and allows disks to be
 added progressively without rebuilding a conventional striped RAID array.
 
-The initial five 4 TB HDDs are expected to become four data disks plus one
-parity disk, subject to review during provisioning:
+The five 4 TB HDDs become four data disks plus one parity disk. All five
+passed extended SMART self-tests before assignment:
+
+| Role | Disk | Notes |
+| --- | --- | --- |
+| `parity01` | Seagate IronWolf `ST4000VN006` | CMR, young; preferred for parity because SnapRAID sync rewrites parity across the whole disk |
+| `data01`–`data04` | three WD Red `WD40EFAX` and one Seagate BarraCuda `ST4000DM004` | SMR; mostly static media, written once, read often |
+
+Roles are assigned by serial number, never by `/dev/sdX`. Confirm them on
+raid-pc with `lsblk -o NAME,MODEL,SERIAL,SIZE` before provisioning:
+
+| Role | Model | Serial | Recording |
+| --- | --- | --- | --- |
+| `parity01` | `ST4000VN006-3CW104` | `WW662Z03` | CMR |
+| `data01` | `WD40EFAX-68JH4N0` | `WD-WX22D10FNUEA` | SMR |
+| `data02` | `WD40EFAX-68JH4N0` | `WD-WX62D105VVJ9` | SMR |
+| `data03` | `WD40EFAX-68JH4N0` | `WD-WX22D10FNVCU` | SMR |
+| `data04` | `ST4000DM004-2CV104` | `ZFN4TS8H` | SMR |
+
+The layout:
 
 ```text
 /mnt/disks/data01
@@ -88,8 +106,9 @@ This yields approximately 16 TB of raw data-disk capacity plus one 4 TB parity
 disk before filesystem overhead. SnapRAID parity is snapshot parity and must
 not be represented as real-time RAID protection.
 
-The exact serial-to-role mapping must not be committed until the physical disks
-have been inventoried on `raid-pc`.
+Provisioning (partitioning, filesystems, mergerFS and SnapRAID configuration)
+is a separate, explicitly confirmed workflow. `migrateToRaid` does not
+provision any disk.
 
 ## Network service
 
@@ -160,8 +179,15 @@ catalogue and organisation workflows can span local and remote media. Migration
 must be performed by complete media folders, not by splitting one title across
 multiple stores.
 
-Copying, verification and source removal are performed by `migrateToRaid`; see
-the [migration guide](migrateToRaid.md).
+raid-pc is the bulk destination for Movies, TV and archive media. Personal
+Pictures and personal/home Video do not move to raid-pc: they stay on andy-pc
+on the internal `/mnt/media` disk.
+
+Copying, verification and source removal to both are performed by
+`migrateToRaid`; see the [migration guide](migrateToRaid.md). A disk attached
+directly to raid-pc, such as the old 2 TB video1 disk on USB at
+`/mnt/oldVideo1`, is copied into the pool by running `migrateToRaid` on
+raid-pc itself ([Running on raid-pc](migrateToRaid.md#running-on-raid-pc)).
 
 ## Maintenance
 

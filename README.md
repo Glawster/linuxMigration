@@ -43,7 +43,7 @@ Project records:
 
 | Command | Purpose |
 | --- | --- |
-| `migrateToRaid` | Copy, verify and record migration of andy-pc disks to raid-pc ([guide](linuxBootstrap/documentation/migrateToRaid.md)) |
+| `migrateToRaid` | Copy, verify and record migration of andy-pc disks to raid-pc, or to the local `/mnt/media` disk ([guide](linuxBootstrap/documentation/migrateToRaid.md)) |
 | `linuxBootstrap/bootstrap.sh` | Preview or apply a machine profile |
 | `omv` | Launch organiseMyVideo |
 

@@ -6,10 +6,11 @@ InProgress
 
 ## Outcome
 
-As the owner of andy-pc, I need to migrate my media and file storage to the
-raid-pc storage pool, one source at a time, with independently verified copies
-and an unambiguous answer on whether each old disk can be removed. This lets
-disks be retired without risking irreplaceable multi-terabyte data.
+As the owner of andy-pc, I need to migrate my bulk media to the raid-pc
+storage pool, and my personal pictures and video to a permanent internal disk
+on andy-pc (`/mnt/media`), one source at a time, with independently verified
+copies and an unambiguous answer on whether each old disk can be removed. This
+lets disks be retired without risking irreplaceable multi-terabyte data.
 
 Priorities, in order: safety, auditability, resumability, speed, convenience.
 
@@ -19,12 +20,25 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
   `/mnt/movie1`, `/mnt/movie2`, `/mnt/video1`–`/mnt/video3`, `/mnt/myVideo`,
   `/mnt/music`, `/mnt/myPictures` (and `/mnt/home`, `/mnt/games1`,
   `/mnt/games2`).
-- raid-pc is the new central storage server: a mergerFS pool of 4 TB data disks
-  that grows over time, with SnapRAID parity added once more disks arrive via an
-  HBA. During the initial phase there may be no parity at all.
+- raid-pc is the bulk Movies/TV/archive store: a mergerFS pool over four 4 TB
+  SMR data disks with SnapRAID parity on a fifth (a CMR Seagate IronWolf
+  `ST4000VN006`). All five passed extended SMART self-tests. Parity is a
+  snapshot, so migrated data is protected only after a sync.
 - The raid-pc pool has no per-disk numbering: sources merge into shared folders
-  such as `<pool>/Movies` (movie1, movie2) and `<pool>/TV` (video1–video3 and
-  `/mnt/myVideo/TV`). Final paths are not yet confirmed.
+  such as `<pool>/Movies` (movie1, movie2, `/mnt/myPictures/Movies`) and
+  `<pool>/TV` (video2, video3, `/mnt/myVideo/TV`). Final paths are not yet
+  confirmed.
+- `/mnt/media` is a new internal 4 TB disk on andy-pc (Seagate SkyHawk
+  `ST4000VX016`, serial `ZW635K7Z`, passed extended SMART). It is the permanent
+  local home for personal Pictures (`/mnt/media/Pictures`, the rest of
+  `/mnt/myPictures`) and personal/home Video (`/mnt/media/Video`, the rest of
+  `/mnt/myVideo`). It replaces the internal 2 TB `/mnt/video1` disk;
+  `/mnt/video1` is not kept as a mount point.
+- The old 2 TB video1 disk holds only TV. It is attached by USB to raid-pc at
+  `/mnt/oldVideo1`, and its `TV` folder is copied into the raid-pc pool's TV
+  folder (`/mnt/storage/TV`) by running the tool on raid-pc. The USB `myPictures` and `myVideo` disks are retired
+  once their content is verified in the right destinations.
+- `/mnt/myVideo/encrypted` is handled separately and is not migrated.
 - Transfers run for many hours over the LAN and may be interrupted. Some sources
   are written to while in use (for example `/mnt/video2` by tv-pc).
 - The tool is implemented in `linuxBootstrap/`
@@ -32,12 +46,17 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 
 ## Scope
 
-- A Bash command, `migrateToRaid`, run on andy-pc.
+- A Bash command, `migrateToRaid`, run on andy-pc, and on raid-pc for disks
+  attached there.
 - JSON configuration of mappings, separate from the implementation. Each
   mapping has a name, label and type, can be enabled individually, may share a
   destination with other mappings, and may migrate a folder inside a mounted
   disk.
-- A preview by default, and copying with rsync over SSH only with `--confirm`.
+- Destinations on raid-pc over SSH (the default) and on one local destination
+  on the machine running the tool (`/mnt/media` on andy-pc, the `/mnt/storage`
+  pool on raid-pc), selected per mapping.
+- A preview by default, and copying with rsync (over SSH for raid-pc) only
+  with `--confirm`.
 - Selection by `--all`, `--source NAME` and `--type TYPE`.
 - Pre-flight checks, classification of destination collisions, resumable
   transfer, separate quick or full verification, final source-stability
@@ -48,7 +67,9 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 
 ## Out of scope
 
-- Deciding or provisioning the raid-pc storage layout, mergerFS or SnapRAID.
+- Deciding or provisioning the raid-pc storage layout, mergerFS or SnapRAID,
+  or partitioning, formatting or mounting the `/mnt/media` disk.
+- Migrating `/mnt/myVideo/encrypted`.
 - Deduplicating media or reorganising library folder structures.
 - Two-way synchronisation, or updating destination files that differ from the
   source.
@@ -57,8 +78,9 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 ## Acceptance criteria
 
 1. Given the template configuration, when it is loaded, then every mapping is
-   disabled, destinations are placeholders, and placeholders are refused before
-   any network or data operation.
+   disabled, raid-pc destinations and the local destination UUID are
+   placeholders, and placeholders are refused before any network or data
+   operation.
 2. Given no `--confirm`, when a mapping is selected, then the source,
    destination, reachability, size, available space, entries to copy,
    identical entries, conflicts and the rsync command are shown, and no data or
@@ -87,9 +109,12 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
     operation runs, then it is refused because the recorded UUID and mount
     point do not match.
 11. Given a full verification of the current source, when `--check` runs, then
-    it reports COPY VERIFIED, and SAFE TO REMOVE only if the configured raid-pc
-    protection check also passes. Otherwise it reports NOT SAFE with reasons.
-    Quick verification is never SAFE.
+    it reports COPY VERIFIED, and SAFE TO REMOVE only if the protection check
+    of that mapping's destination also passes (the raid-pc check, or the local
+    destination's check unless the owner has explicitly accepted it as
+    single-copy storage with `"required": false`, as the template does for
+    `/mnt/media`). Otherwise it reports NOT SAFE with reasons. Quick verification
+    is never SAFE.
 12. Given mappings that cover parts of a disk, when `--check` runs, then the
     disk is SAFE only when every mapping on it is SAFE and every top-level
     entry belongs to a mapping. Overlapping mappings are rejected.
@@ -103,12 +128,46 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 15. Given filenames with spaces, `&`, `()`, apostrophes, wildcards, Unicode,
     tabs or newlines, when they are migrated, verified and removed, then they
     are handled exactly.
+16. Given a mapping with a local destination, when it is previewed, migrated,
+    verified, checked or removed, then criteria 2 and 5–15 apply unchanged and
+    no SSH connection is made.
+17. Given a local destination mount point with no filesystem mounted, a
+    filesystem whose UUID or type differs from the configuration, a
+    destination that resolves outside that filesystem, a destination on the
+    source's own filesystem, or a destination overlapping its source path,
+    when a migration or check runs, then it is refused and nothing is copied
+    or recorded as verified.
+18. Given one disk whose mappings go to raid-pc and to the local destination,
+    when `--check` runs, then each mapping is judged against its own
+    destination and the disk is SAFE only when all of them are.
+19. Given the template configuration, then `/mnt/myPictures/Movies` maps to
+    raid-pc Movies, the rest of `/mnt/myPictures` to `/mnt/media/Pictures`,
+    `/mnt/myVideo/TV` to raid-pc TV, the rest of `/mnt/myVideo` except `TV` and
+    `encrypted` to `/mnt/media/Video`, no mapping uses `/mnt/video1` or the
+    old video1 disk, and `/mnt/media` is accepted as single-copy storage.
+20. Given a SAFE verdict, when `--check` or `--status` reports it, then its
+    basis is stated: verified protection (for example
+    `SNAPRAID PARITY VERIFIED`) or
+    `DESTINATION ACCEPTED AS AUTHORITATIVE (single copy, not redundant)`, and
+    `--status` shows single-copy SAFE as `safe(1 copy)`.
+21. Given the raid-pc template configuration, then its only mapping (disabled)
+    copies `/mnt/oldVideo1/TV`, identified by the old disk's UUID, to the local
+    pool at `/mnt/storage/TV`; the pool is identified by `fuse.mergerfs` and a
+    placeholder mount source, and SAFE needs the SnapRAID check.
+22. Given a local destination without a filesystem UUID, when it is identified
+    by its mount source, then a migration or check is refused if the source
+    is missing or a placeholder, the mounted source differs, nothing is
+    mounted, or it is the source's own device; otherwise criteria 16 and 17
+    apply unchanged.
 
 ## Dependencies and decisions
 
 - [ADR 001: Safety model for migrating storage to raid-pc](../../adr/001-raidMigrationSafety.md)
+- [ADR 002: Local destinations alongside raid-pc](../../adr/002-localMigrationDestination.md)
 - The raid-pc storage layout and SnapRAID parity are prerequisites for real
-  migration, not for this implementation.
+  migration to raid-pc, and a mounted `/mnt/media` with its UUID configured is
+  a prerequisite for local migration; neither is a prerequisite for this
+  implementation.
 
 ## Verification
 
@@ -116,7 +175,8 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
   criterion, using SSH, mount and free-space doubles plus real rsync in
   temporary directories. It is also run by `linuxBootstrap/tests/runTests.sh`.
 - Review the preview against real mounts with real mappings before the first
-  confirmed run.
+  confirmed run, including a local mapping with `/mnt/media` unmounted to
+  confirm the refusal.
 
 ## Change history
 
@@ -127,3 +187,13 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 - 2026-10-18: moved from `linuxBootstrap/project/` (LB-001) to the repository
   `project/` for OMP 0.9; it is a linuxMigration requirement implemented in
   linuxBootstrap.
+- 2026-10-19: refined for the andy-pc local-media plan: a local destination
+  (`/mnt/media`) alongside raid-pc, `myPictures` and `myVideo` split between
+  raid-pc and `/mnt/media`, `encrypted` excluded, `/mnt/video1` replaced by
+  `/mnt/media`, and the confirmed raid-pc disk roles (criteria 16–19).
+- 2026-10-19: the old video1 disk moves to raid-pc by USB and its `TV` goes to
+  the pool, migrated by running the tool on raid-pc; local destinations may be
+  identified by mount source (criteria 21–22, ADR 003).
+- 2026-10-19: `/mnt/media` accepted as the single authoritative copy
+  (`"required": false`), and every SAFE verdict states its basis
+  (criterion 20).
