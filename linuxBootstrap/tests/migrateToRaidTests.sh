@@ -773,25 +773,22 @@ testMigrateToRaidMixedDestinations() {
 testMigrateToRaidTemplateMappings() {
     local template="$projectDir/configs/migrateToRaid/config.json"
     _mtrCheck 'template keeps myPictures remainder local' test "$(jq -r '.mappings[] | select(.name == "myPictures") | [.target, .destination, (.excludes | join(","))] | join(" ")' "$template")" = 'local /mnt/media/Pictures Movies'
-    _mtrCheck 'template sends myPictures Movies to raid-pc' test "$(jq -r '.mappings[] | select(.source == "/mnt/myPictures/Movies") | [(.target // "remote"), .destination] | join(" ")' "$template")" = 'remote <RAID_STORAGE_MOUNT>/Movies'
-    _mtrCheck 'template keeps myVideo remainder local without TV or encrypted' test "$(jq -r '.mappings[] | select(.name == "myVideo") | [.target, .destination, (.excludes | join(","))] | join(" ")' "$template")" = 'local /mnt/media/Video TV,encrypted'
-    _mtrCheck 'template sends myVideo TV to raid-pc' test "$(jq -r '.mappings[] | select(.source == "/mnt/myVideo/TV") | [(.target // "remote"), .destination] | join(" ")' "$template")" = 'remote <RAID_STORAGE_MOUNT>/TV'
+    _mtrCheck 'template sends myPictures Movies to raid-pc' test "$(jq -r '.mappings[] | select(.source == "/mnt/myPictures/Movies") | [(.target // "remote"), .destination] | join(" ")' "$template")" = 'remote /mnt/storage/Movies'
+    _mtrCheck 'template keeps myVideo remainder local without TV or encrypted' test "$(jq -r '.mappings[] | select(.name == "myVideo") | [.target, .destination, (.excludes | join(","))] | join(" ")' "$template")" = 'local /mnt/media/homeVideo TV,encrypted'
+    _mtrCheck 'template sends myVideo TV to raid-pc' test "$(jq -r '.mappings[] | select(.source == "/mnt/myVideo/TV") | [(.target // "remote"), .destination] | join(" ")' "$template")" = 'remote /mnt/storage/TV'
     _mtrCheck 'template has no permanent /mnt/video1 source' test -z "$(jq -r '.mappings[] | select(.source == "/mnt/video1" or .destination == "/mnt/video1")' "$template")"
-    _mtrCheck 'andy-pc template leaves the old video1 disk to raid-pc' test -z "$(jq -r '.mappings[] | select(.name == "video1" or (.source | startswith("/mnt/oldVideo1")))' "$template")"
+    _mtrCheck 'template has no old video1 disk mapping' test -z "$(jq -r '.mappings[] | select(.name == "video1" or (.source | startswith("/mnt/oldVideo1")))' "$template")"
+    _mtrCheck 'template sends movie2 Movies folder to raid-pc' test "$(jq -r '.mappings[] | select(.name == "movie2") | [.source, .mountPoint, .destination] | join(" ")' "$template")" = '/mnt/movie2/Movies /mnt/movie2 /mnt/storage/Movies'
+    _mtrCheck 'template sends video3 TV folder to raid-pc' test "$(jq -r '.mappings[] | select(.name == "video3") | [.source, .mountPoint, .destination] | join(" ")' "$template")" = '/mnt/video3/TV /mnt/video3 /mnt/storage/TV'
+    _mtrCheck 'template leaves local movie1 and video2 disks alone' test -z "$(jq -r '.mappings[] | select(.source | test("^/mnt/(movie1|video2)(/|$)"))' "$template")"
     _mtrCheck 'template local destination is /mnt/media identified by UUID' test "$(jq -r '.localDestination | [.mount, .uuid] | join(" ")' "$template")" = '/mnt/media <MEDIA_FS_UUID>'
     _mtrCheck 'template accepts /mnt/media as single-copy storage' test "$(jq -r '.localDestination.protection.required' "$template")" = false
-
-    template="$projectDir/configs/migrateToRaid/raidPcConfig.json"
-    _mtrCheck 'raid-pc template copies the old video1 TV folder into the pool' test "$(jq -r '.mappings[] | select(.name == "video1") | [.source, .mountPoint, .target, .destination, .enabled] | join(" ")' "$template")" = '/mnt/oldVideo1/TV /mnt/oldVideo1 local /mnt/storage/TV false'
-    _mtrCheck 'raid-pc template identifies the pool by mount source' test "$(jq -r '.localDestination | [.mount, .fsType, .source, (.uuid // "-")] | join(" ")' "$template")" = '/mnt/storage fuse.mergerfs <STORAGE_MOUNT_SOURCE> -'
-    _mtrCheck 'raid-pc template requires SnapRAID protection' test "$(jq -r '.localDestination.protection | [.name, .command, (.required // "-")] | join(" ")' "$template")" = 'SnapRAID parity <RAID_PROTECTION_CHECK_COMMAND> -'
 }
 
-## run on raid-pc
+## local destination identified by mount source
 
-# Run on raid-pc: an old disk attached by USB is copied into the local
-# mergerFS pool, which has no filesystem UUID and is identified by its mount
-# source. SAFE needs SnapRAID protection, run locally.
+# A local mergerFS pool has no filesystem UUID and is identified by its mount
+# source. SAFE needs its configured protection, run locally.
 _mtrPoolSandbox() {
     _mtrSandbox
     mtrOld="$mtrBox/mnt/oldVideo1"
@@ -855,13 +852,6 @@ testMigrateToRaidPoolDestinationRefused() {
     sed -i 's/|data01:data02$/|\/dev\/sdg1/' "$mtrBox/mounts"
     _mtrRun --source video1 --confirm
     assertContains "$mtrOutput" 'is the source filesystem (/dev/sdg1)' 'pool on the source device is refused'
-
-    _mtrPoolSandbox
-    mtrConfig="$projectDir/configs/migrateToRaid/raidPcConfig.json"
-    _mtrRun --status
-    _mtrCheck 'raid-pc template parses' test "$mtrStatus" -eq 0
-    _mtrRun --all
-    assertContains "$mtrOutput" 'no enabled mappings match' 'raid-pc template enables nothing by default'
 }
 
 migrateToRaidTestsRun() {

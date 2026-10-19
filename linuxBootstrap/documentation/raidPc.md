@@ -184,10 +184,9 @@ Pictures and personal/home Video do not move to raid-pc: they stay on andy-pc
 on the internal `/mnt/media` disk.
 
 Copying, verification and source removal to both are performed by
-`migrateToRaid`; see the [migration guide](migrateToRaid.md). A disk attached
-directly to raid-pc, such as the old 2 TB video1 disk on USB at
-`/mnt/oldVideo1`, is copied into the pool by running `migrateToRaid` on
-raid-pc itself ([Running on raid-pc](migrateToRaid.md#running-on-raid-pc)).
+`migrateToRaid`, run on andy-pc; see the [migration guide](migrateToRaid.md).
+A disk attached directly to raid-pc, such as the old 2 TB video1 disk on USB at
+`/mnt/oldVideo1`, is copied into the pool by hand with rsync on raid-pc.
 
 ## Maintenance
 

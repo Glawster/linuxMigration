@@ -1,6 +1,6 @@
 # 003: Migrating disks attached to raid-pc
 
-- Status: Accepted
+- Status: Superseded by [ADR 004](004-migrateOnlyOnAndyPc.md)
 - Date: 2026-10-19
 - Requirement: [001 raid-pc storage migration](../requirements/features/001-raidMigration.md)
 - Related: [ADR 001](001-raidMigrationSafety.md), [ADR 002](002-localMigrationDestination.md)

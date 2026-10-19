@@ -28,16 +28,14 @@ configuration template, tests and the migrateToRaid guide, on branch
 ## Verification
 
 - [ ] Review and merge `feature/migrateToRaid`
-- [ ] Confirm the raid-pc storage layout and configure destinations
+- [x] Confirm the raid-pc storage layout and configure destinations
+      (`/mnt/storage`)
 - [ ] Configure the raid-pc protection check once SnapRAID parity is synced
 - [ ] Mount the SkyHawk at `/mnt/media` and set `localDestination.uuid`
       (protection is accepted as single-copy, `"required": false`)
 - [x] Attach the old video1 disk to raid-pc by USB at `/mnt/oldVideo1`
-      (UUID `9400247000245B8C`, written into `raidPcConfig.json`)
-- [ ] Provision the raid-pc pool at `/mnt/storage`, then on raid-pc check out
-      this branch, install `organiseMyProjects`, configure
-      `localDestination.source` and the SnapRAID check, and migrate `video1`
-      into `/mnt/storage/TV`
+- [ ] Copy `/mnt/oldVideo1/TV` into `/mnt/storage/TV` by hand with rsync on
+      raid-pc (outside `migrateToRaid`, ADR 004)
 - [ ] Manual acceptance: preview real mappings, then the first confirmed,
       fully verified migration
 

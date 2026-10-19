@@ -24,19 +24,23 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
   SMR data disks with SnapRAID parity on a fifth (a CMR Seagate IronWolf
   `ST4000VN006`). All five passed extended SMART self-tests. Parity is a
   snapshot, so migrated data is protected only after a sync.
-- The raid-pc pool has no per-disk numbering: sources merge into shared folders
-  such as `<pool>/Movies` (movie1, movie2, `/mnt/myPictures/Movies`) and
-  `<pool>/TV` (video2, video3, `/mnt/myVideo/TV`). Final paths are not yet
-  confirmed.
+- The raid-pc pool is mounted at `/mnt/storage` on raid-pc (NFS-mounted at
+  `/mnt/raid` on andy-pc) and has no per-disk numbering: sources merge into
+  shared folders, `/mnt/storage/Movies` (`/mnt/movie2/Movies`,
+  `/mnt/myPictures/Movies`) and `/mnt/storage/TV` (`/mnt/video3/TV`,
+  `/mnt/myVideo/TV`).
+- `/mnt/movie1` and `/mnt/video2` stay on andy-pc and are renamed to
+  `/mnt/movies` and `/mnt/video`; they are not migrated.
 - `/mnt/media` is a new internal 4 TB disk on andy-pc (Seagate SkyHawk
   `ST4000VX016`, serial `ZW635K7Z`, passed extended SMART). It is the permanent
   local home for personal Pictures (`/mnt/media/Pictures`, the rest of
-  `/mnt/myPictures`) and personal/home Video (`/mnt/media/Video`, the rest of
+  `/mnt/myPictures`) and personal/home Video (`/mnt/media/homeVideo`, the rest of
   `/mnt/myVideo`). It replaces the internal 2 TB `/mnt/video1` disk;
   `/mnt/video1` is not kept as a mount point.
 - The old 2 TB video1 disk holds only TV. It is attached by USB to raid-pc at
   `/mnt/oldVideo1`, and its `TV` folder is copied into the raid-pc pool's TV
-  folder (`/mnt/storage/TV`) by running the tool on raid-pc. The USB `myPictures` and `myVideo` disks are retired
+  folder (`/mnt/storage/TV`) by hand with rsync on raid-pc, outside this tool.
+  The USB `myPictures` and `myVideo` disks are retired
   once their content is verified in the right destinations.
 - `/mnt/myVideo/encrypted` is handled separately and is not migrated.
 - Transfers run for many hours over the LAN and may be interrupted. Some sources
@@ -46,15 +50,13 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 
 ## Scope
 
-- A Bash command, `migrateToRaid`, run on andy-pc, and on raid-pc for disks
-  attached there.
+- A Bash command, `migrateToRaid`, run on andy-pc.
 - JSON configuration of mappings, separate from the implementation. Each
   mapping has a name, label and type, can be enabled individually, may share a
   destination with other mappings, and may migrate a folder inside a mounted
   disk.
 - Destinations on raid-pc over SSH (the default) and on one local destination
-  on the machine running the tool (`/mnt/media` on andy-pc, the `/mnt/storage`
-  pool on raid-pc), selected per mapping.
+  on andy-pc (`/mnt/media`), selected per mapping.
 - A preview by default, and copying with rsync (over SSH for raid-pc) only
   with `--confirm`.
 - Selection by `--all`, `--source NAME` and `--type TYPE`.
@@ -143,17 +145,16 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 19. Given the template configuration, then `/mnt/myPictures/Movies` maps to
     raid-pc Movies, the rest of `/mnt/myPictures` to `/mnt/media/Pictures`,
     `/mnt/myVideo/TV` to raid-pc TV, the rest of `/mnt/myVideo` except `TV` and
-    `encrypted` to `/mnt/media/Video`, no mapping uses `/mnt/video1` or the
-    old video1 disk, and `/mnt/media` is accepted as single-copy storage.
+    `encrypted` to `/mnt/media/homeVideo`, `/mnt/movie2/Movies` and
+    `/mnt/video3/TV` to raid-pc `/mnt/storage/Movies` and `/mnt/storage/TV`,
+    no mapping uses `/mnt/movie1`, `/mnt/video2`, `/mnt/video1` or the old
+    video1 disk, and `/mnt/media` is accepted as single-copy storage.
 20. Given a SAFE verdict, when `--check` or `--status` reports it, then its
     basis is stated: verified protection (for example
     `SNAPRAID PARITY VERIFIED`) or
     `DESTINATION ACCEPTED AS AUTHORITATIVE (single copy, not redundant)`, and
     `--status` shows single-copy SAFE as `safe(1 copy)`.
-21. Given the raid-pc template configuration, then its only mapping (disabled)
-    copies `/mnt/oldVideo1/TV`, identified by the old disk's UUID, to the local
-    pool at `/mnt/storage/TV`; the pool is identified by `fuse.mergerfs` and a
-    placeholder mount source, and SAFE needs the SnapRAID check.
+21. Withdrawn: there is no raid-pc template configuration (ADR 004).
 22. Given a local destination without a filesystem UUID, when it is identified
     by its mount source, then a migration or check is refused if the source
     is missing or a placeholder, the mounted source differs, nothing is
@@ -164,6 +165,8 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 
 - [ADR 001: Safety model for migrating storage to raid-pc](../../adr/001-raidMigrationSafety.md)
 - [ADR 002: Local destinations alongside raid-pc](../../adr/002-localMigrationDestination.md)
+- [ADR 004: migrateToRaid runs only on andy-pc](../../adr/004-migrateOnlyOnAndyPc.md)
+  (supersedes ADR 003)
 - The raid-pc storage layout and SnapRAID parity are prerequisites for real
   migration to raid-pc, and a mounted `/mnt/media` with its UUID configured is
   a prerequisite for local migration; neither is a prerequisite for this
@@ -197,3 +200,9 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 - 2026-10-19: `/mnt/media` accepted as the single authoritative copy
   (`"required": false`), and every SAFE verdict states its basis
   (criterion 20).
+- 2026-10-19: the tool runs only on andy-pc; the old video1 disk is copied by
+  hand on raid-pc (ADR 004, criterion 21 withdrawn). The pool is
+  `/mnt/storage`; `/mnt/movie2/Movies` and `/mnt/video3/TV` migrate as folders,
+  and `/mnt/movie1` and `/mnt/video2` stay local (criterion 19).
+- 2026-10-19: the `myVideo` remainder goes to `/mnt/media/homeVideo`
+  (criterion 19).

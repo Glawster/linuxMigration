@@ -1,7 +1,7 @@
 {
   "remoteHost": "raid-pc",
   "remoteUser": "andy",
-  "destinationMount": "<RAID_STORAGE_MOUNT>",
+  "destinationMount": "/mnt/storage",
   "destinationFsType": "fuse.mergerfs",
   "minFreeBytesAfter": 10737418240,
   "checksum": "sha256sum",
@@ -20,14 +20,11 @@
     }
   },
   "mappings": [
-    { "name": "movie1", "label": "Movies 1", "type": "movies", "source": "/mnt/movie1", "destination": "<RAID_STORAGE_MOUNT>/Movies", "enabled": false },
-    { "name": "movie2", "label": "Movies 2", "type": "movies", "source": "/mnt/movie2", "destination": "<RAID_STORAGE_MOUNT>/Movies", "enabled": false },
-    { "name": "video2", "label": "TV 2", "type": "tv", "source": "/mnt/video2", "destination": "<RAID_STORAGE_MOUNT>/TV", "enabled": false },
-    { "name": "video3", "label": "TV 3", "type": "tv", "source": "/mnt/video3", "destination": "<RAID_STORAGE_MOUNT>/TV", "enabled": false },
-    { "name": "myVideo", "label": "My Video", "type": "video", "source": "/mnt/myVideo", "excludes": ["TV", "encrypted"], "target": "local", "destination": "/mnt/media/Video", "enabled": false },
-    { "name": "myVideoTV", "label": "My Video TV", "type": "tv", "source": "/mnt/myVideo/TV", "mountPoint": "/mnt/myVideo", "destination": "<RAID_STORAGE_MOUNT>/TV", "enabled": false },
-    { "name": "music", "label": "Music", "type": "music", "source": "/mnt/music", "destination": "<RAID_STORAGE_MOUNT>/Music", "enabled": false },
+    { "name": "movie2", "label": "Movies 2", "type": "movies", "source": "/mnt/movie2/Movies", "mountPoint": "/mnt/movie2", "destination": "/mnt/storage/Movies", "enabled": false },
+    { "name": "video3", "label": "TV 3", "type": "tv", "source": "/mnt/video3/TV", "mountPoint": "/mnt/video3", "destination": "/mnt/storage/TV", "enabled": false },
+    { "name": "myVideo", "label": "My Video", "type": "video", "source": "/mnt/myVideo", "excludes": ["TV", "encrypted"], "target": "local", "destination": "/mnt/media/homeVideo", "enabled": false },
+    { "name": "myVideoTV", "label": "My Video TV", "type": "tv", "source": "/mnt/myVideo/TV", "mountPoint": "/mnt/myVideo", "destination": "/mnt/storage/TV", "enabled": false },
     { "name": "myPictures", "label": "Pictures", "type": "pictures", "source": "/mnt/myPictures", "excludes": ["Movies"], "target": "local", "destination": "/mnt/media/Pictures", "enabled": false },
-    { "name": "myPicturesMovies", "label": "My Pictures Movies", "type": "movies", "source": "/mnt/myPictures/Movies", "mountPoint": "/mnt/myPictures", "destination": "<RAID_STORAGE_MOUNT>/Movies", "enabled": false }
+    { "name": "myPicturesMovies", "label": "My Pictures Movies", "type": "movies", "source": "/mnt/myPictures/Movies", "mountPoint": "/mnt/myPictures", "destination": "/mnt/storage/Movies", "enabled": false }
   ]
 }

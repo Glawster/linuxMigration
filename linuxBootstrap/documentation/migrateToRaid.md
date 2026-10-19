@@ -2,8 +2,7 @@
 
 `migrateToRaid` moves media and file storage from the disks in `andy-pc` to its
 long-term home, one mapping at a time, without risking the only copy of the
-data. It is run on `andy-pc`, and on `raid-pc` for a disk attached there
-(see [Running on raid-pc](#running-on-raid-pc)).
+data. It runs only on `andy-pc`.
 
 There are two kinds of destination:
 
@@ -11,23 +10,21 @@ There are two kinds of destination:
 | --- | --- | --- |
 | **raid-pc** storage pool (mergerFS + SnapRAID) | bulk Movies, TV and archive media | rsync over SSH |
 | **`/mnt/media`** on andy-pc (internal 4 TB disk) | personal Pictures and personal/home Video, kept local permanently | local rsync |
-| raid-pc storage pool, when run **on raid-pc** | content of disks attached to raid-pc by USB | local rsync |
 
-```text
-andy-pc sources                         destination
----------------                         -----------
-/mnt/movie1, /mnt/movie2          ->    raid-pc  <pool>/Movies
-/mnt/myPictures/Movies            ->    raid-pc  <pool>/Movies
-/mnt/video2, /mnt/video3          ->    raid-pc  <pool>/TV
-/mnt/myVideo/TV                   ->    raid-pc  <pool>/TV
-/mnt/myPictures (rest)            ->    andy-pc  /mnt/media/Pictures
-/mnt/myVideo (rest, not encrypted) ->   andy-pc  /mnt/media/Video
-/mnt/myVideo/encrypted                  not migrated (handled separately)
+Destinations on raid-pc are written as raid-pc sees them. On andy-pc the same
+pool is NFS-mounted at `/mnt/raid`, so `/mnt/storage/TV` is `/mnt/raid/TV` there.
 
-raid-pc sources (run on raid-pc)        destination
---------------------------------        -----------
-/mnt/oldVideo1/TV (old 2 TB disk, USB) -> raid-pc  /mnt/storage/TV
-```
+| Source | Mapping | Destination | Notes |
+|---|---|---|---|
+| `/mnt/video3/TV` | `video3` | raid-pc `/mnt/storage/TV` | TV content moves to RAID |
+| `/mnt/movie2/Movies` | `movie2` | raid-pc `/mnt/storage/Movies` | Movie content moves to RAID; `Fraps` is not migrated |
+| `/mnt/myVideo/TV` | `myVideoTV` | raid-pc `/mnt/storage/TV` | TV content moves to RAID |
+| `/mnt/myVideo` excluding `TV` and `encrypted` | `myVideo` | `/mnt/media/homeVideo` | Personal/home video retained locally on `andy-pc` |
+| `/mnt/myPictures/Movies` | `myPicturesMovies` | raid-pc `/mnt/storage/Movies` | Movie content moves to RAID |
+| `/mnt/myPictures` excluding `Movies` | `myPictures` | `/mnt/media/Pictures` | Personal pictures retained locally on `andy-pc` |
+| `/mnt/oldVideo1/TV` on raid-pc | — | raid-pc `/mnt/storage/TV` | Old `video1` disk, attached to raid-pc by USB and copied there by hand with rsync, outside this tool |
+| `/mnt/video2` | — | `/mnt/video` | Rename existing local disk; retain about 50% usage. Not handled by this tool |
+| `/mnt/movie1` | — | `/mnt/movies` | Rename existing local disk; retain about 50% usage. Not handled by this tool |
 
 Once their content is verified in the right destinations, the USB `myPictures`
 and `myVideo` disks can be retired. `/mnt/video1` does not survive the
@@ -49,7 +46,7 @@ command that refuses to run unless the disk has been proven safe to remove.
 Requirement: [001 raid-pc storage migration](../../project/requirements/features/001-raidMigration.md).
 Safety decisions: [ADR 001](../../project/adr/001-raidMigrationSafety.md),
 [ADR 002](../../project/adr/002-localMigrationDestination.md),
-[ADR 003](../../project/adr/003-migrateOnRaidPc.md).
+[ADR 004](../../project/adr/004-migrateOnlyOnAndyPc.md).
 
 ## Contents
 
@@ -66,7 +63,6 @@ Safety decisions: [ADR 001](../../project/adr/001-raidMigrationSafety.md),
 - [Removing migrated source data](#removing-migrated-source-data)
 - [State and logs](#state-and-logs)
 - [Worked example](#worked-example)
-- [Running on raid-pc](#running-on-raid-pc)
 
 ## Configuration
 
@@ -96,7 +92,7 @@ Each mapping:
 
 | Key | Meaning |
 | --- | --- |
-| `name` | Short identifier used on the command line (`movie1`). |
+| `name` | Short identifier used on the command line (`video3`). |
 | `label` | Readable name (`Movies 1`). |
 | `type` | Category used by `--type`: `movies`, `tv`, `video`, `music`, `pictures`, `files`. |
 | `source` | Folder on andy-pc. Normally a whole mounted disk. |
@@ -107,17 +103,19 @@ Each mapping:
 | `uuid` | Optional. The filesystem UUID expected at `mountPoint`. A placeholder is refused. |
 | `enabled` | `true` to include the mapping in `--all` and `--type`. |
 
-Several mappings may share one destination. The template merges `movie1`,
-`movie2` and `/mnt/myPictures/Movies` into `Movies`, and `video2`, `video3`
-and `/mnt/myVideo/TV` into `TV`. On raid-pc, the old `video1` disk's `TV`
-folder joins the same pool `TV` folder.
+Several mappings may share one destination. The template merges
+`/mnt/movie2/Movies` and `/mnt/myPictures/Movies` into `Movies`, and
+`/mnt/video3/TV` and `/mnt/myVideo/TV` into `TV`. The old `video1` disk's `TV`
+folder is copied into the same pool `TV` folder by hand on raid-pc.
 Each mapping compares only its own source against the shared folder, so files
 from other disks are ignored. If two disks hold the same path with different
 content, the second disk reports a [conflict](#files-already-on-raid-pc) and
 nothing is overwritten.
 
 A folder inside a disk is migrated with `mountPoint`, as `myVideoTV` does for
-`/mnt/myVideo/TV`. A mapping whose source contains another mapping's source must
+`/mnt/myVideo/TV`. `movie2` and `video3` also migrate only their `Movies` and
+`TV` folders, so the content lands in the pool's `Movies` and `TV` folders
+rather than nested as `Movies/Movies` or `TV/TV`. A mapping whose source contains another mapping's source must
 exclude that folder (`"excludes": ["TV"]` on `myVideo`). Overlapping mappings
 are rejected when the configuration is loaded. The folders of one disk may go
 to different destinations: `/mnt/myPictures/Movies` goes to raid-pc while the
@@ -129,15 +127,15 @@ it, `--check` keeps reporting the `myVideo` disk as NOT SAFE TO REMOVE DISK
 while `encrypted` is still on it.
 
 The template ships with **every mapping disabled** and placeholders such as
-`<RAID_STORAGE_MOUNT>/Movies` and `<MEDIA_FS_UUID>`. A placeholder is refused
+`<RAID_PROTECTION_CHECK_COMMAND>` and `<MEDIA_FS_UUID>`. A placeholder is refused
 before any network or data operation, so nothing can be migrated until the
-raid-pc layout and the `/mnt/media` filesystem identity have been written in.
+raid-pc protection check and the `/mnt/media` filesystem identity have been
+written in.
 
 ## Local destination
 
-Mappings with `"target": "local"` copy to a disk mounted on the machine running
-the tool instead of over SSH: `/mnt/media` on andy-pc, or the storage pool when
-the tool runs [on raid-pc](#running-on-raid-pc). The same safety model applies: preview by default, missing entries
+Mappings with `"target": "local"` copy to a disk mounted on andy-pc,
+`/mnt/media`, instead of over SSH. The same safety model applies: preview by default, missing entries
 only, conflicts never overwritten, resumable rsync with a partial directory,
 quick or full verification, source stability checks, and source removal only
 after `--check` reports SAFE.
@@ -158,7 +156,7 @@ after `--check` reports SAFE.
 | `mount` | Mount point of the local destination disk. Every `local` destination must be inside it. |
 | `fsType` | Optional. Expected filesystem type, for example `ext4`. |
 | `uuid` | Filesystem UUID of the disk that must be mounted at `mount` (`findmnt -no UUID /mnt/media`). |
-| `source` | Expected mount source (`findmnt -no SOURCE /mnt/storage`), for a filesystem without a UUID such as a mergerFS pool. At least one of `uuid` and `source` is required. |
+| `source` | Expected mount source (`findmnt -no SOURCE <mount>`), for a filesystem without a UUID such as a mergerFS pool. At least one of `uuid` and `source` is required. |
 | `protection` | `{"required": false}` to accept single-copy storage, or a `name`, `command` and `successExitCodes` check run on andy-pc (see below). |
 
 Before every copy and every `--check`, the local destination must be
@@ -262,7 +260,7 @@ All raid-pc access uses SSH in batch mode (no prompts):
 Without `--confirm` nothing is copied, created, deleted or recorded:
 
 ```bash
-migrateToRaid --source movie1
+migrateToRaid --source video3
 migrateToRaid --type movies
 migrateToRaid --all
 ```
@@ -280,8 +278,8 @@ the default and `-y`/`--confirm` performs the work.
 ## Migrating
 
 ```bash
-migrateToRaid --source movie1 --confirm
-migrateToRaid --source movie1 --confirm --verify full
+migrateToRaid --source video3 --confirm
+migrateToRaid --source video3 --confirm --verify full
 ```
 
 Before copying anything, each mapping must pass these checks, or it is
@@ -342,7 +340,7 @@ run, verification fails and the run must be repeated.
 To verify an already-copied mapping again, for example at the full level, run:
 
 ```bash
-migrateToRaid --source movie1 --verify-only --verify full
+migrateToRaid --source video3 --verify-only --verify full
 ```
 
 Quick verification never makes a disk safe to remove.
@@ -391,7 +389,7 @@ migrateToRaid --status
 ```text
 Source           Type      Copy         Verify         Source    Last check           Size
 ------------------------------------------------------------------------------------------
-movie1           movies    complete     verified(full) retained  safe               3.2TiB
+video3           tv        complete     verified(full) retained  safe               3.2TiB
 movie2           movies    partial      pending        retained  -                  3.6TiB
 myPictures       pictures  not run      -              retained  -                       ?
 
@@ -407,7 +405,7 @@ mapping has been checked.
 ## Is a disk safe to remove?
 
 ```bash
-migrateToRaid --check movie1
+migrateToRaid --check video3
 migrateToRaid --check          # every mapping
 ```
 
@@ -417,7 +415,7 @@ The answer distinguishes two conditions.
 from records:
 
 - the disk mounted now is the one that was migrated (same UUID and mount
-  point), so a different disk mounted at `/mnt/movie1` can never inherit the
+  point), so a different disk mounted at `/mnt/video3` can never inherit the
   old disk's state;
 - the copy completed, with no unresolved conflicts;
 - a **full** checksum verification succeeded;
@@ -468,8 +466,8 @@ still the template placeholder, every disk is NOT SAFE TO REMOVE.
 ## Removing migrated source data
 
 ```bash
-migrateToRaid --source movie1 --remove-source              # preview the plan
-migrateToRaid --source movie1 --remove-source --confirm    # asks you to type "movie1"
+migrateToRaid --source video3 --remove-source              # preview the plan
+migrateToRaid --source video3 --remove-source --confirm    # asks you to type "video3"
 ```
 
 Removal:
@@ -518,96 +516,29 @@ folder.
 
 ## Worked example
 
-These paths are placeholders until the raid-pc layout is confirmed.
-
 ```bash
-# 1. Decide the destination and enable the mapping in
-#    ~/.config/migrateToRaid/config.json:
-#    "destinationMount": "/raidStoragePoint"
-#    { "name": "movie1", ..., "destination": "/raidStoragePoint/Movies", "enabled": true }
+# 1. Enable the mapping in ~/.config/migrateToRaid/config.json:
+#    { "name": "video3", ..., "destination": "/mnt/storage/TV", "enabled": true }
 
 # 2. Preview: checks, sizes, conflicts, rsync command; nothing changes
-migrateToRaid --source movie1
+migrateToRaid --source video3
 
 # 3. Copy and fully verify (re-run the same command after any interruption)
-migrateToRaid --source movie1 --confirm --verify full
+migrateToRaid --source video3 --confirm --verify full
 
 # 4. Review progress across all disks
 migrateToRaid --status
 
 # 5. Ask whether the disk can go; expect NOT SAFE until raid-pc parity is synced
-migrateToRaid --check movie1
+migrateToRaid --check video3
 
-# 6. Once SAFE TO REMOVE DISK: preview, then remove the migrated content
-migrateToRaid --source movie1 --remove-source
-migrateToRaid --source movie1 --remove-source --confirm
+# 6. Once SAFE TO REMOVE SOURCE FOLDER: preview, then remove the migrated content
+migrateToRaid --source video3 --remove-source
+migrateToRaid --source video3 --remove-source --confirm
 ```
 
 ### Live sources
 
-`/mnt/video2` is exported over NFS to tv-pc, where qBittorrent writes
-downloads. A source that is still being written to will keep failing the
-stability check or `--check`. Pause those writers, or migrate that disk last,
-before expecting it to become SAFE TO REMOVE.
-
-## Running on raid-pc
-
-The internal 2 TB disk at `/mnt/video1` on andy-pc is replaced by the 4 TB
-SkyHawk, which becomes `/mnt/media`. The old disk holds only TV, so its `TV`
-folder goes to the raid-pc pool. Rather than copy it twice over the network,
-the disk is attached to raid-pc by USB and `migrateToRaid` runs **on raid-pc**,
-where the pool is the local destination. It is the same tool and the same
-safety model; only the configuration differs.
-
-```text
-raid-pc
--------
-/mnt/oldVideo1/TV  (old 2 TB NTFS disk, USB)  ->  /mnt/storage/TV  (mergerFS pool)
-```
-
-The raid-pc template is
-[`configs/migrateToRaid/raidPcConfig.json`](../configs/migrateToRaid/raidPcConfig.json):
-
-- `localDestination.mount` is `/mnt/storage`, of type `fuse.mergerfs`. A
-  mergerFS pool has no filesystem UUID, so it is identified by its mount
-  `source` instead; read it with `findmnt -no SOURCE /mnt/storage` once the
-  pool exists.
-- `localDestination.protection` is the SnapRAID check, run locally on raid-pc.
-  Unlike `/mnt/media`, the pool is not accepted as single-copy storage: the
-  old disk becomes SAFE only when parity covers the copy.
-- The `video1` mapping copies `/mnt/oldVideo1/TV` (with `mountPoint`
-  `/mnt/oldVideo1`) into `/mnt/storage/TV`, so the shows are not nested in
-  `TV/TV`. Its `uuid` is the old disk's NTFS UUID, `9400247000245B8C`, so only
-  that disk is accepted at the temporary mount.
-
-The old disk also has a `.Trash-1000` folder. No mapping covers it, so `--check`
-reports SAFE TO REMOVE SOURCE FOLDER for `TV` but NOT SAFE TO REMOVE DISK until
-the trash is reviewed and emptied.
-
-Prerequisites on raid-pc:
-
-1. The storage pool is provisioned and mounted at `/mnt/storage` (outside this
-   tool), and `/mnt/storage/TV` is writable by the user running the migration.
-2. This branch of `~/bin` is checked out, and `jq`, `rsync`, `findmnt`, `flock`
-   and the `organiseMyProjects` Python package (for `logUtils.sh`) are
-   installed. `LOG_UTILS=/path/to/logUtils.sh` can point at a copy instead.
-3. `sudo -n snapraid diff` (or the chosen protection command) works without a
-   password prompt.
-
-Then, on raid-pc:
-
-```bash
-mkdir -p ~/.config/migrateToRaid
-cp ~/bin/linuxBootstrap/configs/migrateToRaid/raidPcConfig.json ~/.config/migrateToRaid/config.json
-# set localDestination.source and protection.command, then "enabled": true
-
-migrateToRaid --source video1                          # preview
-migrateToRaid --source video1 --confirm --verify full  # copy and verify
-sudo snapraid sync                                     # protect the copy
-migrateToRaid --check video1
-```
-
-State and logs for this migration live on raid-pc, so `--status` on andy-pc
-does not show it. The disk is mounted read-only, so `--remove-source` cannot
-delete from it; once the check is SAFE, unmount it and retire it. On andy-pc,
-`/mnt/video1` is not recreated.
+A source that is still being written to, for example by tv-pc over NFS, will
+keep failing the stability check or `--check`. Pause those writers, or migrate
+that disk last, before expecting it to become SAFE TO REMOVE.
