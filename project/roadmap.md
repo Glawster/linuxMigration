@@ -44,9 +44,10 @@ linuxMigration sequencing and priorities. Current increment status is kept in
 - [x] Remove the drive mappings and aliases of the retiring disks (`myPictures`, `myVideo`, `movie2`, `video3`)
 - [x] Manage the `raid-pc:/mnt/storage` NFS export and the andy-pc `/mnt/raid` mount in the host profiles
 - [x] Confirm the raid-pc storage layout (`/mnt/storage`)
-- [ ] Enable the raid-pc mappings
-- [ ] Rename `/mnt/movie1` and `/mnt/video2` to `/mnt/movies` and `/mnt/video` (profiles, qBittorrent, `pullTvPcVideos` and docs already use the new paths)
-- [ ] Configure the raid-pc parity protection check once SnapRAID parity is synced
+- [x] Enable the raid-pc mappings
+- [x] Rename `/mnt/movie1` and `/mnt/video2` to `/mnt/movies` and `/mnt/video` (profiles, qBittorrent, `pullTvPcVideos` and docs already use the new paths)
+- [x] Configure the raid-pc parity protection check (`snapraid diff`)
+- [ ] Rebalance `/mnt/movies` and `/mnt/video` to raid-pc down to 50% ([002](requirements/features/002-localMediaRebalance.md))
 - [ ] Add `raid-pc` to the managed SSH host configuration
 - [ ] Declare `rsync` and `jq` in the andy-pc and raid-server profiles
 
