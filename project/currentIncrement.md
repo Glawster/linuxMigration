@@ -34,6 +34,7 @@ existing feature/migrateToRaid branch; it is not completed by this increment.
   and invalid-selector stderr/exit behaviour verified.
 - Current-directory filtering, symlink identity, --all directory expansion and
   --history selection verified.
+- Help includes resume commands for all four agents, verified against installed CLI help.
 - Independent review and human acceptance remain required before completion/merge.
 
 ## Risks and suite impact

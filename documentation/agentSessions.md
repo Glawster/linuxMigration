@@ -53,6 +53,22 @@ Current-directory matching uses the exact resolved directory, including symlink
 aliases. It excludes child directories and sessions with unknown working directories.
 Use --all to include those sessions and other projects.
 
+## Resuming a session
+
+Run the matching agent command from the session's working directory with the full ID:
+
+```bash
+codex resume <id>
+claude --resume <id>
+grok --resume <id>
+copilot --resume=<id>
+```
+
+These examples are also included in `agentSessions --help` and were checked
+against the installed agents' CLI help. For Claude and Copilot, see their
+[CLI reference](https://docs.anthropic.com/en/docs/claude-code/cli-usage) and
+[session guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/chronicle).
+
 ## Discovery and output
 
 | Agent | Local source |

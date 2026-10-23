@@ -76,7 +76,18 @@ def main() -> int:
 def parserBuild() -> argparse.ArgumentParser:
     """Build the scriptable, read-only listing interface."""
     parser = argparse.ArgumentParser(
-        description="List resumable local AI agent sessions"
+        description="List resumable local AI agent sessions",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Resume a session (use its full ID, from the session's working directory):
+  Codex:    codex resume <id>
+  Claude:   claude --resume <id>
+  Grok:     grok --resume <id>
+  Copilot:  copilot --resume=<id>
+
+Get a full ID:
+  agentSessions --id 2
+  agentSessions --all --id 2   # when selecting from --all
+""",
     )
     parser.add_argument(
         "--all",

@@ -34,7 +34,7 @@ and changes to unrelated utilities or managed guidance.
 2. Default listing selects the latest session per agent for the exact resolved cwd; --all includes all directories, --history includes older sessions and --full shows full IDs.
 3. Missing stores and malformed JSON do not crash discovery; I/O failures produce contextual warnings.
 4. Session data remains unchanged; only shared application logs are written.
-5. The CLI exposes help, version, verbose and quiet options and initialises shared logging at entry.
+5. The CLI exposes help, version, verbose and quiet options, documents resume syntax for all four agents in help, and initialises shared logging at entry.
 6. Production-path tests, Black and targeted OMP lint pass; verification limitations are reported.
 
 7. Rows are grouped alphabetically by agent, newest first within each group; numbered selectors match this ordering.
@@ -56,3 +56,4 @@ and changes to unrelated utilities or managed guidance.
 - 2026-10-23: created from the request to align agentSessions with .github coding process.
 - 2026-10-23: added agent grouping and numbered resume-ID extraction at user request.
 - 2026-10-23: default to cwd; --all expands directories and --history includes older sessions.
+- 2026-10-23: included verified per-agent resume commands in CLI help.
