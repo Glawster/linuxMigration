@@ -2,7 +2,7 @@
 
 - Requirement: [002 Rebalance local movies and TV to raid-pc](../features/002-localMediaRebalance.md)
 - Role: implement and test
-- Decisions: [ADR 001](../../adr/001-raidMigrationSafety.md), [ADR 004](../../adr/004-migrateOnlyOnAndyPc.md); record the planning design as a new ADR before implementing
+- Decisions: [ADR 001](../../adr/001-raidMigrationSafety.md), [ADR 004](../../adr/004-migrateOnlyOnAndyPc.md), [ADR 005](../../adr/005-rebalancePlan.md)
 
 ## Assignment
 
@@ -27,7 +27,8 @@ acceptance criterion in the requirement.
 ## Component boundaries
 
 - Implementation: `linuxBootstrap/migrateToRaid.sh`,
-  `linuxBootstrap/lib/raidMigration*.sh`.
+  `linuxBootstrap/lib/raidMigration*.sh` (planning in
+  `lib/raidMigrationPlan.sh`).
 - Configuration template: `linuxBootstrap/configs/migrateToRaid/config.json`.
 - Tests: `linuxBootstrap/tests/migrateToRaidTests.sh`.
 - Documentation: `linuxBootstrap/documentation/migrateToRaid.md`.

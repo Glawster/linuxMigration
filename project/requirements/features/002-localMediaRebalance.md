@@ -2,7 +2,7 @@
 
 ## Status
 
-ToDo
+InProgress
 
 ## Outcome
 
@@ -85,7 +85,8 @@ and every title lives in exactly one store.
 4. Given the plan, then no show folder is ever partly selected, and after the
    move and removal every show folder exists in exactly one store.
 5. Given a local disk already at or below 50%, when the plan is made, then
-   nothing from that disk is selected.
+   nothing from that disk is selected except titles already on raid-pc
+   (criterion 3).
 6. Given that the eligible titles are not enough to reach 50%, or that raid-pc
    lacks the space for them, when the plan is previewed, then the shortfall is
    reported and no partial plan is applied silently.
@@ -107,9 +108,9 @@ and every title lives in exactly one store.
   check and removal pipeline, and its safety model
   ([ADR 001](../../adr/001-raidMigrationSafety.md),
   [ADR 004](../../adr/004-migrateOnlyOnAndyPc.md)).
-- Pending ADR: how the plan feeds the pipeline (for example, a generated
-  include-list mapping per disk) and how per-title removal is checked when the
-  local disk is not being retired.
+- [ADR 005: Rebalancing through a recorded title plan](../../adr/005-rebalancePlan.md):
+  how the plan feeds the pipeline, when it is fixed, and how planned titles are
+  checked and removed without a disk verdict.
 - Prerequisites for the real run: the requirement 001 raid-pc migrations have
   finished, and `linuxBackup` has been moved off `/mnt/video`.
 
@@ -128,3 +129,6 @@ and every title lives in exactly one store.
   until the local disks are 50% occupied, oldest first, without splitting a
   show; airing shows stay local; only `TV` moves off `/mnt/video`, and
   `linuxBackup` goes to a USB disk by hand.
+- 2026-10-23: criterion 5 keeps titles already on raid-pc selected when the
+  disk is below target, so they are reunited (criterion 3); design recorded in
+  ADR 005.

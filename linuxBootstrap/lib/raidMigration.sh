@@ -11,6 +11,8 @@ _raidMigrationDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$_raidMigrationDir/raidMigrationStore.sh"
 # shellcheck source=lib/raidMigrationRemote.sh
 source "$_raidMigrationDir/raidMigrationRemote.sh"
+# shellcheck source=lib/raidMigrationPlan.sh
+source "$_raidMigrationDir/raidMigrationPlan.sh"
 
 action="migrate"
 applicationName="migrateToRaid"
@@ -138,7 +140,10 @@ Migration:
   -y, --confirm         Copy and verify (default is a read-only preview)
   --verify LEVEL        quick (size + mtime, default) or full (checksums)
   --verify-only         Verify an already copied mapping without copying
-  --verbose             Show every transferred file
+  --verbose             Show every transferred file (and every planned title)
+
+A mapping with "rebalance" moves only a plan of whole title folders (oldest
+first; for TV, ended shows only) until its disk is at the target occupancy.
 
 Reporting:
   --status              Show recorded state of every mapping
@@ -173,7 +178,10 @@ checkMapping() {
     stateLoad "$name"
     removed="$(stateGet sourceRemoved no)"
 
-    if [[ -z "$(stateGet sourceUuid)" ]]; then
+    if [[ -n "${mapRebalance[$name]}" ]] && ! planLoadRecorded "$name"; then
+        _checkResult fail "no rebalance plan has been recorded"
+        copyVerified=0
+    elif [[ -z "$(stateGet sourceUuid)" ]]; then
         _checkResult fail "no confirmed migration has been recorded"
         copyVerified=0
     elif ! sourceInspect "$name"; then
@@ -232,6 +240,8 @@ checkSelected() {
     local name other mount status=0 mounts=()
     local -A checked=() safe=()
     for name in "${selectedNames[@]}"; do
+        # A rebalance mapping moves planned titles only; it never retires a disk.
+        [[ -n "${mapRebalance[$name]}" ]] && continue
         _checkCoversDisk "$name" || _listAdd mounts "${mapMount[$name]}"
     done
     for name in "${selectedNames[@]}"; do
@@ -270,6 +280,7 @@ _checkDisk() {
             _listContains excludeNames "$entry" && continue
             covered=0
             for name in "${mappings[@]}"; do
+                [[ -n "${mapRebalance[$name]}" ]] && continue
                 if [[ "${mapSource[$name]}" == "$mount" && "/${mapExcludes[$name]}/" != *"/$entry/"* ]] ||
                     [[ "${mapSource[$name]}" == "$mount/$entry" ]]; then
                     covered=1
@@ -295,7 +306,9 @@ _checkDisk() {
 }
 
 _checkSubject() {
-    if _checkCoversDisk "$1"; then
+    if [[ -n "${mapRebalance[$1]}" ]]; then
+        printf 'PLANNED TITLES'
+    elif _checkCoversDisk "$1"; then
         printf 'DISK'
     else
         printf 'SOURCE FOLDER'
@@ -437,6 +450,13 @@ mappingProcess() {
     identityCheck "$name" || { _mappingFail "$name" "$sourceProblem"; return 1; }
     _sayField "Filesystem:" "$srcFsType UUID $srcUuid ($srcDevice)"
     _mappingPreflightDestination "$name" || return 1
+    if [[ -n "${mapRebalance[$name]}" ]]; then
+        planPrepare "$name" "$prefix" || return 1
+        if ((planEmpty == 1)); then
+            _say "  Nothing to move: the disk is at or below its target."
+            return 0
+        fi
+    fi
     _mappingScan "$name" "$prefix" || return 1
     _mappingReport "$name" "$prefix"
     if ((cmpUnsupported > 0)); then
