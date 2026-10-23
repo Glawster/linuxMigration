@@ -2,44 +2,50 @@
 
 ## Increment
 
-001 raidMigration: migrateToRaid implementation
+003 agentSessionsStandards
 
 ## Status
 
 InReview
-<!-- Options: Active, Idle, Blocked, InReview -->
 
 ## Requirement
 
-[project/requirements/features/001-raidMigration.md](requirements/features/001-raidMigration.md)
+[003: Agent session listing standards](requirements/features/003-agentSessionsStandards.md)
 
-## Objective
+## Objective and scope
 
-Copy, verify and record the migration of andy-pc storage to raid-pc, or to the
-local `/mnt/media` disk for personal pictures and video, with protection-gated,
-explicit removal of source data.
+Align agentSessions with .github coding standards while preserving read-only
+session discovery. Scope includes the command, its tests, usage documentation
+and requirement records on feature/agentSessions-process. No commits produced.
+The previous raidMigration work remains governed by requirement 001 and its
+existing feature/migrateToRaid branch; it is not completed by this increment.
 
-## Scope
+## Acceptance and verification
 
-`linuxBootstrap/migrateToRaid.sh`, `linuxBootstrap/lib/raidMigration*.sh`, the
-configuration template, tests and the migrateToRaid guide, on branch
-`feature/migrateToRaid`.
+- Criteria 1–5: synthetic stores for four agents, metadata fallback, latest/all/full,
+  source preservation, malformed input, missing stores and I/O warnings verified.
+- Criterion 6: 20 targeted tests pass. Black and targeted
+  OMP lint pass, with an identical temporary .py copy of the extensionless command.
+- Commands use PYTHONPATH=/home/andy/Source/organiseMyProjects because the default
+  interpreter has no installed organiseMyProjects package.
+- Wider `python -m pytest tests` fails during existing test_scansnapToVM collection:
+  scansnapToVM calls getLogger before the shared application context is set.
+- Criteria 7–8: agent grouping, newest-first ordering, numbered full-ID extraction
+  and invalid-selector stderr/exit behaviour verified.
+- Current-directory filtering, symlink identity, --all directory expansion and
+  --history selection verified.
+- Independent review and human acceptance remain required before completion/merge.
 
-## Verification
+## Risks and suite impact
 
-- [ ] Review and merge `feature/migrateToRaid`
-- [x] Confirm the raid-pc storage layout and configure destinations
-      (`/mnt/storage`)
-- [ ] Configure the raid-pc protection check once SnapRAID parity is synced
-- [ ] Mount the SkyHawk at `/mnt/media` and set `localDestination.uuid`
-      (protection is accepted as single-copy, `"required": false`)
-- [x] Attach the old video1 disk to raid-pc by USB at `/mnt/oldVideo1`
-- [ ] Copy `/mnt/oldVideo1/TV` into `/mnt/storage/TV` by hand with rsync on
-      raid-pc (outside `migrateToRaid`, ADR 004)
-- [ ] Manual acceptance: preview real mappings, then the first confirmed,
-      fully verified migration
+Provider formats remain existing local assumptions; malformed records can yield a
+partial listing and I/O warnings should be reviewed. No requirement/ADR changes
+proposed beyond requirement 003. OMS, OMV and OMP have no runtime changes.
+OMPR is consumed through its existing logging API; its linter rejects extensionless
+scripts, so an identical temporary .py file is used for review. No shared tooling
+or managed conventions were changed.
 
 ## Next
 
-Review the branch, then install `/mnt/media` so the local mappings can be
-enabled ahead of the raid-pc layout.
+Review requirement 003 and the implementation, perform human CLI acceptance in the
+intended Python environment, then commit and merge through the normal process.

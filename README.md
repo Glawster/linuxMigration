@@ -6,6 +6,8 @@ and launchers are on `PATH`.
 
 ## Documentation
 
+- [Agent session listing](documentation/agentSessions.md)
+
 - [linuxBootstrap: machine configuration](linuxBootstrap/linuxBootstrapIndex.md)
   - [Migrating andy-pc storage to raid-pc (migrateToRaid)](linuxBootstrap/documentation/migrateToRaid.md)
   - [raid-pc storage server](linuxBootstrap/documentation/raidPc.md)
@@ -45,9 +47,11 @@ Project records:
 | --- | --- |
 | `migrateToRaid` | Copy, verify and record migration of andy-pc disks to raid-pc, or to the local `/mnt/media` disk ([guide](linuxBootstrap/documentation/migrateToRaid.md)) |
 | `linuxBootstrap/bootstrap.sh` | Preview or apply a machine profile |
+| `agentSessions` | List local Codex, Claude, Grok and Copilot sessions ([guide](documentation/agentSessions.md)) |
 | `omv` | Launch organiseMyVideo |
 
-Tools preview by default and act only with `-y`/`--confirm`.
+Tools that modify data preview by default and act only with `-y`/`--confirm`.
+`agentSessions` reads session stores and writes application logs.
 
 ## Tests
 

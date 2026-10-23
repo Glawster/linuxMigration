@@ -1,0 +1,534 @@
+#!/usr/bin/env python3
+"""List resumable local sessions; session stores are always read-only."""
+
+import argparse
+import json
+import logging
+import os
+import re
+import shutil
+from typing import Any, Iterator, TypedDict
+
+from datetime import datetime
+from pathlib import Path
+from urllib.parse import unquote
+
+from organiseMyProjects.logUtils import getLogger, line, runStart, setApplication
+
+
+class Session(TypedDict):
+    """One resumable local session and its latest activity."""
+
+    agent: str
+    date: datetime
+    directory: str
+    session_id: str
+
+
+HOME = Path.home()
+VERSION = "1.0"
+
+
+UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-"
+    r"[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{12}$"
+)
+
+## command
+
+
+def main() -> int:
+    """Initialise logging, discover sessions and render the requested listing."""
+    parser = parserBuild()
+    args = parser.parse_args()
+    setApplication("agentSessions")
+    level = (
+        logging.DEBUG
+        if args.verbose
+        else logging.WARNING if args.quiet else logging.INFO
+    )
+    # ID extraction keeps stdout clean for shell substitution and clipboard pipes.
+    logger = getLogger(includeConsole=args.id is None, level=level)
+    rows = sessionsCollect()
+    if not args.all:
+        rows = sessionsForDirectory(rows, Path.cwd())
+    if not args.history:
+        rows = sessionsLatest(rows)
+    rows = sessionsSort(rows)
+    if args.id is not None:
+        if not 1 <= args.id <= len(rows):
+            parser.error("--id must identify a row in the current listing")
+        print(rows[args.id - 1]["session_id"])
+        return 0
+    runStart()
+    logger.doing("listing local agent sessions")
+    line()
+    tablePrint(rows, full_ids=args.full)
+    line()
+    logger.value("sessions", len(rows))
+    logger.done("session listing complete")
+    return 0
+
+
+def parserBuild() -> argparse.ArgumentParser:
+    """Build the scriptable, read-only listing interface."""
+    parser = argparse.ArgumentParser(
+        description="List resumable local AI agent sessions"
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="include sessions from all working directories",
+    )
+    parser.add_argument(
+        "--id",
+        type=int,
+        metavar="ROW",
+        help="print only the full resume ID for numbered row ROW",
+    )
+    parser.add_argument(
+        "--history",
+        action="store_true",
+        help="include older sessions as well as the latest",
+    )
+    parser.add_argument("--full", action="store_true", help="show complete session IDs")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    output = parser.add_mutually_exclusive_group()
+    output.add_argument(
+        "--verbose", action="store_true", help="enable diagnostic logging"
+    )
+    output.add_argument(
+        "--quiet", action="store_true", help="suppress console lifecycle messages"
+    )
+    return parser
+
+
+def sessionsCollect() -> list[Session]:
+    """Discover all supported local stores without changing session data."""
+    rows: list[Session] = []
+    for collect in (_claudeCollect, _codexCollect, _grokCollect, _copilotCollect):
+        try:
+            collect(rows)
+        except OSError as error:
+            # A broken store must not hide sessions from the remaining providers.
+            _warningReport(f"cannot scan session store: {collect.__name__}: {error}")
+    getLogger().debug("scanned all supported session stores")
+    return rows
+
+
+def sessionsForDirectory(rows: list[Session], directory: Path) -> list[Session]:
+    """Match exact working directories, resolving symlinks and home abbreviations."""
+    target = directory.resolve()
+    matches = []
+    for row in rows:
+        if row["directory"] == "?":
+            continue
+        # Stored paths are display-shortened against the discovery home.
+        stored = row["directory"]
+        path = (
+            HOME / stored[2:]
+            if stored.startswith("~/")
+            else HOME if stored == "~" else Path(stored)
+        )
+        try:
+            if path.resolve() == target:
+                matches.append(row)
+        except (OSError, ValueError, RuntimeError) as error:
+            _warningReport(f"cannot resolve session directory: {stored}: {error}")
+    return matches
+
+
+def sessionsLatest(rows: list[Session]) -> list[Session]:
+    """Select the most recent session for each agent and working directory."""
+    latest = {}
+
+    for row in rows:
+        key = (row["agent"], row["directory"])
+
+        old = latest.get(key)
+        if old is None or row["date"] > old["date"]:
+            latest[key] = row
+
+    return list(latest.values())
+
+
+def sessionsSort(rows: list[Session]) -> list[Session]:
+    """Group agents alphabetically, then order newest first with stable tie breaks."""
+    rows = sorted(rows, key=lambda row: (row["directory"], row["session_id"]))
+    rows.sort(key=lambda row: row["date"], reverse=True)
+    rows.sort(key=lambda row: row["agent"].casefold())
+    return rows
+
+
+def tablePrint(rows: list[Session], full_ids: bool = False) -> None:
+    """Render a terminal-width-aware listing without changing session records."""
+    if not rows:
+        print("No local agent sessions found.")
+        return
+
+    rows = sessionsSort(rows)
+
+    rendered = []
+
+    for row in rows:
+        sid = row["session_id"]
+
+        if not full_ids and len(sid) > 12:
+            sid = sid[:8] + "…"
+
+        rendered.append(
+            {
+                "agent": row["agent"],
+                "date": row["date"].strftime("%Y-%m-%d %H:%M"),
+                "directory": row["directory"],
+                "session_id": sid,
+            }
+        )
+
+    number_width = max(1, len(str(len(rows))))
+    agent_width, date_width, session_width, dir_width = _tableWidths(
+        rendered, number_width
+    )
+
+    print(
+        f"{'#':>{number_width}}  "
+        f"{'AGENT':<{agent_width}}  "
+        f"{'DATE':<{date_width}}  "
+        f"{'DIRECTORY':<{dir_width}}  "
+        f"{'SESSION ID':<{session_width}}"
+    )
+
+    for number, row in enumerate(rendered, start=1):
+        directory = _textTruncate(
+            row["directory"],
+            dir_width,
+        )
+
+        print(
+            f"{number:>{number_width}}  "
+            f"{row['agent']:<{agent_width}}  "
+            f"{row['date']:<{date_width}}  "
+            f"{directory:<{dir_width}}  "
+            f"{row['session_id']:<{session_width}}"
+        )
+
+
+## utilities
+
+
+def _claudeCollect(rows: list[Session]) -> None:
+    root = HOME / ".claude" / "projects"
+    if not root.is_dir():
+        return
+
+    for path in root.glob("*/*.jsonl"):
+        session_id = path.stem
+
+        if not UUID_RE.match(session_id):
+            continue
+
+        cwd = next(
+            (
+                _jsonFind(obj, ("cwd",))
+                for obj in _jsonRecords(path)
+                if _jsonFind(obj, ("cwd",))
+            ),
+            None,
+        )
+
+        _sessionAppend(
+            rows,
+            "Claude",
+            _fileDate(path),
+            cwd,
+            session_id,
+        )
+
+
+def _codexCollect(rows: list[Session]) -> None:
+    root = HOME / ".codex" / "sessions"
+    if not root.is_dir():
+        return
+
+    for path in root.rglob("rollout-*.jsonl"):
+        obj = _jsonFirst(path)
+        if not isinstance(obj, dict):
+            continue
+
+        payload = obj.get("payload", {})
+        if not isinstance(payload, dict):
+            continue
+        if obj.get("type") != "session_meta":
+            continue
+
+        session_id = payload.get("id") or payload.get("session_id")
+        cwd = payload.get("cwd")
+
+        _sessionAppend(
+            rows,
+            "Codex",
+            _fileDate(path),
+            cwd,
+            session_id,
+        )
+
+
+def _copilotCollect(rows: list[Session]) -> None:
+    copilot_home = Path(os.environ.get("COPILOT_HOME", HOME / ".copilot")).expanduser()
+
+    root = copilot_home / "session-state"
+    if not root.is_dir():
+        return
+
+    for session_dir in root.iterdir():
+        if not session_dir.is_dir():
+            continue
+
+        session_id = session_dir.name
+
+        events = session_dir / "events.jsonl"
+        workspace = session_dir / "workspace.yaml"
+
+        # A resumable local session should have its event history.
+        if not events.exists():
+            continue
+
+        cwd = None
+
+        if workspace.exists():
+            cwd = _yamlValue(workspace, "cwd")
+
+        # Only session.start is authoritative when the workspace scalar is absent.
+        if not cwd:
+            cwd = next(
+                (
+                    _jsonFind(obj, ("cwd", "workingDirectory"))
+                    for obj in _jsonRecords(events)
+                    if isinstance(obj, dict)
+                    and obj.get("type") == "session.start"
+                    and _jsonFind(obj, ("cwd", "workingDirectory"))
+                ),
+                None,
+            )
+
+        _sessionAppend(
+            rows,
+            "Copilot",
+            _fileDate(events),
+            cwd,
+            session_id,
+        )
+
+
+def _fileDate(path: Path) -> datetime:
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime)
+    except OSError as error:
+        _warningReport(f"cannot read session timestamp: {path}: {error}")
+        return datetime.min
+
+
+def _grokCollect(rows: list[Session]) -> None:
+    root = HOME / ".grok" / "sessions"
+    if not root.is_dir():
+        return
+
+    # Layout:
+    # ~/.grok/sessions/<url-encoded-cwd>/<session-id>/
+    #
+    # Deliberately only inspect direct children so Grok subagent UUIDs
+    # are not mistaken for top-level resumable sessions.
+    for project_dir in root.iterdir():
+        if not project_dir.is_dir():
+            continue
+
+        cwd = unquote(project_dir.name)
+
+        for session_dir in project_dir.iterdir():
+            if not session_dir.is_dir():
+                continue
+
+            session_id = session_dir.name
+
+            if not UUID_RE.match(session_id):
+                continue
+
+            # summary.json is a good proxy for last session activity.
+            # Fall back to chat history, then directory mtime.
+            candidates = [
+                session_dir / "summary.json",
+                session_dir / "chat_history.jsonl",
+                session_dir / "updates.jsonl",
+            ]
+
+            date_source = session_dir
+            for candidate in candidates:
+                if candidate.exists():
+                    date_source = candidate
+                    break
+
+            _sessionAppend(
+                rows,
+                "Grok",
+                _fileDate(date_source),
+                cwd,
+                session_id,
+            )
+
+
+def _jsonFind(obj: Any, names: tuple[str, ...]) -> str | None:
+    """Recursively find the first string value whose key matches."""
+    if isinstance(obj, dict):
+        for key in names:
+            value = obj.get(key)
+            if isinstance(value, str) and value:
+                return value
+
+        for value in obj.values():
+            found = _jsonFind(value, names)
+            if found:
+                return found
+
+    elif isinstance(obj, list):
+        for value in obj:
+            found = _jsonFind(value, names)
+            if found:
+                return found
+
+    return None
+
+
+def _jsonFirst(path: Path) -> Any:
+    return next(_jsonRecords(path), None)
+
+
+def _jsonRecords(path: Path) -> Iterator[Any]:
+    """Stream valid JSON values, tolerating partial writes and reporting I/O failures."""
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as stream:
+            for record in stream:
+                if not record.strip():
+                    continue
+                try:
+                    yield json.loads(record)
+                except json.JSONDecodeError:
+                    getLogger().debug("skipping malformed session record in %s", path)
+    except OSError as error:
+        _warningReport(f"cannot read session metadata: {path}: {error}")
+
+
+def _pathShorten(path: str | None) -> str:
+    if not isinstance(path, str) or not path or "\0" in path:
+        return "?"
+    path = os.path.abspath(os.path.expanduser(path))
+    home = str(HOME)
+    if path == home:
+        return "~"
+    if path.startswith(home + os.sep):
+        return "~" + path[len(home) :]
+    return path
+
+
+def _sessionAppend(
+    rows: list[Session],
+    agent: str,
+    date: datetime,
+    directory: str | None,
+    session_id: str | None,
+) -> None:
+    if not isinstance(session_id, str) or not session_id:
+        return
+
+    rows.append(
+        {
+            "agent": agent,
+            "date": date,
+            "directory": _pathShorten(directory),
+            "session_id": session_id,
+        }
+    )
+
+
+def _tableWidths(
+    rendered: list[dict[str, str]], number_width: int
+) -> tuple[int, int, int, int]:
+    """Reserve fixed columns and assign remaining terminal space to directories."""
+    agent_width = max(
+        len("AGENT"),
+        max(len(r["agent"]) for r in rendered),
+    )
+
+    date_width = 16
+
+    session_width = max(
+        len("SESSION ID"),
+        max(len(r["session_id"]) for r in rendered),
+    )
+
+    terminal_width = shutil.get_terminal_size(fallback=(120, 24)).columns
+
+    # Reserve the numbered selector and spaces between all five columns.
+    fixed_width = number_width + agent_width + date_width + session_width + 8
+
+    # Leave DIRECTORY whatever space remains.
+    dir_width = terminal_width - fixed_width
+
+    # Keep it usable on smaller terminals.
+    dir_width = max(20, dir_width)
+
+    return agent_width, date_width, session_width, dir_width
+
+
+def _textTruncate(text: str, width: int) -> str:
+    if len(text) <= width:
+        return text
+
+    if width <= 3:
+        return text[:width]
+
+    left = (width - 1) // 2
+    right = width - left - 1
+
+    return text[:left] + "…" + text[-right:]
+
+
+def _warningReport(message: str) -> None:
+    """Report incomplete discovery through the entry point's logging context."""
+    getLogger().warning(message)
+
+
+def _yamlValue(path: Path, wanted: str) -> str | None:
+    """
+    workspace.yaml only needs a tiny parser here. We deliberately avoid a
+    PyYAML dependency because cwd is stored as a simple top-level scalar.
+    """
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if ":" not in line:
+                    continue
+
+                key, value = line.split(":", 1)
+
+                if key.strip() == wanted:
+                    value = value.strip()
+
+                    if (
+                        len(value) >= 2
+                        and value[0] == value[-1]
+                        and value[0] in ("'", '"')
+                    ):
+                        value = value[1:-1]
+
+                    return value
+    except OSError as error:
+        _warningReport(f"cannot read session metadata: {path}: {error}")
+
+    return None
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
