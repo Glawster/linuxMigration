@@ -69,6 +69,10 @@ esac
 EOF
     cat >"$fakeBin/df" <<EOF
 #!/usr/bin/env bash
+if [[ -n "\${FAKE_DF_USED_AVAIL:-}" && " \$* " == *" --output=used,avail "* ]]; then
+    printf '   Used   Avail\n%s\n' "\$FAKE_DF_USED_AVAIL"
+    exit 0
+fi
 if [[ -n "\${FAKE_DF_AVAIL:-}" && " \$* " == *" --output=avail "* ]]; then
     printf '   Avail\n%s\n' "\$FAKE_DF_AVAIL"
     exit 0
@@ -783,6 +787,8 @@ testMigrateToRaidTemplateMappings() {
     _mtrCheck 'template leaves local movie1 and video2 disks alone' test -z "$(jq -r '.mappings[] | select(.source | test("^/mnt/(movie1|video2)(/|$)"))' "$template")"
     _mtrCheck 'template local destination is /mnt/media identified by UUID' test "$(jq -r '.localDestination | [.mount, .uuid] | join(" ")' "$template")" = '/mnt/media <MEDIA_FS_UUID>'
     _mtrCheck 'template accepts /mnt/media as single-copy storage' test "$(jq -r '.localDestination.protection.required' "$template")" = false
+    _mtrCheck 'template rebalances /mnt/movies Movies to 50%' test "$(jq -r '.mappings[] | select(.name == "moviesRebalance") | [.type, .source, .mountPoint, .destination, .rebalance.targetPercent, .enabled] | join(" ")' "$template")" = 'movies /mnt/movies/Movies /mnt/movies /mnt/storage/Movies 50 false'
+    _mtrCheck 'template rebalances only /mnt/video TV to 50%' test "$(jq -r '.mappings[] | select(.name == "tvRebalance") | [.type, .source, .mountPoint, .destination, .rebalance.targetPercent, .enabled] | join(" ")' "$template")" = 'tv /mnt/video/TV /mnt/video /mnt/storage/TV 50 false'
 }
 
 ## local destination identified by mount source
@@ -885,6 +891,167 @@ migrateToRaidTestsRun() {
     testMigrateToRaidTemplateMappings
     testMigrateToRaidPoolDestination
     testMigrateToRaidPoolDestinationRefused
+    testMigrateToRaidRebalanceConfig
+    testMigrateToRaidRebalanceMoviesPlan
+    testMigrateToRaidRebalanceLimits
+    testMigrateToRaidRebalanceTv
+}
+
+## rebalance (requirement 002)
+
+# A local /mnt/movies-style disk whose Movies folder is rebalanced to raid-pc.
+# Sizes are exact bytes so the plan is predictable against a fake disk usage.
+_mtrRebalanceMoviesSandbox() {
+    local title
+    _mtrSandbox
+    mtrMovies="$mtrBox/mnt/movies"
+    mkdir -p "$mtrMovies/Movies" "$mtrStorage/Movies/Split Film (2021)"
+    for title in 'Old Film (1975)|400' 'Middle Film (1999)|300' 'New Film (2020)|300' 'Undated Film|100' 'Split Film (2021)|50'; do
+        mkdir -p "$mtrMovies/Movies/${title%|*}"
+        head -c "${title#*|}" /dev/zero | tr '\0' 'm' >"$mtrMovies/Movies/${title%|*}/${title%|*}.mkv"
+    done
+    printf 'poster\n' >"$mtrMovies/Movies/Split Film (2021)/poster.jpg"
+    cp -p "$mtrMovies/Movies/Split Film (2021)/poster.jpg" "$mtrStorage/Movies/Split Film (2021)/"
+    printf 'not a title\n' >"$mtrMovies/Movies/notes.txt"
+    printf '%s|ext4|UUID-MOVIES|/dev/sdm1\n' "$mtrMovies" >>"$mtrBox/mounts"
+    jq --arg mv "$mtrMovies" --arg st "$mtrStorage" '
+        .mappings = [{name: "moviesRebalance", label: "Movies rebalance", type: "movies",
+                      source: ($mv + "/Movies"), mountPoint: $mv, destination: ($st + "/Movies"),
+                      rebalance: {targetPercent: 50}, enabled: true}]
+    ' "$mtrConfig" >"$mtrConfig.new" && mv "$mtrConfig.new" "$mtrConfig"
+}
+
+# A /mnt/video-style disk: ended, airing and undocumented shows, one airing
+# show already split onto raid-pc, and non-TV content beside TV.
+_mtrRebalanceTvSandbox() {
+    local show
+    _mtrSandbox
+    mtrVideo="$mtrBox/mnt/video"
+    mkdir -p "$mtrVideo/TV" "$mtrVideo/linuxBackup" "$mtrStorage/TV/Split Airing"
+    printf 'backup\n' >"$mtrVideo/linuxBackup/home.tar"
+    for show in 'Old Ended|Ended|1990-01-01' 'New Ended|Ended|2015-05-05' 'Airing Show|Continuing|1985-02-02' \
+        'No Metadata||' 'Split Airing|Continuing|2001-01-01' 'Undated Ended|Ended|'; do
+        IFS='|' read -r mtrShow mtrStatus mtrAired <<<"$show"
+        mkdir -p "$mtrVideo/TV/$mtrShow/Season 01"
+        head -c 300 /dev/zero | tr '\0' 't' >"$mtrVideo/TV/$mtrShow/Season 01/$mtrShow S01E01.mkv"
+        if [[ "$mtrShow" != 'No Metadata' ]]; then
+            printf '<Series>\n  <Status>%s</Status>\n  <FirstAired>%s</FirstAired>\n</Series>\n' \
+                "$mtrStatus" "$mtrAired" >"$mtrVideo/TV/$mtrShow/series.xml"
+        fi
+    done
+    printf '%s|ntfs3|UUID-VIDEO|/dev/sdj2\n' "$mtrVideo" >>"$mtrBox/mounts"
+    jq --arg vd "$mtrVideo" --arg st "$mtrStorage" '
+        .mappings = [{name: "tvRebalance", label: "TV rebalance", type: "tv",
+                      source: ($vd + "/TV"), mountPoint: $vd, destination: ($st + "/TV"),
+                      rebalance: {targetPercent: 50}, enabled: true}]
+    ' "$mtrConfig" >"$mtrConfig.new" && mv "$mtrConfig.new" "$mtrConfig"
+}
+
+_mtrBefore() {
+    local first="${1%%"$2"*}" second="${1%%"$3"*}"
+    [[ "$1" == *"$2"* && "$1" == *"$3"* && ${#first} -lt ${#second} ]]
+}
+
+testMigrateToRaidRebalanceConfig() {
+    _mtrRebalanceMoviesSandbox
+    jq '.mappings[0].type = "video"' "$mtrConfig" >"$mtrConfig.new" && mv "$mtrConfig.new" "$mtrConfig"
+    _mtrRun --status
+    assertContains "$mtrOutput" 'must have type movies or tv' 'rebalance needs a movies or tv type'
+    jq '.mappings[0].type = "movies" | .mappings[0].rebalance.targetPercent = 150' "$mtrConfig" >"$mtrConfig.new" && mv "$mtrConfig.new" "$mtrConfig"
+    _mtrRun --status
+    assertContains "$mtrOutput" 'targetPercent must be a whole number from 1 to 99' 'rebalance target out of range is rejected'
+    jq '.mappings[0].rebalance = true' "$mtrConfig" >"$mtrConfig.new" && mv "$mtrConfig.new" "$mtrConfig"
+    _mtrRun --status
+    _mtrCheck 'non-object rebalance is rejected' test "$mtrStatus" -ne 0
+}
+
+testMigrateToRaidRebalanceMoviesPlan() {
+    _mtrRebalanceMoviesSandbox
+    _mtrRun --check moviesRebalance
+    assertContains "$mtrOutput" 'no rebalance plan has been recorded' 'unplanned rebalance mapping is not safe'
+    _mtrRun --source moviesRebalance --verify-only --verify full
+    assertContains "$mtrOutput" 'no rebalance plan is recorded' 'verify-only needs a recorded plan'
+
+    FAKE_DF_USED_AVAIL='1500 500' _mtrRun --source moviesRebalance
+    _mtrCheck 'rebalance preview succeeds' test "$mtrStatus" -eq 0
+    assertContains "$mtrOutput" '75.0% used' 'preview shows current occupancy'
+    assertContains "$mtrOutput" 'Plan:         3 titles' 'preview plans whole titles to the target'
+    assertContains "$mtrOutput" 'Split Film (2021) (already on raid-pc)' 'title already on raid-pc is reunited first'
+    assertContains "$mtrOutput" 'Old Film (1975) (oldest)' 'oldest title is planned'
+    assertContains "$mtrOutput" 'Middle Film (1999) (oldest)' 'next oldest title is planned until the target'
+    _mtrCheck 'newer title is not planned' _mtrNotContains "$mtrOutput" 'New Film (2020) ('
+    _mtrCheck 'undated title is not planned before dated ones' _mtrNotContains "$mtrOutput" 'Undated Film ('
+    _mtrCheck 'plan is ordered already-on-raid then oldest' _mtrBefore "$mtrOutput" 'Split Film (2021) (' 'Old Film (1975) ('
+    _mtrCheck 'preview records no plan' test ! -e "$mtrState/moviesRebalance.plan"
+    _mtrCheck 'preview copies nothing' test ! -e "$mtrStorage/Movies/Old Film (1975)"
+
+    FAKE_DF_USED_AVAIL='1500 500' _mtrRun --source moviesRebalance --confirm --verify full
+    _mtrCheck 'confirmed rebalance succeeds' test "$mtrStatus" -eq 0
+    _mtrCheck 'confirmed rebalance records the plan' test -f "$mtrState/moviesRebalance.plan"
+    _mtrCheck 'planned title is copied whole' test -f "$mtrStorage/Movies/Old Film (1975)/Old Film (1975).mkv"
+    _mtrCheck 'split title is completed on raid-pc' test -f "$mtrStorage/Movies/Split Film (2021)/Split Film (2021).mkv"
+    _mtrCheck 'unplanned title is not copied' test ! -e "$mtrStorage/Movies/New Film (2020)"
+    _mtrCheck 'loose files beside titles are not copied' test ! -e "$mtrStorage/Movies/notes.txt"
+
+    FAKE_DF_USED_AVAIL='100 1900' _mtrRun --source moviesRebalance
+    assertContains "$mtrOutput" 'Plan:         recorded' 'recorded plan is kept until removal'
+
+    mkdir -p "$mtrMovies/Movies/Brand New (2024)"
+    printf 'new\n' >"$mtrMovies/Movies/Brand New (2024)/Brand New (2024).mkv"
+    _mtrRun --check moviesRebalance
+    assertContains "$mtrOutput" 'SAFE TO REMOVE PLANNED TITLES' 'verified plan is safe to remove'
+    _mtrCheck 'new title outside the plan does not affect the check' test "$mtrStatus" -eq 0
+    _mtrCheck 'rebalance never gives a disk verdict' _mtrNotContains "$mtrOutput" 'REMOVE DISK'
+
+    _mtrRun --source moviesRebalance --remove-source --confirm --yes-delete
+    _mtrCheck 'planned removal succeeds' test "$mtrStatus" -eq 0
+    _mtrCheck 'planned titles are removed' test ! -e "$mtrMovies/Movies/Old Film (1975)" -a ! -e "$mtrMovies/Movies/Middle Film (1999)" -a ! -e "$mtrMovies/Movies/Split Film (2021)"
+    _mtrCheck 'unplanned titles are kept' test -f "$mtrMovies/Movies/New Film (2020)/New Film (2020).mkv" -a -f "$mtrMovies/Movies/Undated Film/Undated Film.mkv" -a -f "$mtrMovies/Movies/Brand New (2024)/Brand New (2024).mkv"
+    _mtrCheck 'loose files and the source folder are kept' test -f "$mtrMovies/Movies/notes.txt"
+    _mtrCheck 'moved titles exist only on raid-pc' test -f "$mtrStorage/Movies/Middle Film (1999)/Middle Film (1999).mkv"
+
+    FAKE_DF_USED_AVAIL='800 1200' _mtrRun --source moviesRebalance --confirm
+    assertContains "$mtrOutput" 'Nothing to move' 'disk at the target plans nothing'
+    _mtrCheck 'empty plan starts no new cycle' test -z "$(find "$mtrState" -name 'moviesRebalance.2*')"
+
+    FAKE_DF_USED_AVAIL='1500 500' _mtrRun --source moviesRebalance --confirm
+    _mtrCheck 'next cycle succeeds' test "$mtrStatus" -eq 0
+    _mtrCheck 'finished cycle is archived' test -n "$(find "$mtrState" -name 'moviesRebalance.2*.plan')"
+    _mtrCheck 'next cycle moves the next oldest title' test -f "$mtrStorage/Movies/New Film (2020)/New Film (2020).mkv"
+}
+
+testMigrateToRaidRebalanceLimits() {
+    _mtrRebalanceMoviesSandbox
+    FAKE_DF_USED_AVAIL='500 1500' _mtrRun --source moviesRebalance
+    assertContains "$mtrOutput" 'Plan:         1 titles' 'disk below target plans only titles already on raid-pc'
+    assertContains "$mtrOutput" 'Split Film (2021) (already on raid-pc)' 'split title is reunited even below target'
+    FAKE_DF_USED_AVAIL='3000 100' _mtrRun --source moviesRebalance
+    assertContains "$mtrOutput" 'SHORTFALL:' 'unreachable target is reported'
+    _mtrCheck 'undated titles are planned after dated ones' _mtrBefore "$mtrOutput" 'New Film (2020) (' 'Undated Film ('
+    FAKE_DF_USED_AVAIL='1500 500' FAKE_DF_AVAIL=1000 _mtrRun --source moviesRebalance --confirm
+    assertContains "$mtrOutput" 'insufficient space on raid-pc' 'raid-pc space shortfall is refused'
+    _mtrCheck 'refused rebalance copies nothing' test ! -e "$mtrStorage/Movies/Old Film (1975)"
+}
+
+testMigrateToRaidRebalanceTv() {
+    _mtrRebalanceTvSandbox
+    FAKE_DF_USED_AVAIL='1500 500' _mtrRun --source tvRebalance
+    _mtrCheck 'tv rebalance preview succeeds' test "$mtrStatus" -eq 0
+    assertContains "$mtrOutput" 'Old Ended (oldest)' 'oldest ended show is planned'
+    assertContains "$mtrOutput" 'New Ended (oldest)' 'next ended show is planned until the target'
+    _mtrCheck 'airing show is never planned, however old' _mtrNotContains "$mtrOutput" 'Airing Show ('
+    _mtrCheck 'show without series.xml is never planned' _mtrNotContains "$mtrOutput" 'No Metadata ('
+    assertContains "$mtrOutput" 'Kept local:   3 airing shows' 'airing shows are reported as kept'
+    assertContains "$mtrOutput" 'Split:        Split Airing (Continuing) is airing and also on raid-pc' 'split airing show is reported'
+    _mtrCheck 'split airing show is not planned' _mtrNotContains "$mtrOutput" 'Split Airing (already'
+
+    FAKE_DF_USED_AVAIL='1500 500' _mtrRun --source tvRebalance --confirm --verify full
+    _mtrCheck 'ended show is moved whole' test -f "$mtrStorage/TV/Old Ended/Season 01/Old Ended S01E01.mkv" -a -f "$mtrStorage/TV/Old Ended/series.xml"
+    _mtrCheck 'airing show stays local only' test ! -e "$mtrStorage/TV/Airing Show"
+    _mtrCheck 'only TV is moved off the disk' test ! -e "$mtrStorage/TV/linuxBackup" -a ! -e "$mtrStorage/linuxBackup"
+    _mtrRun --source tvRebalance --remove-source --confirm --yes-delete
+    _mtrCheck 'moved shows leave the local disk whole' test ! -e "$mtrVideo/TV/Old Ended" -a ! -e "$mtrVideo/TV/New Ended"
+    _mtrCheck 'airing and non-TV content stay' test -d "$mtrVideo/TV/Airing Show" -a -f "$mtrVideo/linuxBackup/home.tar"
 }
 
 # Standalone run: provide the small harness that runTests.sh normally supplies.

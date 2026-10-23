@@ -35,6 +35,8 @@ declare -gA mapEnabled=()
 declare -gA mapExcludes=()
 declare -gA mapLabel=()
 declare -gA mapMount=()
+declare -gA mapPlanFile=()
+declare -gA mapRebalance=()
 declare -gA mapSource=()
 declare -gA mapTarget=()
 declare -gA mapType=()
@@ -44,7 +46,7 @@ declare -gA state=()
 ## config
 
 configLoad() {
-    local file="$1" name label type source dest enabled uuid mount excludes target
+    local file="$1" name label type source dest enabled uuid mount excludes target rebalance
     if [[ ! -f "$file" ]]; then
         log_error "configuration not found: $file"
         log_info "copy configs/migrateToRaid/config.json to that path and review it"
@@ -76,8 +78,8 @@ configLoad() {
     mapfile -t localProtectionSuccessCodes < <(jq -r '(.localDestination.protection.successExitCodes // [0])[] | tostring' "$file")
 
     mappingNames=()
-    mapDest=() mapEnabled=() mapExcludes=() mapLabel=() mapMount=() mapSource=() mapTarget=() mapType=() mapUuid=()
-    while IFS=$'\x1f' read -r name label type source dest enabled uuid mount excludes target; do
+    mapDest=() mapEnabled=() mapExcludes=() mapLabel=() mapMount=() mapPlanFile=() mapRebalance=() mapSource=() mapTarget=() mapType=() mapUuid=()
+    while IFS=$'\x1f' read -r name label type source dest enabled uuid mount excludes target rebalance; do
         if [[ ! "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
             log_error "invalid mapping name in configuration: '$name'"
             return 1
@@ -103,6 +105,18 @@ configLoad() {
             log_error "mapping $name: target must be remote (raid-pc) or local: '$target'"
             return 1
         fi
+        # A rebalance mapping moves only planned title folders (ADR 005), so its
+        # type must name the title rules and its target must be a percentage.
+        if [[ -n "$rebalance" ]]; then
+            if [[ "${type,,}" != movies && "${type,,}" != tv ]]; then
+                log_error "mapping $name: a rebalance mapping must have type movies or tv: '$type'"
+                return 1
+            fi
+            if [[ ! "$rebalance" =~ ^[0-9]+$ ]] || ((10#$rebalance < 1 || 10#$rebalance > 99)); then
+                log_error "mapping $name: rebalance.targetPercent must be a whole number from 1 to 99: '$rebalance'"
+                return 1
+            fi
+        fi
         mappingNames+=("$name")
         mapLabel[$name]="$label"
         mapType[$name]="${type,,}"
@@ -113,12 +127,14 @@ configLoad() {
         mapMount[$name]="$mount"
         mapExcludes[$name]="$excludes"
         mapTarget[$name]="$target"
+        mapRebalance[$name]="${rebalance:+$((10#$rebalance))}"
     done < <(jq -r '.mappings[] | [
             (.name // ""), (.label // .name // ""), (.type // "files"),
             (.source // ""), (.destination // ""),
             ((.enabled // false) | tostring), (.uuid // ""),
             (.mountPoint // .source // ""), ((.excludes // []) | join("/")),
-            (.target // "remote")
+            (.target // "remote"),
+            (if .rebalance == null then "" elif (.rebalance | type) == "object" then (.rebalance.targetPercent // 50) else "invalid" end)
         ] | map(tostring | gsub("[\u001f\n]"; " ")) | join("\u001f")' "$file")
     configFile="$file"
     _configOverlapCheck
@@ -300,9 +316,10 @@ manifestFingerprint() {
 
 # Lists a source tree without crossing into other filesystems. Fails if any
 # part of the tree cannot be read, so unreadable data is never treated as
-# migrated.
+# migrated. A rebalance mapping lists only its planned title folders, and fails
+# without a plan, unless "unfiltered" is passed for planning.
 manifestSource() {
-    local source="$1" output="$2" mapping="${3:-}" name pruneArgs=() names=()
+    local source="$1" output="$2" mapping="${3:-}" scope="${4:-}" name pruneArgs=() names=()
     if [[ -n "$mapping" ]]; then
         mapfile -t names < <(configMappingExcludes "$mapping")
     else
@@ -324,7 +341,29 @@ manifestSource() {
             find . -xdev -mindepth 1 "${pruneArgs[@]}" \
                 \( -type d -printf 'd\t0\t0\t%P\0' \) -o -printf '%y\t%s\t%T@\t%P\0' |
             LC_ALL=C sort -z
-    ) >"$output"
+    ) >"$output" || return 1
+    if [[ -n "$mapping" && -n "${mapRebalance[$mapping]:-}" && "$scope" != unfiltered ]]; then
+        _manifestPlanFilter "$mapping" "$output"
+    fi
+}
+
+# Keeps only the records inside the mapping's planned top-level folders.
+_manifestPlanFilter() {
+    local mapping="$1" output="$2" plan="${mapPlanFile[$1]:-}" title record
+    local -A planned=()
+    if [[ -z "$plan" || ! -f "$plan" ]]; then
+        echo "no rebalance plan is recorded for $mapping" >&2
+        return 1
+    fi
+    while IFS= read -r -d '' title; do
+        planned["$title"]=1
+    done <"$plan"
+    mv -f -- "$output" "$output.unplanned"
+    while IFS= read -r -d '' record; do
+        _manifestRecordSplit "$record"
+        [[ -n "${planned[${_path%%/*}]:-}" ]] && printf '%s\0' "$record"
+    done <"$output.unplanned" >"$output"
+    rm -f -- "$output.unplanned"
 }
 
 _manifestEntriesMatch() {

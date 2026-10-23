@@ -25,6 +25,8 @@
     { "name": "myVideo", "label": "My Video", "type": "video", "source": "/mnt/myVideo", "excludes": ["TV", "encrypted", "decrypted"], "target": "local", "destination": "/mnt/media/homeVideo", "enabled": false },
     { "name": "myVideoTV", "label": "My Video TV", "type": "tv", "source": "/mnt/myVideo/TV", "mountPoint": "/mnt/myVideo", "destination": "/mnt/storage/TV", "enabled": false },
     { "name": "myPictures", "label": "Pictures", "type": "pictures", "source": "/mnt/myPictures", "excludes": ["Movies"], "target": "local", "destination": "/mnt/media/Pictures", "enabled": false },
-    { "name": "myPicturesMovies", "label": "My Pictures Movies", "type": "movies", "source": "/mnt/myPictures/Movies", "mountPoint": "/mnt/myPictures", "destination": "/mnt/storage/Movies", "enabled": false }
+    { "name": "myPicturesMovies", "label": "My Pictures Movies", "type": "movies", "source": "/mnt/myPictures/Movies", "mountPoint": "/mnt/myPictures", "destination": "/mnt/storage/Movies", "enabled": false },
+    { "name": "moviesRebalance", "label": "Movies rebalance", "type": "movies", "source": "/mnt/movies/Movies", "mountPoint": "/mnt/movies", "destination": "/mnt/storage/Movies", "rebalance": { "targetPercent": 50 }, "enabled": false },
+    { "name": "tvRebalance", "label": "TV rebalance", "type": "tv", "source": "/mnt/video/TV", "mountPoint": "/mnt/video", "destination": "/mnt/storage/TV", "rebalance": { "targetPercent": 50 }, "enabled": false }
   ]
 }

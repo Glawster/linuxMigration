@@ -63,6 +63,7 @@ Safety decisions: [ADR 001](../../project/adr/001-raidMigrationSafety.md),
 - [Checking status](#checking-status)
 - [Is a disk safe to remove?](#is-a-disk-safe-to-remove)
 - [Removing migrated source data](#removing-migrated-source-data)
+- [Rebalancing local disks](#rebalancing-local-disks)
 - [State and logs](#state-and-logs)
 - [Worked example](#worked-example)
 
@@ -489,6 +490,87 @@ Removal:
   folders, or anything that changed or appeared after verification;
 - writes every deletion to `<name>-<timestamp>.removed`.
 
+## Rebalancing local disks
+
+`/mnt/movies` and `/mnt/video` stay on andy-pc, but they should never be more
+than half full. A **rebalance mapping** moves just enough whole titles to
+raid-pc to bring its disk down to a target occupancy
+([requirement 002](../../project/requirements/features/002-localMediaRebalance.md),
+[ADR 005](../../project/adr/005-rebalancePlan.md)). The template has two,
+disabled:
+
+```json
+{ "name": "moviesRebalance", "label": "Movies rebalance", "type": "movies",
+  "source": "/mnt/movies/Movies", "mountPoint": "/mnt/movies",
+  "destination": "/mnt/storage/Movies", "rebalance": { "targetPercent": 50 }, "enabled": false },
+{ "name": "tvRebalance", "label": "TV rebalance", "type": "tv",
+  "source": "/mnt/video/TV", "mountPoint": "/mnt/video",
+  "destination": "/mnt/storage/TV", "rebalance": { "targetPercent": 50 }, "enabled": false }
+```
+
+`rebalance.targetPercent` defaults to 50, and the mapping's `type` must be
+`movies` or `tv`. Only the source folder is ever considered, so nothing outside
+`/mnt/video/TV` (such as `linuxBackup`) is moved.
+
+### How titles are chosen
+
+Each top-level folder of the source is one title and is always moved whole.
+
+| Rule | Movies | TV |
+| --- | --- | --- |
+| Eligible | every movie folder | shows whose `series.xml` `<Status>` is `Ended`; anything else, or no `series.xml`, counts as airing and stays local |
+| Age | the `(Year)` ending the folder name | `<FirstAired>` in `series.xml` |
+
+Titles without a date come after every dated one; ties sort by name. The plan
+takes, in order:
+
+1. every eligible title that already exists in the destination, whatever its
+   age, so a title is never left split between andy-pc and raid-pc;
+2. the oldest eligible titles, until the projected occupancy (used minus
+   planned, over used plus available, as `df` reports it) is at or below the
+   target.
+
+An airing show already on raid-pc is reported as `Split:` and left in place. If
+the eligible titles cannot reach the target, every one of them is planned and
+the preview says `SHORTFALL:`. If raid-pc lacks the space, the usual space
+check refuses the run.
+
+### Running a rebalance
+
+```bash
+migrateToRaid --source tvRebalance                      # preview the plan
+migrateToRaid --source tvRebalance --verbose            # ... listing every title
+migrateToRaid --source tvRebalance --confirm --verify full
+migrateToRaid --check tvRebalance                       # SAFE TO REMOVE PLANNED TITLES?
+migrateToRaid --source tvRebalance --remove-source --confirm
+```
+
+The preview shows the disk's occupancy, the number and size of planned titles,
+the occupancy after the move, and the oldest planned titles with the reason for
+each. It records nothing.
+
+The first confirmed run records the plan as `<name>.plan` and copies only the
+planned folders. From then on, resuming, `--verify-only`, `--check` and
+`--remove-source` all use that recorded plan, even if a show's status or the
+disk's usage changes. To discard a plan before its titles are removed, delete
+`<name>.plan` by hand.
+
+`--check` judges only the planned titles: it reports **SAFE TO REMOVE PLANNED
+TITLES** and never gives a disk verdict, because a rebalanced disk stays in
+use. New titles added to the disk after the plan do not affect it, but a new
+episode written into a planned show does. `--remove-source` deletes only the
+planned title folders, never the rest of the source folder.
+
+After the planned titles have been removed, the next confirmed run starts a new
+cycle: the finished cycle's state, manifest and plan are kept as
+`<name>.<timestamp>.state`, `.manifest` and `.plan`, and a fresh plan is made.
+If the disk is at or below its target, the run says `Nothing to move` and
+records nothing.
+
+Move anything else off the disk first (for example `linuxBackup` from
+`/mnt/video`): the plan is based on the disk's usage at the time, so leftover
+content makes it move more titles than necessary.
+
 ## State and logs
 
 Everything lives in one folder:
@@ -502,6 +584,7 @@ Everything lives in one folder:
 ├── <name>.state                     current state of each mapping
 ├── <name>.history                   timestamped audit trail
 ├── <name>.manifest                  verified source manifest
+├── <name>.plan                      recorded rebalance plan (rebalance mappings)
 ├── <name>.conflicts                 destination conflicts to review
 ├── <name>-<timestamp>.rsync.log     every file rsync transferred
 └── <name>-<timestamp>.removed       every file deleted from the source
