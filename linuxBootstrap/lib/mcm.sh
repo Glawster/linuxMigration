@@ -108,13 +108,28 @@ _mcmPrefixApply() {
     fi
 }
 
+# .NET 4.8 is detected from the prefix's registry file rather than by running
+# wine: wine creates a missing prefix and may upgrade an existing one, which a
+# preview must never do.
 _mcmRuntimeApply() {
     local prefix="$1"
-    if WINEPREFIX="$prefix" WINEDEBUG=-all wine reg query 'HKLM\Software\Microsoft\NET Framework Setup\NDP\v4\Full' /v Release 2>/dev/null | grep -Eq '0x(8[0-9a-f]{4}|[9a-f][0-9a-f]{4,})'; then
+    if _mcmDotnetInstalled "$prefix"; then
         itemSkip "Media Center Master: .NET Framework 4.8 is installed"
     else
         changeRun "install .NET Framework 4.8 and core fonts in the Media Center Master prefix" _mcmRuntimeInstall "$prefix"
     fi
+}
+
+# Succeeds when system.reg records .NET Framework 4.8 or later (Release
+# 0x80000 and above) under NDP\v4\Full.
+_mcmDotnetInstalled() {
+    local registry="$1/system.reg" release
+    [[ -f "$registry" ]] || return 1
+    release="$(awk '
+        /^\[/ { inSection = ($0 ~ /^\[Software\\\\Microsoft\\\\NET Framework Setup\\\\NDP\\\\v4\\\\Full\]/); next }
+        inSection && /^"Release"=dword:/ { sub(/^"Release"=dword:/, ""); print; exit }
+    ' "$registry")"
+    [[ "$release" =~ ^[0-9a-fA-F]{8}$ ]] && ((16#$release >= 16#80000))
 }
 
 _mcmRuntimeInstall() {

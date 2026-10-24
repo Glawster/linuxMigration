@@ -959,13 +959,22 @@ Both print `git describe` against the release tags:
 
 `python3 ~/bin/repoVersion.py` prints the version of a machine's checkout.
 
+### When to release
+
+Tag a release only when the whole repository is in a good state on `main`:
+
+- every piece of work meant for the release is merged into `main`, and no
+  feature branch holds unmerged work that belongs in it;
+- every test suite passes with no failures, including ones that seem
+  unrelated: `./linuxBootstrap/tests/runTests.sh` (which includes the
+  migrateToRaid tests) and `python3 -m pytest tests`;
+- the release notes describe every tool that changed since the last release.
+
 ### Making a release
 
 1. On a branch, set `VERSION` to the new number and add the release to
    `documentation/releaseNotes.md`.
-2. Run the tests: `./linuxBootstrap/tests/runTests.sh` and
-   `python3 -m pytest tests/test_repoVersion.py` (plus the tests of any
-   changed tool).
+2. Run every test suite (see above); all must pass.
 3. Open a pull request and squash-merge it into `main`.
 4. Tag the merge commit and push the tag:
 

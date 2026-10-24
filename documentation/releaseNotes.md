@@ -3,6 +3,19 @@
 Releases of this repository, newest first. The process is in
 [Versioning and releases](../.github/additional-instructions.md#versioning-and-releases).
 
+## Unreleased
+
+- `bootstrap.sh`: previews no longer run wine. The Media Center Master check
+  reads .NET 4.8 from the prefix's `system.reg`, so a preview never creates or
+  upgrades `~/.wine-mcm`.
+- `bootstrap.sh`: the DaVinci Resolve install folder can be overridden
+  (`davinciRoot`), so its tests no longer depend on whether Resolve is
+  installed.
+- `scansnapToVM.py`: sets its logUtils application context before creating its
+  logger, fixing a crash at startup with organiseMyProjects 0.9.
+- Release process: tag only when all work is on `main` and every test suite
+  passes.
+
 ## v1.3 (2026-10-24)
 
 First tagged release. Introduces one repository version (`VERSION`, `vX.Y`

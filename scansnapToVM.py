@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    from organiseMyProjects.logUtils import getLogger  # type: ignore
+    from organiseMyProjects.logUtils import getLogger, setApplication  # type: ignore
 except ImportError:
     import logging as _logging
 
@@ -74,10 +74,16 @@ except ImportError:
     def getLogger(name: str, dryRun: bool = False, **kwargs) -> _FallbackLogger:  # type: ignore[misc]
         return _FallbackLogger(name, dryRun=dryRun)
 
+    def setApplication(name: str, logDir: Optional[Path] = None) -> None:  # type: ignore[misc]
+        """The fallback logger needs no application context."""
+
 
 CONFIG_DIR = Path.home() / ".config" / "scansnapToVM"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
+# This script is its own entry point, so it sets the logUtils application
+# context before creating the module logger (organiseMyProjects 0.9 requires it).
+setApplication("scansnapToVM")
 logger = getLogger("scansnapToVM")
 
 
