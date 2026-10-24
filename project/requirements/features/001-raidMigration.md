@@ -179,6 +179,11 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
     file does not fail verification or `--check`, an older destination copy
     does fail `--check`, and video and other files still conflict.
 
+25. Given any run, when it starts, then a header on screen and in the log
+    names the tool version (and git commit when available), the host, the
+    action and mode, and the command line; `--version` prints the version;
+    and a confirmed copy records the version and host in the mapping's state.
+
 ## Dependencies and decisions
 
 - [ADR 001: Safety model for migrating storage to raid-pc](../../adr/001-raidMigrationSafety.md)
@@ -233,3 +238,5 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
   locally (ADR 006, superseding ADR 004, criterion 23); `movie2` is the first.
 - 2026-10-24: differing artwork and metadata files are resolved by age, the
   newer copy winning, instead of being conflicts (ADR 007, criteria 5 and 24).
+- 2026-10-24: every run opens with a versioned header, and copies record the
+  tool version and host (criterion 25).
