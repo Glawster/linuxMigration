@@ -922,6 +922,76 @@ def process_in_batches(files, batch_size=100):
             process_file(file)
 ```
 
+## Versioning and releases
+
+This repository has **one version for everything in it**
+([ADR 008](../project/adr/008-repositoryVersion.md)). It replaces the
+release-branch model of the managed `documentation/howToRelease.md`: there
+are no release branches, and releases are tagged on `main`.
+
+### Version numbers
+
+- `VERSION` at the repository root holds the release number, `X.Y`
+  (`X.Y.Z` only for a hotfix). Between releases it holds the last release.
+- Bump the minor number for new features or changed behaviour, the patch
+  number for a fix released on its own, and the major number for a change
+  that needs existing configuration or state to be migrated.
+- Tools never keep their own version numbers. What changed for each tool goes
+  in `documentation/releaseNotes.md`.
+
+### Reporting the version
+
+Every tool shows what is running at the start of its output and logs:
+
+- Bash: `source "<repository root>/repoVersion.sh"`, then
+  `repoVersionDescribe`.
+- Python: `from repoVersion import repoVersion`, then `repoVersion()`.
+
+Both print `git describe` against the release tags:
+
+| Output | Meaning |
+| --- | --- |
+| `v1.3` | exactly release v1.3 |
+| `v1.3-4-g1a2b3c4` | 4 commits after v1.3, at commit `1a2b3c4` |
+| `…-dirty` | the checkout has uncommitted changes |
+| `1.3 (1a2b3c4)` | no release tag is reachable; `VERSION` and the commit |
+| `1.3` | not a git checkout; `VERSION` only |
+
+`python3 ~/bin/repoVersion.py` prints the version of a machine's checkout.
+
+### Making a release
+
+1. On a branch, set `VERSION` to the new number and add the release to
+   `documentation/releaseNotes.md`.
+2. Run the tests: `./linuxBootstrap/tests/runTests.sh` and
+   `python3 -m pytest tests/test_repoVersion.py` (plus the tests of any
+   changed tool).
+3. Open a pull request and squash-merge it into `main`.
+4. Tag the merge commit and push the tag:
+
+   ```bash
+   git fetch origin && git switch main && git pull --ff-only
+   git tag -a v1.3 -m "Release v1.3"
+   git push origin v1.3
+   ```
+
+5. Never move, delete or reuse a published tag; fix mistakes with a new
+   release.
+
+### Deploying a release to a machine
+
+Each machine runs the tools from its own `~/bin` checkout:
+
+```bash
+cd ~/bin && git fetch --tags origin
+git switch --detach v1.3          # run exactly a release
+git switch main && git pull --ff-only   # or follow main
+python3 repoVersion.py            # confirm what is checked out
+```
+
+A machine left on a feature branch runs that branch's code; the version in the
+tool header shows it.
+
 ## When Contributing
 
 ### Pre-commit Checklist

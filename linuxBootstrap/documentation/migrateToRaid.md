@@ -636,13 +636,16 @@ content makes it move more titles than necessary.
 ## State and logs
 
 Every run starts with a header, on screen and in the daily log, naming the
-version of `migrateToRaid` (with the git commit of the checkout), the host,
-the action and mode, and the exact command line:
+repository version it runs from, the host, the action and mode, and the exact
+command line. The version is the checkout's release tag, for example `v1.3`,
+or `v1.3-4-g1a2b3c4` four commits later, with `-dirty` for uncommitted
+changes (see "Versioning and releases" in
+[additional instructions](../../.github/additional-instructions.md)):
 
 ```text
 >--------------------------------------------------------------------------------<
 
-migrateToRaid 1.3 (889c852) on raid-pc
+migrateToRaid v1.3 on raid-pc
   Action:       migrate (apply)
   Command:      migrateToRaid --source movie2 --confirm --verify full
 --------------------------------------------------------------------------------

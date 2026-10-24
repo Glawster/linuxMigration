@@ -3,7 +3,7 @@
 Consequential linuxMigration decisions, numbered `nnn-decisionName.md` and never
 reused. Status values: Proposed, Accepted, Superseded (link the replacement).
 
-Next available number: 008
+Next available number: 009
 
 | ADR | Title | Status | Requirements |
 | --- | --- | --- | --- |
@@ -14,3 +14,4 @@ Next available number: 008
 | [005](005-rebalancePlan.md) | Rebalancing through a recorded title plan | Accepted | [002](../requirements/features/002-localMediaRebalance.md) |
 | [006](006-migrateOnHostWithDisk.md) | Migrating a disk on the machine it is attached to | Accepted | [001](../requirements/features/001-raidMigration.md) |
 | [007](007-newerMetadataWins.md) | Newer artwork and metadata replace older copies | Accepted | [001](../requirements/features/001-raidMigration.md) |
+| [008](008-repositoryVersion.md) | One version and release tag for the whole repository | Accepted | — |
