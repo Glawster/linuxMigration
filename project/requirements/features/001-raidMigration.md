@@ -180,8 +180,8 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
     does fail `--check`, and video and other files still conflict.
 
 25. Given any run, when it starts, then a header on screen and in the log
-    names the tool version (and git commit when available), the host, the
-    action and mode, and the command line; `--version` prints the version;
+    names the repository version (ADR 008), the host, the action and mode,
+    and the command line; `--version` prints the version;
     and a confirmed copy records the version and host in the mapping's state.
 
 ## Dependencies and decisions
@@ -240,3 +240,5 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
   newer copy winning, instead of being conflicts (ADR 007, criteria 5 and 24).
 - 2026-10-24: every run opens with a versioned header, and copies record the
   tool version and host (criterion 25).
+- 2026-10-24: the header reports the repository version instead of a
+  tool-specific one (ADR 008, criterion 25).

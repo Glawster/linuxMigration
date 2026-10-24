@@ -49,6 +49,14 @@ Project records:
 
 Tools preview by default and act only with `-y`/`--confirm`.
 
+## Versions
+
+The repository has one version, in `VERSION`, and each release is an annotated
+`vX.Y` tag on `main`. Tools report what is running with `repoVersion.sh` or
+`repoVersion.py` (for example `v1.3`, or `v1.3-4-g1a2b3c4-dirty`). See
+[release notes](documentation/releaseNotes.md) and the release process in
+[additional instructions](.github/additional-instructions.md#versioning-and-releases).
+
 ## Tests
 
 ```bash

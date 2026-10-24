@@ -13,17 +13,15 @@ source "$_raidMigrationDir/raidMigrationStore.sh"
 source "$_raidMigrationDir/raidMigrationRemote.sh"
 # shellcheck source=lib/raidMigrationPlan.sh
 source "$_raidMigrationDir/raidMigrationPlan.sh"
+# The repository version (VERSION and release tags) identifies what is running.
+if [[ -f "$_raidMigrationDir/../../repoVersion.sh" ]]; then
+    # shellcheck source=../../repoVersion.sh
+    source "$_raidMigrationDir/../../repoVersion.sh"
+fi
 
 action="migrate"
 applicationName="migrateToRaid"
-# The tool's own version, shown in every run header and recorded in mapping
-# state. Bump the minor version for each change in behaviour:
-#   1.0 copy, verify, check and removal (requirement 001)
-#   1.1 rebalance plans (requirement 002, ADR 005)
-#   1.2 running on raid-pc with the same configuration (ADR 006)
-#   1.3 newer artwork and metadata replace older copies (ADR 007), version in
-#       the run header and --version
-applicationVersion="1.3"
+_versionCache=""
 configOverride=""
 dryRun=1
 lockFd=""
@@ -1016,15 +1014,17 @@ runHeader() {
     fi
 }
 
-# The version, plus the git commit of this checkout when it is available.
+# The repository version this run comes from (repoVersion.sh), worked out once
+# per run because it asks git about the whole checkout.
 versionDescribe() {
-    local commit
-    commit="$(git -C "$_raidMigrationDir" rev-parse --short HEAD 2>/dev/null)" || commit=""
-    if [[ -n "$commit" ]]; then
-        printf '%s (%s)' "$applicationVersion" "$commit"
-    else
-        printf '%s' "$applicationVersion"
+    if [[ -z "$_versionCache" ]]; then
+        if declare -F repoVersionDescribe >/dev/null; then
+            _versionCache="$(repoVersionDescribe)"
+        else
+            _versionCache=unknown
+        fi
     fi
+    printf '%s' "$_versionCache"
 }
 
 commandsRequire() {

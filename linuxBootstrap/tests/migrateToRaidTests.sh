@@ -247,7 +247,7 @@ testMigrateToRaidArgumentErrors() {
 testMigrateToRaidVersion() {
     local version
     version="$("$projectDir/migrateToRaid.sh" --version)"
-    _mtrCheck 'migrateToRaid --version prints the version' test "${version%% (*}" = "migrateToRaid $(sed -n 's/^applicationVersion="\(.*\)"$/\1/p' "$projectDir/lib/raidMigration.sh")"
+    _mtrCheck 'migrateToRaid --version prints the repository version' test "$version" = "migrateToRaid $(source "$projectDir/../repoVersion.sh" && repoVersionDescribe)"
     _mtrSandbox
     _mtrRun --source movie1
     assertContains "$mtrOutput" "${version#migrateToRaid }" 'run header shows the version'
