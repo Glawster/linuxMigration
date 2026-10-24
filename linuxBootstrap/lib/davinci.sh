@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Where the official installer puts DaVinci Resolve. Tests point it at an empty
+# folder so the host's own installation does not change their results.
+davinciRoot="${davinciRoot:-/opt/resolve}"
+
 davinciApply() {
     local enabled="$1" remove="$2" installerDir="$3"
     enabled="${enabled,,}"
@@ -30,7 +34,7 @@ _davinciGpuValidate() {
 _davinciInstallApply() {
     local installerDir="$1" installer
     _davinciGpuValidate
-    if [[ -x /opt/resolve/bin/resolve ]]; then
+    if [[ -x "$davinciRoot/bin/resolve" ]]; then
         itemSkip "DaVinci Resolve: application installed"
     else
         installer="$(_davinciInstallerFind "$installerDir")" || {
@@ -70,7 +74,7 @@ _davinciInstallerRun() {
 
 _davinciLauncherApply() {
     local target="$HOME/bin/davinci-resolve"
-    if [[ -x "$target" ]] && grep -Fq '/opt/resolve/bin/resolve' "$target"; then
+    if [[ -x "$target" ]] && grep -Fq "$davinciRoot/bin/resolve" "$target"; then
         itemSkip "DaVinci Resolve: launcher installed"
     else
         changeRun "install DaVinci Resolve launcher in ~/bin" _davinciLauncherInstall "$target"
@@ -80,15 +84,15 @@ _davinciLauncherApply() {
 _davinciLauncherInstall() {
     local target="$1"
     mkdir -p "$(dirname "$target")"
-    printf '%s\n' '#!/usr/bin/env bash' 'set -Eeuo pipefail' 'exec /opt/resolve/bin/resolve "$@"' > "$target"
+    printf '%s\n' '#!/usr/bin/env bash' 'set -Eeuo pipefail' "exec $davinciRoot/bin/resolve \"\$@\"" > "$target"
     chmod 755 "$target"
 }
 
 _davinciRemoveApply() {
-    if [[ -x /opt/resolve/installer ]]; then
-        changeRun "uninstall DaVinci Resolve from this host" sudo /opt/resolve/installer -u
-    elif [[ -e /opt/resolve ]]; then
-        logError "DaVinci Resolve exists but its official uninstaller is missing: /opt/resolve/installer"
+    if [[ -x "$davinciRoot/installer" ]]; then
+        changeRun "uninstall DaVinci Resolve from this host" sudo "$davinciRoot/installer" -u
+    elif [[ -e "$davinciRoot" ]]; then
+        logError "DaVinci Resolve exists but its official uninstaller is missing: $davinciRoot/installer"
         ((summaryFailed += 1))
         return 1
     else

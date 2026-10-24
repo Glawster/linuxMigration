@@ -323,6 +323,7 @@ testDaVinciDryRun() {
         HOME="$resolveHome"
         source "$projectDir/lib/logging.sh"
         source "$projectDir/lib/common.sh"
+        davinciRoot="$testStateDir/davinci-not-installed"
         source "$projectDir/lib/davinci.sh"
         nvidia-smi() { :; }
         dryRun=1
@@ -340,6 +341,7 @@ testDaVinciMissingInstaller() {
     output="$({
         source "$projectDir/lib/logging.sh"
         source "$projectDir/lib/common.sh"
+        davinciRoot="$testStateDir/davinci-not-installed"
         source "$projectDir/lib/davinci.sh"
         nvidia-smi() { :; }
         dryRun=1
@@ -359,6 +361,7 @@ testDaVinciRemoveLauncherDryRun() {
         HOME="$resolveHome"
         source "$projectDir/lib/logging.sh"
         source "$projectDir/lib/common.sh"
+        davinciRoot="$testStateDir/davinci-not-installed"
         source "$projectDir/lib/davinci.sh"
         dryRun=1
         davinciApply false true "$resolveHome/Downloads"
@@ -396,12 +399,15 @@ testMcmExisting() {
     mkdir -p "$(dirname "$executable")" "$prefix/dosdevices" "$mcmHome/bin"
     : > "$executable"
     ln -s /mnt/video2 "$prefix/dosdevices/x:"
+    printf '%s\n' 'WINE REGISTRY Version 2' \
+        '[Software\\Microsoft\\NET Framework Setup\\NDP\\v4\\Full] 1788641383' \
+        '"Install"=dword:00000001' '"Release"=dword:00080eb1' > "$prefix/system.reg"
     output="$({
         HOME="$mcmHome"
         source "$projectDir/lib/logging.sh"
         source "$projectDir/lib/common.sh"
         source "$projectDir/lib/mcm.sh"
-        wine() { printf 'Release    REG_DWORD    0x80eb0\n'; }
+        wine() { : > "$mcmHome/wine-ran"; }
         winetricks() { :; }
         unzip() { :; }
         dryRun=0
@@ -411,6 +417,7 @@ testMcmExisting() {
         printf 'CHANGES %s\n' "$summaryChanged"
     })"
     assertContains "$output" 'CHANGES 0' 'MCM preserves an existing complete installation'
+    [[ ! -e "$mcmHome/wine-ran" ]] || { printf 'FAIL  MCM ran wine to inspect an existing prefix\n'; ((failed += 1)); }
 }
 
 testDcsDisabled() {
