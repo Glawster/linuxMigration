@@ -62,3 +62,7 @@ linuxMigration sequencing and priorities. Current increment status is kept in
 - [ ] Cron and systemd user-service management
 - [ ] NetworkManager connection selection and static addressing
 - [ ] Integration tests in a disposable Pop!_OS-compatible virtual machine
+
+## suggestUnwatched
+
+- [x] Suggest the oldest unwatched video folders, with exemptions and a removal script ([004](requirements/features/004-suggestUnwatched.md))

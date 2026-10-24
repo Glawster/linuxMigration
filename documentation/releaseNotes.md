@@ -5,6 +5,10 @@ Releases of this repository, newest first. The process is in
 
 ## Unreleased
 
+- `suggestUnwatched` (new, requirement 004): suggests the oldest unwatched
+  shows from Plex watch state and Media Center Master air dates, with an
+  exemption chooser and a reviewable `removeShows.sh`. It logs the repository
+  version at start-up.
 - `bootstrap.sh`: previews no longer run wine. The Media Center Master check
   reads .NET 4.8 from the prefix's `system.reg`, so a preview never creates or
   upgrades `~/.wine-mcm`.

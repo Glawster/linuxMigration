@@ -967,7 +967,9 @@ Tag a release only when the whole repository is in a good state on `main`:
   feature branch holds unmerged work that belongs in it;
 - every test suite passes with no failures, including ones that seem
   unrelated: `./linuxBootstrap/tests/runTests.sh` (which includes the
-  migrateToRaid tests) and `python3 -m pytest tests`;
+  migrateToRaid tests), `python3 -m pytest tests`, and
+  `conda run -n suggestUnwatched python -m pytest suggestUnwatched` (it has
+  its own environment);
 - the release notes describe every tool that changed since the last release.
 
 ### Making a release

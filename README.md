@@ -38,6 +38,7 @@ Project records:
 | `recoveryTools/` | Photo/video recovery pipeline for PhotoRec output |
 | `kohyaTools/` | Image processing and LoRA training workflows |
 | `runpodTools/` | Modular bootstrap for RunPod instances |
+| `suggestUnwatched/` | Suggest the oldest unwatched shows for removal, from Plex watch state ([guide](suggestUnwatched/suggestUnwatchedIndex.md)) |
 
 ## Notable commands
 
