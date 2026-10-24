@@ -98,7 +98,8 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
    space, when a migration runs, then that mapping stops before any transfer.
 5. Given destination entries that already exist, when a migration runs, then
    missing entries are copied, identical entries are skipped, and differing
-   entries are recorded as conflicts and never overwritten.
+   entries are recorded as conflicts and never overwritten, except metadata
+   files (criterion 24).
 6. Given an interrupted transfer, when the migration is re-run, then the partial
    data resumes from a dedicated partial directory, no partial file ever
    appears at a destination path, and the interruption is not treated as a
@@ -171,6 +172,13 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
     filesystem-type and protection checks still apply, and on any other host
     raid-pc is still reached over SSH.
 
+24. Given a differing destination file whose extension is in
+    `metadataExtensions` (default `jpg`, `jpeg`, `png`, `xml`, `nfo`), when a
+    migration runs, then it is replaced if the source copy is newer and kept
+    if the destination copy is as new or newer, it is not a conflict, a kept
+    file does not fail verification or `--check`, an older destination copy
+    does fail `--check`, and video and other files still conflict.
+
 ## Dependencies and decisions
 
 - [ADR 001: Safety model for migrating storage to raid-pc](../../adr/001-raidMigrationSafety.md)
@@ -178,6 +186,7 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 - [ADR 004: migrateToRaid runs only on andy-pc](../../adr/004-migrateOnlyOnAndyPc.md)
   (supersedes ADR 003; superseded by ADR 006)
 - [ADR 006: Migrating a disk on the machine it is attached to](../../adr/006-migrateOnHostWithDisk.md)
+- [ADR 007: Newer artwork and metadata replace older copies](../../adr/007-newerMetadataWins.md)
 - The raid-pc storage layout and SnapRAID parity are prerequisites for real
   migration to raid-pc, and a mounted `/mnt/media` with its UUID configured is
   a prerequisite for local migration; neither is a prerequisite for this
@@ -222,3 +231,5 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 - 2026-10-24: a source disk attached to raid-pc is migrated by running the
   tool on raid-pc, with the same configuration as andy-pc and the pool reached
   locally (ADR 006, superseding ADR 004, criterion 23); `movie2` is the first.
+- 2026-10-24: differing artwork and metadata files are resolved by age, the
+  newer copy winning, instead of being conflicts (ADR 007, criteria 5 and 24).

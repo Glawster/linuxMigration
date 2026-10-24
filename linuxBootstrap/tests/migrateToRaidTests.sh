@@ -406,6 +406,69 @@ testMigrateToRaidConflictingDestination() {
     _mtrCheck 'conflicting migration is not verified' test "$(_mtrState verifyStatus)" != verified
 }
 
+# Artwork and metadata files are not conflicts: the newer copy wins (ADR 007).
+# Video files still conflict.
+testMigrateToRaidNewerMetadataWins() {
+    local film
+    _mtrSandbox
+    film="Films/A Film (2001)"
+    mkdir -p "$mtrDest/$film"
+    printf 'new poster\n' >"$mtrSource/$film/poster.jpg"
+    printf 'old poster\n' >"$mtrDest/$film/poster.jpg"
+    touch -d 2024-01-01 "$mtrSource/$film/poster.jpg"
+    touch -d 2020-01-01 "$mtrDest/$film/poster.jpg"
+    printf 'old fanart\n' >"$mtrSource/$film/fanart.jpg"
+    printf 'newer fanart\n' >"$mtrDest/$film/fanart.jpg"
+    touch -d 2020-01-01 "$mtrSource/$film/fanart.jpg"
+    touch -d 2024-06-01 "$mtrDest/$film/fanart.jpg"
+    printf '<a/>\n' >"$mtrSource/$film/movie.xml"
+    printf '<bb/>\n' >"$mtrDest/$film/movie.xml"
+    touch -d 2022-02-02 "$mtrSource/$film/movie.xml" "$mtrDest/$film/movie.xml"
+    printf 'a different film\n' >"$mtrDest/$film/A Film (2001).mkv"
+
+    _mtrRun --source movie1
+    assertContains "$mtrOutput" 'To replace:   1 older metadata files' 'newer source metadata is planned to replace'
+    assertContains "$mtrOutput" 'Kept:         2 metadata files already newer' 'newer or equal destination metadata is kept'
+    assertContains "$mtrOutput" 'Conflicts:    1 ' 'only the video file conflicts'
+
+    _mtrRun --source movie1 --confirm
+    _mtrCheck 'video conflict still fails the migration' test "$(_mtrState copyStatus)/$(_mtrState conflicts)" = conflicts/1
+    _mtrCheck 'newer source metadata replaces the destination copy' test "$(cat "$mtrDest/$film/poster.jpg")" = 'new poster'
+    _mtrCheck 'replaced metadata keeps the source time' test "$(stat -c %Y "$mtrDest/$film/poster.jpg")" = "$(stat -c %Y "$mtrSource/$film/poster.jpg")"
+    _mtrCheck 'newer destination metadata is kept' test "$(cat "$mtrDest/$film/fanart.jpg")" = 'newer fanart'
+    _mtrCheck 'equal-time destination metadata is kept' test "$(cat "$mtrDest/$film/movie.xml")" = '<bb/>'
+    _mtrCheck 'conflicting video file is not overwritten' test "$(cat "$mtrDest/$film/A Film (2001).mkv")" = 'a different film'
+    _mtrCheck 'metadata is not listed as a conflict' _mtrNotContains "$(cat "$mtrState/movie1.conflicts")" '.jpg'
+
+    rm -f "$mtrDest/$film/A Film (2001).mkv"
+    _mtrRun --source movie1 --confirm --verify full
+    _mtrCheck 'resolved migration verifies' test "$(_mtrState verifyStatus)/$(_mtrState verifyLevel)" = verified/full
+    assertContains "$mtrOutput" '2 metadata files are newer on raid-pc and were kept' 'verification reports kept metadata'
+    _mtrRun --check movie1
+    assertContains "$mtrOutput" 'SAFE TO REMOVE DISK' 'kept newer metadata is safe'
+
+    printf 'newest fanart\n' >"$mtrDest/$film/fanart.jpg"
+    touch -d 2025-01-01 "$mtrDest/$film/fanart.jpg"
+    _mtrRun --check movie1
+    assertContains "$mtrOutput" 'SAFE TO REMOVE DISK' 'metadata updated later on raid-pc stays safe'
+    touch -d 2019-01-01 "$mtrDest/$film/poster.jpg"
+    _mtrRun --check movie1
+    assertContains "$mtrOutput" 'destination no longer matches' 'older destination metadata is not safe'
+    touch -d 2024-01-01 "$mtrDest/$film/poster.jpg"
+
+    _mtrRun --source movie1 --remove-source --confirm --yes-delete
+    _mtrCheck 'removal deletes superseded source metadata' test ! -e "$mtrSource/$film/fanart.jpg"
+    _mtrCheck 'removal leaves the newer destination metadata' test "$(cat "$mtrDest/$film/fanart.jpg")" = 'newest fanart'
+
+    _mtrSandbox
+    jq '.metadataExtensions = []' "$mtrConfig" >"$mtrConfig.new" && mv "$mtrConfig.new" "$mtrConfig"
+    mkdir -p "$mtrDest/Films/A Film (2001)"
+    printf 'new poster\n' >"$mtrSource/Films/A Film (2001)/poster.jpg"
+    printf 'old\n' >"$mtrDest/Films/A Film (2001)/poster.jpg"
+    _mtrRun --source movie1
+    assertContains "$mtrOutput" 'Conflicts:    1 ' 'without metadata extensions every difference conflicts'
+}
+
 ## verification
 
 testMigrateToRaidFullVerification() {
@@ -885,6 +948,7 @@ migrateToRaidTestsRun() {
     testMigrateToRaidSourceGrowsDuringCopy
     testMigrateToRaidIdenticalDestination
     testMigrateToRaidConflictingDestination
+    testMigrateToRaidNewerMetadataWins
     testMigrateToRaidFullVerification
     testMigrateToRaidFailedVerification
     testMigrateToRaidCheck

@@ -335,8 +335,10 @@ _checkDestination() {
         return 1
     fi
     manifestCompare "$stateDir/$name.manifest" "$prefix.dest" "$prefix.destCompare"
-    if ((cmpMissing > 0 || cmpConflicts > 0)); then
-        _checkResult fail "destination no longer matches the verified manifest ($cmpMissing missing, $cmpConflicts changed)"
+    # A destination metadata file that is newer than the verified one has been
+    # updated by a media manager; an older or other changed file has not.
+    if ((cmpMissing > 0 || cmpConflicts > 0 || cmpReplace > 0)); then
+        _checkResult fail "destination no longer matches the verified manifest ($cmpMissing missing, $((cmpConflicts + cmpReplace)) changed)"
         return 1
     fi
     _checkResult ok "destination is reachable and still matches the verified manifest"
@@ -367,8 +369,8 @@ _checkSourceUnchanged() {
         return 0
     fi
     manifestCompare "$prefix.source" "$stateDir/$name.manifest" "$prefix.sourceCompare"
-    if ((cmpMissing > 0 || cmpConflicts > 0 || cmpUnsupported > 0)); then
-        _checkResult fail "source contains data that was not verified ($cmpMissing new, $cmpConflicts changed)"
+    if ((cmpMissing > 0 || cmpConflicts > 0 || cmpUnsupported > 0 || cmpReplace > 0 || cmpKept > 0)); then
+        _checkResult fail "source contains data that was not verified ($cmpMissing new, $((cmpConflicts + cmpReplace + cmpKept)) changed)"
         return 1
     fi
     _checkResult ok "source holds no unverified data (migrated content removal: $removed)"
@@ -483,17 +485,18 @@ mappingProcess() {
     stateSave "$name" sourceUuid="$srcUuid" sourceMount="${mapMount[$name]}" sourcePath="$source" sourceFsType="$srcFsType" \
         sourceDevice="$srcDevice" destination="$destRsyncPrefix$dest" destinationKind="$destKind" copyStatus=running \
         copyStarted="$(date -Is)" copyCompleted="" verifyStatus=pending pid="$$" lastError=""
-    stateHistoryAppend "$name" copyStarted "missing=$cmpMissing conflicts=$cmpConflicts"
+    stateHistoryAppend "$name" copyStarted "missing=$cmpMissing replace=$cmpReplace conflicts=$cmpConflicts"
     _mappingCopy "$name" "$prefix" || return 1
     _mappingVerify "$name" "$prefix"
 }
 
 _mappingCopy() {
-    local name="$1" prefix="$2" source="${mapSource[$1]}" dest="${mapDest[$1]}"
-    local pass=1 copiedFiles=0 copiedBytes=0 rsyncLog detail
-    while ((cmpMissing > 0)); do
+    local name="$1" prefix="$2" dest="${mapDest[$1]}"
+    local pass=1 replace
+    copiedFiles=0 copiedBytes=0
+    while ((cmpMissing + cmpReplace > 0)); do
         if ((pass > maxCopyPasses)); then
-            _mappingFail "$name" "source is still changing: $cmpMissing new entries after $maxCopyPasses copy passes" copyStatus=partial
+            _mappingFail "$name" "source is still changing: $((cmpMissing + cmpReplace)) new entries after $maxCopyPasses copy passes" copyStatus=partial
             return 1
         fi
         if [[ "$probeDestExists" != yes ]] && ! destinationMakeDirectory "$dest"; then
@@ -501,20 +504,17 @@ _mappingCopy() {
             return 1
         fi
         probeDestExists=yes
-        _say "  Copying (pass $pass): $cmpMissingFiles files, $cmpMissingDirs directories, $(_bytesFormat "$cmpMissingBytes")"
-        rsyncLog="$stateDir/$name-$(date +%Y%m%d-%H%M%S).rsync.log"
-        transferArgsBuild "$prefix.missing" "$srcFsType" "$rsyncLog"
-        log_value "rsync log" "$rsyncLog"
-        transferRun "$source" "$dest" "$prefix.rsync.out" "$prefix.rsync.err" "$prefix.rsync.status"
-        copiedFiles=$((copiedFiles + transferFiles))
-        copiedBytes=$((copiedBytes + transferBytes))
-        stateSave "$name" copiedFiles="$copiedFiles" copiedBytes="$copiedBytes"
-        if [[ "$transferStatus" != 0 ]]; then
-            detail="$(tail -n 2 "$prefix.rsync.err" | tr '\n' ' ')"
-            _mappingFail "$name" "rsync exit $transferStatus ($(transferStatusExplain "$transferStatus")): $detail; re-run to resume" copyStatus=partial
-            return 1
+        replace="$cmpReplace"
+        if ((cmpMissing > 0)); then
+            _say "  Copying (pass $pass): $cmpMissingFiles files, $cmpMissingDirs directories, $(_bytesFormat "$cmpMissingBytes")"
+            _mappingTransfer "$name" "$prefix" missing || return 1
         fi
-        _say "  Copied $transferFiles files ($(_bytesFormat "$transferBytes")); re-scanning both sides"
+        # Only metadata files newer on the source replace destination copies.
+        if ((replace > 0)); then
+            _say "  Replacing (pass $pass): $replace older metadata files on $destPlace"
+            _mappingTransfer "$name" "$prefix" replace || return 1
+        fi
+        _say "  Re-scanning both sides"
         _mappingScan "$name" "$prefix" || return 1
         pass=$((pass + 1))
     done
@@ -527,6 +527,26 @@ _mappingCopy() {
         sourceFiles="$cmpFiles" sourceBytes="$cmpBytes"
     stateHistoryAppend "$name" copyComplete "files=$copiedFiles bytes=$copiedBytes"
     _say "  Copy complete"
+}
+
+# Runs one rsync pass over <prefix>.missing or <prefix>.replace and adds its
+# totals to copiedFiles and copiedBytes.
+_mappingTransfer() {
+    local name="$1" prefix="$2" mode="$3" source="${mapSource[$1]}" dest="${mapDest[$1]}" rsyncLog detail
+    rsyncLog="$stateDir/$name-$(date +%Y%m%d-%H%M%S)-$mode.rsync.log"
+    [[ "$mode" == missing ]] && rsyncLog="$stateDir/$name-$(date +%Y%m%d-%H%M%S).rsync.log"
+    transferArgsBuild "$prefix.$mode" "$srcFsType" "$rsyncLog" "$mode"
+    log_value "rsync log" "$rsyncLog"
+    transferRun "$source" "$dest" "$prefix.rsync.out" "$prefix.rsync.err" "$prefix.rsync.status"
+    copiedFiles=$((copiedFiles + transferFiles))
+    copiedBytes=$((copiedBytes + transferBytes))
+    stateSave "$name" copiedFiles="$copiedFiles" copiedBytes="$copiedBytes"
+    if [[ "$transferStatus" != 0 ]]; then
+        detail="$(tail -n 2 "$prefix.rsync.err" | tr '\n' ' ')"
+        _mappingFail "$name" "rsync exit $transferStatus ($(transferStatusExplain "$transferStatus")): $detail; re-run to resume" copyStatus=partial
+        return 1
+    fi
+    _say "  Copied $transferFiles files ($(_bytesFormat "$transferBytes"))"
 }
 
 # Records a failure. Preview runs never write state.
@@ -574,6 +594,8 @@ _mappingReport() {
     _sayField "Available:" "$(_bytesFormat "${probeAvail:-0}") on $destPlace"
     _sayField "On $destPlace:" "$cmpIdentical entries already identical (skipped)"
     _sayField "To copy:" "$cmpMissingFiles files, $cmpMissingDirs directories ($(_bytesFormat "$cmpMissingBytes"))"
+    _sayField "To replace:" "$cmpReplace older metadata files on $destPlace ($(_bytesFormat "$cmpReplaceBytes")); the source copy is newer"
+    _sayField "Kept:" "$cmpKept metadata files already newer on $destPlace"
     _sayField "Conflicts:" "$cmpConflicts (existing destination files that differ; never overwritten)"
     if ((cmpConflicts > 0)); then
         _reportExcerpt "$prefix.conflicts"
@@ -612,7 +634,7 @@ _mappingScan() {
 
 _mappingSpaceCheck() {
     local name="$1" required
-    required=$((cmpMissingBytes + minFreeBytesAfter))
+    required=$((cmpMissingBytes + cmpReplaceBytes + minFreeBytesAfter))
     if [[ ! "$probeAvail" =~ ^[0-9]+$ ]]; then
         _mappingFail "$name" "could not determine free space on $destPlace"
         return 1
@@ -626,11 +648,14 @@ _mappingSpaceCheck() {
 _mappingVerify() {
     local name="$1" prefix="$2" source="${mapSource[$1]}" dest="${mapDest[$1]}"
     stateSave "$name" verifyStatus=running verifyStarted="$(date -Is)" verifyLevel="$verifyLevel" pid="$$"
-    if ((cmpMissing > 0 || cmpConflicts > 0)); then
-        _mappingFail "$name" "verification failed: $cmpMissing entries missing and $cmpConflicts differing on $destPlace" verifyStatus=failed
+    if ((cmpMissing > 0 || cmpConflicts > 0 || cmpReplace > 0)); then
+        _mappingFail "$name" "verification failed: $cmpMissing entries missing and $((cmpConflicts + cmpReplace)) differing on $destPlace" verifyStatus=failed
         return 1
     fi
     _say "  Quick check: $cmpIdentical entries match (type, size, modification time)"
+    if ((cmpKept > 0)); then
+        _say "  $cmpKept metadata files are newer on $destPlace and were kept instead of the source copy"
+    fi
     if [[ "$verifyLevel" == full ]]; then
         _say "  Verifying checksums ($checksumCommand on both machines)..."
         checksumVerify "$source" "$dest" "$prefix.files" "$prefix"
