@@ -375,8 +375,11 @@ protectionCheck() {
 
 ## transfer
 
+# Builds the rsync arguments for one list. A "replace" list holds metadata
+# files that are newer on the source, so it alone may overwrite (ADR 007);
+# every other list keeps --ignore-existing as a second guard (ADR 001).
 transferArgsBuild() {
-    local list="$1" fsType="$2" rsyncLog="$3" info=progress2
+    local list="$1" fsType="$2" rsyncLog="$3" mode="${4:-missing}" info=progress2
     [[ "${verbose:-0}" == 1 ]] && info=progress2,name1
     rsyncArgs=(
         --from0
@@ -384,7 +387,9 @@ transferArgsBuild() {
         --dirs
         --links
         --times
-        --ignore-existing
+    )
+    [[ "$mode" == replace ]] || rsyncArgs+=(--ignore-existing)
+    rsyncArgs+=(
         --partial-dir=.rsync-partial
         --protect-args
         --timeout=300

@@ -6,6 +6,7 @@
   "minFreeBytesAfter": 10737418240,
   "checksum": "sha256sum",
   "excludes": ["lost+found", "$RECYCLE.BIN", "System Volume Information"],
+  "metadataExtensions": ["jpg", "jpeg", "png", "xml", "nfo"],
   "protection": {
     "name": "SnapRAID parity",
     "command": "<RAID_PROTECTION_CHECK_COMMAND>",

@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-18
 - Requirement: [001 raid-pc storage migration](../requirements/features/001-raidMigration.md)
+- Amended by: [ADR 007](007-newerMetadataWins.md) (artwork and metadata files)
 
 ## Context
 
