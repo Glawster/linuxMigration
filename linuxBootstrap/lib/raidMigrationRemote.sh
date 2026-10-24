@@ -24,6 +24,7 @@ protectionVerdict=""
 raidHostIsThis=0
 remoteTarget=""
 rsyncArgs=()
+transferLog=""
 declare -gA _protectionBases=()
 declare -gA _protectionDetails=()
 declare -gA _protectionProblems=()
@@ -380,6 +381,7 @@ protectionCheck() {
 # every other list keeps --ignore-existing as a second guard (ADR 001).
 transferArgsBuild() {
     local list="$1" fsType="$2" rsyncLog="$3" mode="${4:-missing}" info=progress2
+    transferLog="$rsyncLog"
     [[ "${verbose:-0}" == 1 ]] && info=progress2,name1
     rsyncArgs=(
         --from0
@@ -396,7 +398,7 @@ transferArgsBuild() {
         --info="$info"
         --stats
         --log-file="$rsyncLog"
-        --log-file-format='%i %n%L'
+        --log-file-format='%i %l %n%L'
     )
     [[ "$destKind" == local ]] || rsyncArgs+=(-e "ssh ${sshOptions[*]}")
     case "$fsType" in
@@ -415,8 +417,9 @@ transferDescribe() {
 # Copies only the listed (missing) paths. Sets transferStatus,
 # transferFiles and transferBytes.
 transferRun() {
-    local source="$1" dest="$2" outFile="$3" errFile="$4" statusFile="$5"
+    local source="$1" dest="$2" outFile="$3" errFile="$4" statusFile="$5" logStart=0
     : >"$outFile"
+    [[ -f "$transferLog" ]] && logStart="$(wc -l <"$transferLog")"
     {
         if rsync "${rsyncArgs[@]}" "$source/" "$destRsyncPrefix$dest/" 2>"$errFile"; then
             printf '0' >"$statusFile"
@@ -425,10 +428,32 @@ transferRun() {
         fi
     } | progressRender "$outFile"
     transferStatus="$(<"$statusFile")"
-    transferFiles="$(sed -n 's/^Number of regular files transferred: //p' "$outFile" | tr -d ',' | tail -n 1)"
-    transferBytes="$(sed -n 's/^Total transferred file size: \([0-9,]*\).*/\1/p' "$outFile" | tr -d ',' | tail -n 1)"
-    transferFiles="${transferFiles:-0}"
-    transferBytes="${transferBytes:-0}"
+    transferCount "$logStart"
+}
+
+# Totals the files this transfer actually copied from the lines it added to
+# its --log-file ("%i %l %n%L": itemize code, length, name). rsync's summary
+# statistics are not used: when rsync stops on an error they count every
+# listed file as transferred.
+transferCount() {
+    local logStart="$1"
+    transferFiles=0 transferBytes=0
+    [[ -f "$transferLog" ]] || return 0
+    read -r transferFiles transferBytes < <(
+        tail -n "+$((logStart + 1))" -- "$transferLog" | awk '
+            {
+                start = index($0, "] ")
+                if (start == 0) next
+                split(substr($0, start + 2), field, " ")
+                if (field[1] !~ /^[<>]f/ || field[2] !~ /^[0-9]+$/) next
+                name = substr($0, start + 2 + length(field[1]) + length(field[2]) + 2)
+                if (name in seen) next
+                seen[name] = 1
+                files++
+                bytes += field[2]
+            }
+            END { printf "%d %.0f\n", files, bytes }'
+    )
 }
 
 transferStatusExplain() {

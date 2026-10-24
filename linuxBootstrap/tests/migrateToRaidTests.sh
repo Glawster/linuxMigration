@@ -110,6 +110,13 @@ if ((transfer == 1)) && [[ -n "${FAKE_RSYNC_INTERRUPT:-}" && -f "$FAKE_RSYNC_INT
 fi
 status=0
 "$realRsync" "$@" || status=$?
+# Like rsync stopping on a read error: its summary claims every listed file.
+if ((transfer == 1)) && [[ -n "${FAKE_RSYNC_BOGUS_STATS:-}" && -f "$FAKE_RSYNC_BOGUS_STATS" ]]; then
+    rm -f -- "$FAKE_RSYNC_BOGUS_STATS"
+    printf 'Number of regular files transferred: 999\nTotal transferred file size: 999,999,999 bytes\n'
+    echo "rsync error: some files/attrs were not transferred (simulated)" >&2
+    exit 23
+fi
 if ((transfer == 1)) && [[ -n "${FAKE_RSYNC_ADD_SOURCE:-}" && ! -e "$FAKE_RSYNC_ADD_SOURCE" ]]; then
     echo "written during migration" >"$FAKE_RSYNC_ADD_SOURCE"
 fi
@@ -388,6 +395,26 @@ testMigrateToRaidSourceGrowsDuringCopy() {
     assertContains "$mtrOutput" 'Copying (pass 2)' 'final synchronisation pass copies late files'
     _mtrCheck 'late file reaches raid-pc' test -f "$mtrDest/late arrival.mkv"
     _mtrCheck 'grown source still verifies' test "$(_mtrState verifyStatus)" = verified
+}
+
+# Copied totals come from the files rsync logged, not its summary, which
+# counts every listed file when rsync stops on an error.
+testMigrateToRaidCopiedTotals() {
+    local expected
+    _mtrSandbox
+    expected=$(($(stat -c %s "$mtrSource/Films/A Film (2001)/A Film (2001).mkv") + $(stat -c %s "$mtrSource/Films/A Film (2001)/A Film (2001).en.srt")))
+    : >"$mtrBox/bogus-stats"
+    FAKE_RSYNC_BOGUS_STATS="$mtrBox/bogus-stats" _mtrRun --source movie1 --confirm
+    _mtrCheck 'rsync error leaves the copy partial' test "$(_mtrState copyStatus)" = partial
+    _mtrCheck 'copied files are counted from the rsync log' test "$(_mtrState copiedFiles)" = 2
+    _mtrCheck 'copied bytes are counted from the rsync log' test "$(_mtrState copiedBytes)" = "$expected"
+    _mtrRun --source movie1 --confirm
+    _mtrCheck 'resumed copy completes' test "$(_mtrState copyStatus)" = complete
+
+    _mtrSandbox
+    _mtrRun --source movie1 --confirm
+    _mtrCheck 'successful copy counts each file once' test "$(_mtrState copiedFiles)/$(_mtrState copiedBytes)" = "2/$expected"
+    assertContains "$mtrOutput" "Copied 2 files" 'copy summary uses the logged totals'
 }
 
 ## collisions
@@ -964,6 +991,7 @@ migrateToRaidTestsRun() {
     testMigrateToRaidSuccessfulCopy
     testMigrateToRaidInterruptedResume
     testMigrateToRaidSourceGrowsDuringCopy
+    testMigrateToRaidCopiedTotals
     testMigrateToRaidIdenticalDestination
     testMigrateToRaidConflictingDestination
     testMigrateToRaidNewerMetadataWins
