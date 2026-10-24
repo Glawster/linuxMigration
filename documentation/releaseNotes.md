@@ -5,6 +5,9 @@ Releases of this repository, newest first. The process is in
 
 ## Unreleased
 
+- `migrateToRaid`: `copiedFiles` and `copiedBytes` count the files rsync
+  logged as copied (its log now records each file's size), instead of rsync's
+  summary, which counts every listed file when rsync stops on an error.
 - `suggestUnwatched` (new, requirement 004): suggests the oldest unwatched
   shows from Plex watch state and Media Center Master air dates, with an
   exemption chooser and a reviewable `removeShows.sh`. It logs the repository
