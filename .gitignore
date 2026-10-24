@@ -49,3 +49,4 @@ uploadModels.sh
 credentials.json
 credentials.json.gpg
 *.credentials.json
+.coverage

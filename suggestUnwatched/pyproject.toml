@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "suggestUnwatched"
+version = "0.1.0"
+description = "Suggest the oldest unwatched video folders under the working directory."
+requires-python = ">=3.10"
+dependencies = [
+    "organiseMyProjects @ git+https://github.com/Glawster/organiseMyProjects.git@0.6",
+    "textual>=0.50",
+]
+
+[project.scripts]
+suggestUnwatched = "suggestUnwatched.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+python_functions = ["test*"]
