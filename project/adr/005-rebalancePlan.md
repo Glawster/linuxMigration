@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-23
 - Requirement: [002 Rebalance local movies and TV to raid-pc](../requirements/features/002-localMediaRebalance.md)
-- Related: [ADR 001](001-raidMigrationSafety.md), [ADR 004](004-migrateOnlyOnAndyPc.md)
+- Related: [ADR 001](001-raidMigrationSafety.md), [ADR 006](006-migrateOnHostWithDisk.md)
 
 ## Context
 

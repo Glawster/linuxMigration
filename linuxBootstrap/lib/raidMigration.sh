@@ -43,6 +43,7 @@ raidMigrationMain() {
     selectionResolve || exit 2
     remoteTarget="$remoteHost"
     [[ -n "$remoteUser" ]] && remoteTarget="$remoteUser@$remoteHost"
+    destinationHostDetect
     workDir="$(mktemp -d "${TMPDIR:-/tmp}/$applicationName.XXXXXX")"
     trap '_raidCleanup' EXIT
     trap '_raidInterrupted' INT TERM

@@ -2,7 +2,9 @@
 
 `migrateToRaid` moves media and file storage from the disks in `andy-pc` to its
 long-term home, one mapping at a time, without risking the only copy of the
-data. It runs only on `andy-pc`.
+data. It runs on the machine the source disk is attached to: normally
+`andy-pc`, or raid-pc for a disk moved there (see
+[Running on raid-pc](#running-on-raid-pc)).
 
 There are two kinds of destination:
 
@@ -55,6 +57,7 @@ Safety decisions: [ADR 001](../../project/adr/001-raidMigrationSafety.md),
 - [Configuration](#configuration)
 - [Local destination](#local-destination)
 - [Initial setup](#initial-setup)
+- [Running on raid-pc](#running-on-raid-pc)
 - [Preview (the default)](#preview-the-default)
 - [Migrating](#migrating)
 - [Verification](#verification)
@@ -258,6 +261,54 @@ All raid-pc access uses SSH in batch mode (no prompts):
   `Host` entry).
 - The remote login shell must be `bash`.
 - The remote user must be able to write to the destination folders.
+
+## Running on raid-pc
+
+A USB source disk can be moved to raid-pc and migrated there, so the copy into
+the pool is local and does not use the network
+([ADR 006](../../project/adr/006-migrateOnHostWithDisk.md)). raid-pc uses the
+**same configuration** as andy-pc. When the machine's short hostname is
+`remoteHost`, raid-pc mappings reach `/mnt/storage` directly instead of over
+SSH; the pool must still be mounted with `destinationFsType`, and the SnapRAID
+`protection` command runs locally. Everything else is unchanged.
+
+1. On raid-pc, install `jq`, `rsync` and `ntfs-3g`, keep `~/bin` up to date,
+   and make `organiseMyProjects` importable from its checkout:
+
+   ```bash
+   echo /home/andy/Source/organiseMyProjects > "$(python3 -m site --user-site)/organiseMyProjects.pth"
+   ```
+
+2. Copy andy-pc's configuration to raid-pc, from andy-pc, and copy it again
+   whenever it changes:
+
+   ```bash
+   scp ~/.config/migrateToRaid/config.json raid-pc:.config/migrateToRaid/config.json
+   ```
+
+3. Mount the disk at the same mount point it had on andy-pc, using the same
+   `/etc/fstab` line (by UUID), for example:
+
+   ```text
+   UUID=7866F03966EFF632   /mnt/movie2  ntfs-3g  defaults,uid=1000,gid=1000,windows_names,nofail   0 0
+   ```
+
+4. Run the usual commands on raid-pc, in a terminal that stays open (raid-pc
+   does not keep user services running after logout):
+
+   ```bash
+   migrateToRaid --source movie2                          # preview: "Destination: /mnt/storage/Movies (local)"
+   migrateToRaid --source movie2 --confirm --verify full
+   migrateToRaid --check movie2
+   ```
+
+A disk is migrated, checked and removed on the machine where it is mounted;
+each machine keeps its own state and logs, so `--status` on andy-pc does not
+show runs made on raid-pc. Mappings for disks attached elsewhere, and the
+`/mnt/media` mappings, are refused on raid-pc as not mounted.
+
+Copies on raid-pc are still limited by its USB port: a USB 2 port gives about
+40 MB/s, so use a USB 3 port when one is free.
 
 ## Preview (the default)
 
