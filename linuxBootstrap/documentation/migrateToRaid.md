@@ -635,6 +635,23 @@ content makes it move more titles than necessary.
 
 ## State and logs
 
+Every run starts with a header, on screen and in the daily log, naming the
+version of `migrateToRaid` (with the git commit of the checkout), the host,
+the action and mode, and the exact command line:
+
+```text
+>--------------------------------------------------------------------------------<
+
+migrateToRaid 1.3 (889c852) on raid-pc
+  Action:       migrate (apply)
+  Command:      migrateToRaid --source movie2 --confirm --verify full
+--------------------------------------------------------------------------------
+```
+
+`migrateToRaid --version` prints the same version. The version and host that
+started a copy are also recorded in the mapping's state (`toolVersion`,
+`toolHost`) and in its history.
+
 Everything lives in one folder:
 
 ```text

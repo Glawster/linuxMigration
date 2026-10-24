@@ -244,6 +244,23 @@ testMigrateToRaidArgumentErrors() {
     assertContains "$mtrOutput" "no mapping named 'nosuch'" 'unknown mapping is rejected'
 }
 
+testMigrateToRaidVersion() {
+    local version
+    version="$("$projectDir/migrateToRaid.sh" --version)"
+    _mtrCheck 'migrateToRaid --version prints the version' test "${version%% (*}" = "migrateToRaid $(sed -n 's/^applicationVersion="\(.*\)"$/\1/p' "$projectDir/lib/raidMigration.sh")"
+    _mtrSandbox
+    _mtrRun --source movie1
+    assertContains "$mtrOutput" "${version#migrateToRaid }" 'run header shows the version'
+    assertContains "$mtrOutput" 'Action:       migrate (preview)' 'run header shows the action and mode'
+    assertContains "$mtrOutput" "Command:      migrateToRaid --config $mtrConfig --source movie1" 'run header shows the command line'
+    _mtrCheck 'run header comes before the first mapping' _mtrBefore "$mtrOutput" 'Action:' 'Movies 1 (movie1'
+    _mtrRun --source movie1 --confirm
+    assertContains "$mtrOutput" 'Action:       migrate (apply)' 'run header shows apply mode'
+    _mtrCheck 'mapping state records the version that copied it' test "$(_mtrState toolVersion)" = "${version#migrateToRaid }"
+    _mtrRun --status
+    assertContains "$mtrOutput" 'Action:       status (report)' 'run header shows report mode'
+}
+
 ## configuration
 
 testMigrateToRaidConfigTemplate() {
@@ -935,6 +952,7 @@ testMigrateToRaidPoolDestinationRefused() {
 migrateToRaidTestsRun() {
     testMigrateToRaidHelp
     testMigrateToRaidArgumentErrors
+    testMigrateToRaidVersion
     testMigrateToRaidConfigTemplate
     testMigrateToRaidConfigInvalid
     testMigrateToRaidMissingSource

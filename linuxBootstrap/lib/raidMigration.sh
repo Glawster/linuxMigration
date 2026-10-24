@@ -16,6 +16,14 @@ source "$_raidMigrationDir/raidMigrationPlan.sh"
 
 action="migrate"
 applicationName="migrateToRaid"
+# The tool's own version, shown in every run header and recorded in mapping
+# state. Bump the minor version for each change in behaviour:
+#   1.0 copy, verify, check and removal (requirement 001)
+#   1.1 rebalance plans (requirement 002, ADR 005)
+#   1.2 running on raid-pc with the same configuration (ADR 006)
+#   1.3 newer artwork and metadata replace older copies (ADR 007), version in
+#       the run header and --version
+applicationVersion="1.3"
 configOverride=""
 dryRun=1
 lockFd=""
@@ -38,6 +46,7 @@ raidMigrationMain() {
     mkdir -p "$stateDir"
     chmod 700 "$stateDir" 2>/dev/null || true
     loggingInitialize
+    runHeader "$@"
     commandsRequire
     configLoad "${configOverride:-${XDG_CONFIG_HOME:-$HOME/.config}/$applicationName/config.json}" || exit 1
     selectionResolve || exit 2
@@ -101,6 +110,10 @@ argsParse() {
                 ;;
             --verify-only) action=verify; actions=$((actions + 1)) ;;
             --yes-delete) yesDelete=1 ;;
+            --version)
+                printf '%s %s\n' "$applicationName" "$(versionDescribe)"
+                exit 0
+                ;;
             -h | --help)
                 argsUsage
                 exit 0
@@ -157,6 +170,7 @@ Source removal:
 
 Other:
   --config FILE         Configuration (default ~/.config/migrateToRaid/config.json)
+  --version             Show the version
   -h, --help            Show this help
 EOF
 }
@@ -484,8 +498,9 @@ mappingProcess() {
     fi
     stateSave "$name" sourceUuid="$srcUuid" sourceMount="${mapMount[$name]}" sourcePath="$source" sourceFsType="$srcFsType" \
         sourceDevice="$srcDevice" destination="$destRsyncPrefix$dest" destinationKind="$destKind" copyStatus=running \
+        toolVersion="$(versionDescribe)" toolHost="$(hostname -s 2>/dev/null)" \
         copyStarted="$(date -Is)" copyCompleted="" verifyStatus=pending pid="$$" lastError=""
-    stateHistoryAppend "$name" copyStarted "missing=$cmpMissing replace=$cmpReplace conflicts=$cmpConflicts"
+    stateHistoryAppend "$name" copyStarted "missing=$cmpMissing replace=$cmpReplace conflicts=$cmpConflicts version=$(versionDescribe)"
     _mappingCopy "$name" "$prefix" || return 1
     _mappingVerify "$name" "$prefix"
 }
@@ -981,6 +996,36 @@ statusShow() {
 }
 
 ## utilities
+
+# Prints the run boundary and the header that opens every run's output and
+# log: the tool version (with its git commit), the host, the action and mode,
+# and the command line.
+runHeader() {
+    local mode=apply command
+    [[ -n "${dryRun:-}" && "$action" != verify && "$action" != status && "$action" != check ]] && mode=preview
+    [[ "$action" == status || "$action" == check ]] && mode=report
+    printf -v command ' %q' "$@"
+    declare -F runStart >/dev/null && runStart
+    _say "$applicationName $(versionDescribe) on $(hostname -s 2>/dev/null || printf 'unknown host')"
+    _sayField "Action:" "$action ($mode)"
+    _sayField "Command:" "$applicationName${command}"
+    if declare -F line >/dev/null; then
+        line
+    else
+        _say "$(printf '%.0s-' {1..80})"
+    fi
+}
+
+# The version, plus the git commit of this checkout when it is available.
+versionDescribe() {
+    local commit
+    commit="$(git -C "$_raidMigrationDir" rev-parse --short HEAD 2>/dev/null)" || commit=""
+    if [[ -n "$commit" ]]; then
+        printf '%s (%s)' "$applicationVersion" "$commit"
+    else
+        printf '%s' "$applicationVersion"
+    fi
+}
 
 commandsRequire() {
     local command commands=(jq findmnt find sort sha256sum numfmt stat)
