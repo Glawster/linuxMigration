@@ -52,7 +52,9 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 
 ## Scope
 
-- A Bash command, `migrateToRaid`, run on andy-pc.
+- A Bash command, `migrateToRaid`, run on the machine the source disk is
+  attached to: andy-pc, or raid-pc for a disk moved there, with one shared
+  configuration (ADR 006).
 - JSON configuration of mappings, separate from the implementation. Each
   mapping has a name, label and type, can be enabled individually, may share a
   destination with other mappings, and may migrate a folder inside a mounted
@@ -163,12 +165,19 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
     mounted, or it is the source's own device; otherwise criteria 16 and 17
     apply unchanged.
 
+23. Given the shared configuration on raid-pc (its short hostname is
+    `remoteHost`), when a raid-pc mapping is migrated, checked or removed,
+    then the pool is reached locally with no SSH connection, the mount,
+    filesystem-type and protection checks still apply, and on any other host
+    raid-pc is still reached over SSH.
+
 ## Dependencies and decisions
 
 - [ADR 001: Safety model for migrating storage to raid-pc](../../adr/001-raidMigrationSafety.md)
 - [ADR 002: Local destinations alongside raid-pc](../../adr/002-localMigrationDestination.md)
 - [ADR 004: migrateToRaid runs only on andy-pc](../../adr/004-migrateOnlyOnAndyPc.md)
-  (supersedes ADR 003)
+  (supersedes ADR 003; superseded by ADR 006)
+- [ADR 006: Migrating a disk on the machine it is attached to](../../adr/006-migrateOnHostWithDisk.md)
 - The raid-pc storage layout and SnapRAID parity are prerequisites for real
   migration to raid-pc, and a mounted `/mnt/media` with its UUID configured is
   a prerequisite for local migration; neither is a prerequisite for this
@@ -210,3 +219,6 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
   (criterion 19).
 - 2026-10-19: the `movie2` and `video3` disks are retired once migrated, and
   `decrypted` is excluded from `myVideo` (criterion 19).
+- 2026-10-24: a source disk attached to raid-pc is migrated by running the
+  tool on raid-pc, with the same configuration as andy-pc and the pool reached
+  locally (ADR 006, superseding ADR 004, criterion 23); `movie2` is the first.

@@ -10,6 +10,7 @@
 
 _mtrRealRsync="$(command -v rsync)"
 _mtrRealDf="$(command -v df)"
+_mtrRealHostname="$(command -v hostname)"
 
 _mtrFakeBin() {
     local fakeBin="$testStateDir/mtr-fake-bin"
@@ -113,6 +114,14 @@ if ((transfer == 1)) && [[ -n "${FAKE_RSYNC_ADD_SOURCE:-}" && ! -e "$FAKE_RSYNC_
     echo "written during migration" >"$FAKE_RSYNC_ADD_SOURCE"
 fi
 exit "$status"
+EOF
+    cat >"$fakeBin/hostname" <<EOF
+#!/usr/bin/env bash
+if [[ -n "\${FAKE_HOSTNAME:-}" ]]; then
+    printf '%s\n' "\$FAKE_HOSTNAME"
+    exit 0
+fi
+exec "$_mtrRealHostname" "\$@"
 EOF
     cat >"$fakeBin/fake-protection" <<'EOF'
 #!/usr/bin/env bash
@@ -895,6 +904,7 @@ migrateToRaidTestsRun() {
     testMigrateToRaidRebalanceMoviesPlan
     testMigrateToRaidRebalanceLimits
     testMigrateToRaidRebalanceTv
+    testMigrateToRaidOnRaidHost
 }
 
 ## rebalance (requirement 002)
@@ -1052,6 +1062,34 @@ testMigrateToRaidRebalanceTv() {
     _mtrRun --source tvRebalance --remove-source --confirm --yes-delete
     _mtrCheck 'moved shows leave the local disk whole' test ! -e "$mtrVideo/TV/Old Ended" -a ! -e "$mtrVideo/TV/New Ended"
     _mtrCheck 'airing and non-TV content stay' test -d "$mtrVideo/TV/Airing Show" -a -f "$mtrVideo/linuxBackup/home.tar"
+}
+
+## running on raid-pc (ADR 006)
+
+# The same configuration runs on raid-pc: when this machine's short hostname is
+# remoteHost, raid-pc mappings copy into the pool locally, with no SSH, and the
+# SnapRAID check runs locally.
+testMigrateToRaidOnRaidHost() {
+    _mtrSandbox
+    FAKE_HOSTNAME=raid-pc FAKE_SSH_FAIL=1 _mtrRun --source movie1 --confirm --verify full
+    _mtrCheck 'migration on raid-pc succeeds without SSH' test "$mtrStatus" -eq 0
+    assertContains "$mtrOutput" "Destination:  $mtrDest (local)" 'raid-pc destination is local on raid-pc'
+    _mtrCheck 'migration on raid-pc copies into the pool' _mtrSameTree
+    _mtrCheck 'migration on raid-pc records a local destination' test "$(_mtrState destinationKind)" = local
+
+    FAKE_HOSTNAME=raid-pc FAKE_SSH_FAIL=1 _mtrRun --check movie1
+    assertContains "$mtrOutput" $'COPY VERIFIED\nSNAPRAID PARITY VERIFIED\nSAFE TO REMOVE DISK' 'raid-pc protection runs locally on raid-pc'
+    FAKE_HOSTNAME=raid-pc FAKE_SSH_FAIL=1 FAKE_PROTECTION_STATUS=2 _mtrRun --check movie1
+    assertContains "$mtrOutput" 'SnapRAID parity check failed' 'raid-pc protection is still required on raid-pc'
+
+    printf '%s|ntfs3|UUID-MOVIE1|/dev/sdx1\n' "$mtrSource" >"$mtrBox/mounts"
+    FAKE_HOSTNAME=raid-pc _mtrRun --source movie1 --confirm
+    assertContains "$mtrOutput" 'no filesystem is mounted at' 'unmounted pool is refused on raid-pc'
+
+    _mtrSandbox
+    FAKE_HOSTNAME=andy-pc FAKE_SSH_FAIL=1 _mtrRun --source movie1 --confirm
+    assertContains "$mtrOutput" 'raid-pc is not reachable over SSH' 'other hosts still reach raid-pc over SSH'
+    _mtrCheck 'other hosts copy nothing without SSH' test ! -e "$mtrDest"
 }
 
 # Standalone run: provide the small harness that runTests.sh normally supplies.

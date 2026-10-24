@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Destination, rsync, checksum and progress helpers for migrateToRaid. A
 # destination is raid-pc over SSH (the default) or a disk mounted on andy-pc
-# (/mnt/media); both run the same scripts and pass the same checks.
+# (/mnt/media); both run the same scripts and pass the same checks. When the
+# tool runs on raid-pc itself, raid-pc destinations are reached locally.
 # Sourced by lib/raidMigration.sh; not a bootstrap module.
 
 destFsType=""
 destHost=""
 destKind=""
+destRole=""
 destMount=""
 destPlace=""
 destRsyncPrefix=""
@@ -19,6 +21,7 @@ protectionDetail=""
 protectionProblem=""
 protectionResult=""
 protectionVerdict=""
+raidHostIsThis=0
 remoteTarget=""
 rsyncArgs=()
 declare -gA _protectionBases=()
@@ -232,15 +235,30 @@ destinationRun() {
     ssh "${sshOptions[@]}" "$remoteTarget" "$command"
 }
 
+# Decides once per run whether this machine is raid-pc (its short hostname is
+# remoteHost), so one configuration serves both machines (ADR 006).
+destinationHostDetect() {
+    local thisHost
+    thisHost="$(hostname -s 2>/dev/null)" || thisHost=""
+    raidHostIsThis=0
+    [[ -n "$thisHost" && "$thisHost" == "${remoteHost%%.*}" ]] && raidHostIsThis=1
+    return 0
+}
+
 # Selects a mapping's destination and sets the dest* globals used by every
-# destination helper: raid-pc over SSH unless the mapping targets the local
-# destination on this machine.
+# destination helper. destRole names the destination (raid-pc or the local
+# destination) and decides its checks and protection; destKind is only the
+# transport: SSH to raid-pc, or local when the destination is on this machine.
 destinationSelect() {
     if [[ "${mapTarget[$1]}" == local ]]; then
-        destKind=local destHost="$(hostname -s 2>/dev/null || printf 'this machine')" destMount="$localMount" destPlace="$localMount"
+        destKind=local destRole=localDestination destHost="$(hostname -s 2>/dev/null || printf 'this machine')"
+        destMount="$localMount" destPlace="$localMount"
         destFsType="$localFsType" destSource="$localSource" destUuid="$localUuid" destRsyncPrefix=""
+    elif ((raidHostIsThis == 1)); then
+        destKind=local destRole=raid destHost=raid-pc destMount="$destinationMount" destPlace=raid-pc
+        destFsType="$destinationFsType" destSource="" destUuid="" destRsyncPrefix=""
     else
-        destKind=remote destHost=raid-pc destMount="$destinationMount" destPlace=raid-pc
+        destKind=remote destRole=raid destHost=raid-pc destMount="$destinationMount" destPlace=raid-pc
         destFsType="$destinationFsType" destSource="" destUuid="" destRsyncPrefix="$remoteTarget:"
     fi
 }
@@ -292,15 +310,17 @@ progressRender() {
 # raid-pc, for example a SnapRAID "diff" that succeeds only when parity is in
 # sync; locally, whatever the owner configured for the local destination. A
 # local destination needs no command only when the owner has explicitly
-# accepted it as a single authoritative copy with "required": false. Results are cached per destination kind for the rest of
-# this run and recorded in protection.state / protection-local.state.
+# accepted it as a single authoritative copy with "required": false. The
+# raid-pc check runs over SSH, or locally when this machine is raid-pc. Results
+# are cached per destination for the rest of this run and recorded in
+# protection.state / protection-local.state.
 # protectionVerdict names the basis of a SAFE verdict so that verified
 # protection and accepted single-copy storage are never confused;
 # protectionBasis is protected or singleCopy.
 protectionCheck() {
-    local kind="$destKind" name="$protectionName" command="$protectionCommand" codes=("${protectionSuccessCodes[@]}")
+    local kind="$destRole" name="$protectionName" command="$protectionCommand" codes=("${protectionSuccessCodes[@]}")
     local output status=0 code stateName=protection.state
-    if [[ "$kind" == local ]]; then
+    if [[ "$kind" == localDestination ]]; then
         name="$localProtectionName" command="$localProtectionCommand" codes=("${localProtectionSuccessCodes[@]}")
         stateName=protection-local.state
     fi
@@ -317,18 +337,18 @@ protectionCheck() {
     protectionDetail="$name is established and in sync"
     protectionVerdict="${name^^} VERIFIED"
     protectionBasis=protected
-    if [[ "$kind" == local && "$localProtectionRequired" == false ]]; then
+    if [[ "$kind" == localDestination && "$localProtectionRequired" == false ]]; then
         protectionDetail="single-copy local storage is accepted for $localMount (localDestination.protection.required is false); it is not backed up or redundant"
         protectionVerdict="DESTINATION ACCEPTED AS AUTHORITATIVE (single copy, not redundant)"
         protectionBasis=singleCopy
     elif _configIsPlaceholder "$command"; then
-        if [[ "$kind" == local ]]; then
+        if [[ "$kind" == localDestination ]]; then
             protectionProblem="$name check is not configured (localDestination.protection.command)"
         else
             protectionProblem="$name check is not configured (protection.command); parity has not been established"
         fi
     else
-        if [[ "$kind" == local ]]; then
+        if [[ "$destKind" == local ]]; then
             output="$(bash -c "$command" 2>&1 </dev/null)" || status=$?
         else
             output="$(ssh "${sshOptions[@]}" "$remoteTarget" "$command" 2>&1 </dev/null)" || status=$?

@@ -1,6 +1,6 @@
 # 004: migrateToRaid runs only on andy-pc
 
-- Status: Accepted
+- Status: Superseded by [ADR 006](006-migrateOnHostWithDisk.md)
 - Date: 2026-10-19
 - Requirement: [001 raid-pc storage migration](../requirements/features/001-raidMigration.md)
 - Related: [ADR 001](001-raidMigrationSafety.md), [ADR 002](002-localMigrationDestination.md)
