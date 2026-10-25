@@ -5,7 +5,9 @@ Requirement records for linuxMigration, following
 
 Next available number: 005
 
-003 is used by agentSessions on `feature/agentSessions-process`.
+003 is not used: agentSessions was drafted here as requirement 003 and moved to
+organiseMyProjects, where it is requirement 022 and the `agentSessions` console
+script.
 
 | Req ID | Requirement | Description | Status | Agent Prompt | Architecture Decisions |
 | --- | --- | --- | --- | --- | --- |
