@@ -7,6 +7,7 @@
   "checksum": "sha256sum",
   "excludes": ["lost+found", "$RECYCLE.BIN", "System Volume Information"],
   "metadataExtensions": ["jpg", "jpeg", "png", "xml", "nfo"],
+  "permissions": "Dgo+rx,Fgo+r",
   "protection": {
     "name": "SnapRAID parity",
     "command": "<RAID_PROTECTION_CHECK_COMMAND>",

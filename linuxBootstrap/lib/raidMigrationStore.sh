@@ -29,6 +29,7 @@ remoteHost=""
 remoteUser=""
 stateDir=""
 checksumCommand="sha256sum"
+transferChmod="Dgo+rx,Fgo+r"
 
 declare -gA mapDest=()
 declare -gA mapEnabled=()
@@ -73,6 +74,14 @@ configLoad() {
     while IFS= read -r extension; do
         [[ -n "$extension" ]] && metadataExtensions["${extension,,}"]=1
     done < <(jq -r '(.metadataExtensions // ["jpg", "jpeg", "png", "xml", "nfo"])[] | ltrimstr(".")' "$file")
+    # Copied files must stay readable by other local users such as Plex, whatever
+    # the source mode; an empty string keeps the source permissions.
+    transferChmod="$(jq -r 'if has("permissions") then .permissions // "" else "Dgo+rx,Fgo+r" end' "$file")"
+    local chmodItem='[DF]?([ugoa]*[-+=][rwxXst]*|[0-7]{3,4})'
+    if [[ -n "$transferChmod" && ! "$transferChmod" =~ ^$chmodItem(,$chmodItem)*$ ]]; then
+        log_error "invalid permissions (expected an rsync --chmod value such as Dgo+rx,Fgo+r): $transferChmod"
+        return 1
+    fi
     # The optional local destination is a disk on andy-pc (/mnt/media). Its
     # protection is required unless explicitly set to false.
     localMount="$(jq -r '.localDestination.mount // "" | sub("/+$"; "")' "$file")"

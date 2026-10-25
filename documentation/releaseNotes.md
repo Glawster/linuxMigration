@@ -5,6 +5,9 @@ Releases of this repository, newest first. The process is in
 
 ## Unreleased
 
+- `migrateToRaid`: copies are readable by other users such as Plex, whatever
+  the source permissions (`permissions`, default `Dgo+rx,Fgo+r`), and a
+  private folder already on raid-pc is corrected by the next copy through it.
 - `bootstrap.sh`: setting a Media Center Master drive letter also removes
   Wine's raw-device reservation for that letter (`<letter>::`). A stale
   reservation let Wine take the letter back for whichever USB disk now has that
