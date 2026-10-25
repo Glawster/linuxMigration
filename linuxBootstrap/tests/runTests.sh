@@ -420,6 +420,38 @@ testMcmExisting() {
     [[ ! -e "$mcmHome/wine-ran" ]] || { printf 'FAIL  MCM ran wine to inspect an existing prefix\n'; ((failed += 1)); }
 }
 
+testMcmDriveReservation() {
+    local output prefix
+    prefix="$testStateDir/mcm-reservation/.wine-mcm"
+    mkdir -p "$prefix/dosdevices"
+    ln -s /mnt/myPictures "$prefix/dosdevices/r:"
+    ln -s /dev/sdc1 "$prefix/dosdevices/r::"
+    ln -s /dev/sdd "$prefix/dosdevices/m::"
+    output="$({
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/mcm.sh"
+        dryRun=1
+        _mcmDrivesApply "$prefix" 'r|/mnt/raid/Movies'
+    })"
+    assertContains "$output" "release Media Center Master drive R: from Wine's device reservation (/dev/sdc1)" 'MCM previews releasing a reserved drive letter'
+    [[ -L "$prefix/dosdevices/r::" && "$(readlink "$prefix/dosdevices/r:")" == /mnt/myPictures ]] || { printf 'FAIL  MCM drive preview changed the prefix\n'; ((failed += 1)); }
+    (
+        source "$projectDir/lib/logging.sh"
+        source "$projectDir/lib/common.sh"
+        source "$projectDir/lib/mcm.sh"
+        dryRun=0
+        _mcmDrivesApply "$prefix" 'r|/mnt/raid/Movies'
+    ) >/dev/null
+    if [[ ! -L "$prefix/dosdevices/r::" && "$(readlink "$prefix/dosdevices/r:")" == /mnt/raid/Movies && -L "$prefix/dosdevices/m::" ]]; then
+        printf 'PASS  %s\n' 'MCM releases device reservations only for configured letters'
+        ((passed += 1))
+    else
+        printf 'FAIL  %s\n' 'MCM did not release only the configured reserved drive letter'
+        ((failed += 1))
+    fi
+}
+
 testDcsDisabled() {
     local output
     output="$({
@@ -627,6 +659,7 @@ testDaVinciRemoveLauncherDryRun
 testMcmDisabled
 testMcmDryRun
 testMcmExisting
+testMcmDriveReservation
 testDcsDisabled
 testDcsEnabledDryRun
 testDcsRunnerChecksum

@@ -5,6 +5,10 @@ Releases of this repository, newest first. The process is in
 
 ## Unreleased
 
+- `bootstrap.sh`: setting a Media Center Master drive letter also removes
+  Wine's raw-device reservation for that letter (`<letter>::`). A stale
+  reservation let Wine take the letter back for whichever USB disk now has that
+  device name, replacing or dropping the configured mapping.
 - `migrateToRaid`: `copiedFiles` and `copiedBytes` count the files rsync
   logged as copied (its log now records each file's size), instead of rsync's
   summary, which counts every listed file when rsync stops on an error.

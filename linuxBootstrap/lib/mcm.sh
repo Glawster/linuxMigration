@@ -46,6 +46,12 @@ _mcmDriveApply() {
     letter="${letter,,}"
     [[ "$letter" =~ ^[d-z]$ && "$path" == /* ]] || { logError "invalid Media Center Master drive mapping: $specification"; return 2; }
     target="$prefix/dosdevices/$letter:"
+    # Wine reserves a letter for the raw disk named by "<letter>::" and reclaims it
+    # when that device is mounted; device names move with USB re-plugging, so a
+    # stale reservation would replace or drop the configured mapping.
+    if [[ -L "$target:" ]]; then
+        changeRun "release Media Center Master drive ${letter^^}: from Wine's device reservation ($(readlink "$target:"))" rm -f -- "$target:"
+    fi
     if [[ -L "$target" && "$(readlink "$target")" == "$path" ]]; then
         itemSkip "Media Center Master: drive ${letter^^}: already maps to $path"
     else
