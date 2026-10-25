@@ -91,6 +91,7 @@ Start from the reviewed template in this repository,
 | `checksum` | `sha256sum` (default), `b2sum` or `md5sum`, used for full verification. |
 | `excludes` | Top-level names never migrated (default `lost+found`, `$RECYCLE.BIN`, `System Volume Information`). |
 | `metadataExtensions` | File extensions treated as artwork or metadata, where the newer copy wins instead of conflicting (default `jpg`, `jpeg`, `png`, `xml`, `nfo`; see [Files already on raid-pc](#files-already-on-raid-pc)). |
+| `permissions` | rsync `--chmod` applied to every copy so other local users, such as Plex, can read it (default `Dgo+rx,Fgo+r`; `""` keeps the source permissions). Folders already at the destination are corrected too. |
 | `protection` | The raid-pc parity/protection readiness check (see [below](#parity-protection)). |
 | `localDestination` | Optional. The local destination on the machine running the tool (see [Local destination](#local-destination)). |
 | `mappings` | The list of sources to migrate. |
@@ -362,7 +363,8 @@ The copy uses rsync, over SSH for raid-pc and directly for a local mapping:
 rsync --from0 --files-from=<missing entries> --dirs --links --times
       --ignore-existing --partial-dir=.rsync-partial --protect-args
       --timeout=300 --info=progress2 --stats --log-file=...
-      (NTFS/FAT sources: --chmod=D755,F644; others: --perms --hard-links)
+      --perms (NTFS/FAT sources: --chmod=D755,F644; others: --hard-links)
+      --chmod=<permissions, default Dgo+rx,Fgo+r>
 ```
 
 - Only entries classified as **missing** on raid-pc are given to rsync.
@@ -372,6 +374,11 @@ rsync --from0 --files-from=<missing entries> --dirs --links --times
 - Timestamps and directory structure are preserved. Owners are not, because
   the remote user is not root. NTFS permission bits mean nothing, so files
   from NTFS or FAT get ordinary `755`/`644` permissions.
+- `permissions` then makes every copied folder and file readable by other
+  users, whatever the source mode, so Plex (which runs as its own user) can
+  read them. Because of `--perms`, a private folder already on raid-pc is
+  corrected the next time a copy passes through it. Permissions are not part
+  of verification, which compares type, size, time and checksums.
 - `--timeout` makes a dead network fail the run instead of hanging it.
 
 After each copy pass, both sides are listed again (the final synchronisation

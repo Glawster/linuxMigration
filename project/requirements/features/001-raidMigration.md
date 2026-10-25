@@ -183,6 +183,11 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
     names the repository version (ADR 008), the host, the action and mode,
     and the command line; `--version` prints the version;
     and a confirmed copy records the version and host in the mapping's state.
+26. Given a source folder or file that other users cannot read, or a private
+    folder already at the destination, when a copy runs, then every copied
+    folder and file, and the existing folder, end readable by other users
+    (`permissions`, default `Dgo+rx,Fgo+r`); an empty value keeps the source
+    permissions, and an invalid value is refused before anything is copied.
 
 ## Dependencies and decisions
 
@@ -242,3 +247,5 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
   tool version and host (criterion 25).
 - 2026-10-24: the header reports the repository version instead of a
   tool-specific one (ADR 008, criterion 25).
+- 2026-10-25: copies are made readable by other users such as Plex, after 45
+  private TV folders on raid-pc were invisible to Plex (criterion 26).

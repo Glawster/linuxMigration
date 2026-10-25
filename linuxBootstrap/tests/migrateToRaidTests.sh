@@ -417,6 +417,38 @@ testMigrateToRaidCopiedTotals() {
     assertContains "$mtrOutput" "Copied 2 files" 'copy summary uses the logged totals'
 }
 
+# Copies stay readable by other local users such as Plex, whatever the source
+# mode, and a private folder already at the destination is corrected.
+testMigrateToRaidPermissions() {
+    local film="Films/A Film (2001)" fsType
+    for fsType in ntfs3 ext4; do
+        _mtrSandbox
+        printf '%s|%s|UUID-MOVIE1|/dev/sdx1\n%s|fuse.mergerfs|pool|storage\n' "$mtrSource" "$fsType" "$mtrStorage" >"$mtrBox/mounts"
+        chmod 700 "$mtrSource/Films" "$mtrSource/$film"
+        chmod 600 "$mtrSource/$film/A Film (2001).mkv"
+        mkdir -p "$mtrDest/Films"
+        chmod 700 "$mtrDest/Films"
+        _mtrRun --source movie1 --confirm
+        _mtrCheck "$fsType: permissions do not affect verification" test "$(_mtrState verifyStatus)" = verified
+        _mtrCheck "$fsType: existing private folder becomes readable" test -n "$(find "$mtrDest/Films" -maxdepth 0 -perm -o=rx)"
+        _mtrCheck "$fsType: new folder is readable" test -n "$(find "$mtrDest/$film" -maxdepth 0 -perm -o=rx)"
+        _mtrCheck "$fsType: private file is readable" test -n "$(find "$mtrDest/$film/A Film (2001).mkv" -perm -o=r)"
+    done
+
+    _mtrSandbox
+    printf '%s|ext4|UUID-MOVIE1|/dev/sdx1\n%s|fuse.mergerfs|pool|storage\n' "$mtrSource" "$mtrStorage" >"$mtrBox/mounts"
+    chmod 700 "$mtrSource/$film"
+    jq '.permissions = ""' "$mtrConfig" >"$mtrConfig.new" && mv "$mtrConfig.new" "$mtrConfig"
+    _mtrRun --source movie1 --confirm
+    _mtrCheck 'empty permissions keeps the source mode' test "$(stat -c %a "$mtrDest/$film")" = 700
+
+    _mtrSandbox
+    jq '.permissions = "everyone"' "$mtrConfig" >"$mtrConfig.new" && mv "$mtrConfig.new" "$mtrConfig"
+    _mtrRun --source movie1 --confirm
+    assertContains "$mtrOutput" 'invalid permissions' 'invalid permissions value is refused'
+    _mtrCheck 'invalid permissions copies nothing' test ! -e "$mtrDest"
+}
+
 ## collisions
 
 testMigrateToRaidIdenticalDestination() {
@@ -992,6 +1024,7 @@ migrateToRaidTestsRun() {
     testMigrateToRaidInterruptedResume
     testMigrateToRaidSourceGrowsDuringCopy
     testMigrateToRaidCopiedTotals
+    testMigrateToRaidPermissions
     testMigrateToRaidIdenticalDestination
     testMigrateToRaidConflictingDestination
     testMigrateToRaidNewerMetadataWins

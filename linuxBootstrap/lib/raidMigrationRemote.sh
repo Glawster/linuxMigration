@@ -401,10 +401,14 @@ transferArgsBuild() {
         --log-file-format='%i %l %n%L'
     )
     [[ "$destKind" == local ]] || rsyncArgs+=(-e "ssh ${sshOptions[*]}")
+    # --perms also updates folders that already exist at the destination, so a
+    # private folder left by an earlier copy is corrected by the next run.
+    rsyncArgs+=(--perms)
     case "$fsType" in
         ntfs | ntfs3 | fuseblk | vfat | exfat | msdos) rsyncArgs+=(--chmod=D755,F644) ;;
-        *) rsyncArgs+=(--perms --hard-links) ;;
+        *) rsyncArgs+=(--hard-links) ;;
     esac
+    [[ -z "${transferChmod:-}" ]] || rsyncArgs+=(--chmod="$transferChmod")
 }
 
 transferDescribe() {
