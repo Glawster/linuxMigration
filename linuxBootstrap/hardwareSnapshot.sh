@@ -64,7 +64,12 @@ collectSensorTemps() {
 
     sensors > "$outputFile" 2>&1 || true
     sensors -u 2>/dev/null | awk '
-        /^[^[:space:]]/ { chip=$0; label=""; next }
+        /^[^[:space:]]/ {
+            chip=$0
+            sub(/:$/, "", chip)
+            label=""
+            next
+        }
         /^[[:space:]]+[^:]+:$/ {
             label=$0
             sub(/^[[:space:]]+/, "", label)
@@ -119,10 +124,9 @@ collectDiskTemps() {
 
 appendTemperatures() {
     local snapshotDir="$1"
-    local sensorRows diskRows
+    local sensorRows="" diskRows=""
     sensorRows="$(mktemp)"
     diskRows="$(mktemp)"
-    trap 'rm -f "$sensorRows" "$diskRows"' RETURN
 
     ensureTempHeader
 
@@ -151,6 +155,8 @@ appendTemperatures() {
     if [[ ! -s "$sensorRows" && ! -s "$diskRows" ]]; then
         echo "No temperature readings available."
     fi
+
+    rm -f "$sensorRows" "$diskRows"
 
     echo
     echo "Temperature history: $TEMP_HISTORY"
