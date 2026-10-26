@@ -5,6 +5,12 @@ Releases of this repository, newest first. The process is in
 
 ## Unreleased
 
+- `hardwareSnapshot` (new): records a machine's hardware configuration and
+  temperatures, reports when the configuration changes between runs, and keeps
+  a per-host temperature history with disks identified by serial number
+  ([guide](../linuxBootstrap/documentation/hardwareSnapshot.md)). It shows the
+  repository version at start-up and with `--version`, and runs `smartctl` and
+  `dmidecode` with `sudo -n` so it never waits for a password.
 - `migrateToRaid`: copies are readable by other users such as Plex, whatever
   the source permissions (`permissions`, default `Dgo+rx,Fgo+r`), and a
   private folder already on raid-pc is corrected by the next copy through it.

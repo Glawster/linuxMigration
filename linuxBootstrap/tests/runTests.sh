@@ -686,5 +686,9 @@ testPullTvPcVideosConfirmRemovesSource
 source "$projectDir/tests/migrateToRaidTests.sh"
 migrateToRaidTestsRun
 
+# shellcheck source=/dev/null
+source "$projectDir/tests/hardwareSnapshotTests.sh"
+hardwareSnapshotTestsRun
+
 printf '\n%d passed, %d failed\n' "$passed" "$failed"
 ((failed == 0))
