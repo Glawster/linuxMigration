@@ -6,7 +6,7 @@
 
 ## Status
 
-Active
+Blocked
 <!-- Options: Active, Idle, Blocked, InReview -->
 
 ## Requirement
@@ -23,15 +23,15 @@ splitting a show between stores.
 
 Rebalance planning in `linuxBootstrap/lib/raidMigrationPlan.sh`, its hooks in
 `lib/raidMigration.sh` and `lib/raidMigrationStore.sh`, the configuration
-template, tests and the migrateToRaid guide, on branch
-`feature/localMediaRebalance` ([ADR 005](adr/005-rebalancePlan.md)).
+template, tests and the migrateToRaid guide
+([ADR 005](adr/005-rebalancePlan.md)). Merged to `main` in #97.
 
 ## Verification
 
 - [x] Automated tests for every acceptance criterion
       (`linuxBootstrap/tests/migrateToRaidTests.sh`)
 - [x] Read-only preview of both plans against the real disks
-- [ ] Review and merge `feature/localMediaRebalance`
+- [x] Review and merge `feature/localMediaRebalance` (#97)
 - [ ] Finish the requirement 001 raid-pc migrations
 - [ ] Move `linuxBackup` off `/mnt/video` to a retired USB disk
 - [ ] Manual acceptance: review the real plans, then the first confirmed,
@@ -39,5 +39,13 @@ template, tests and the migrateToRaid guide, on branch
 
 ## Next
 
-Review the branch. The real rebalance waits for the requirement 001 migrations
-to finish and for `linuxBackup` to leave `/mnt/video`.
+The real rebalance is blocked until two things are done:
+
+- **Requirement 001 migrations.** `myVideo`, `myVideoTV` and `myPictures` are
+  complete. `movie2` is being copied from andy-pc, with `video3` queued after it.
+  A shutdown interrupted the `myPicturesMovies` full verification. It has to be
+  run again, with its disk mounted, before the source can be removed.
+- **`linuxBackup` leaving `/mnt/video`.** It is still there.
+
+Once both are done, preview both rebalance plans again against the real disks,
+because raid-pc free space will have changed.
