@@ -41,6 +41,7 @@ linuxMigration/
 │   ├── linuxBootstrapIndex.md            # linuxBootstrap guide and documentation index
 │   ├── bootstrap.sh                      # Bootstrap CLI (install, update, status, profile, capture)
 │   ├── migrateToRaid.sh                  # andy-pc → raid-pc storage migration (requirement 001)
+│   ├── hardwareSnapshot.sh               # Hardware snapshot and temperature history
 │   ├── pullRemote.sh, pullTvPcVideos.sh  # Remote rsync pulls
 │   ├── lib/                              # Modules and standalone-script libraries
 │   ├── profiles/                         # Role and host profiles (YAML)
@@ -102,6 +103,7 @@ linuxMigration/
 ├── installLinuxApps.sh                   # Application installer
 ├── setupBattlenetPrefix.sh               # Gaming setup
 ├── migrateToRaid                         # Launcher for linuxBootstrap/migrateToRaid.sh
+├── hardwareSnapshot                      # Launcher for linuxBootstrap/hardwareSnapshot.sh
 └── [other scripts]                       # Various utilities
 ```
 
@@ -178,7 +180,8 @@ This repository contains four major subprojects, each with its own focus and too
 ### linuxBootstrap - Machine Configuration and Storage Migration
 
 - Entry points: `bootstrap.sh` (preview by default, `--confirm` to apply) and
-  standalone tools `migrateToRaid.sh`, `pullRemote.sh`, `pullTvPcVideos.sh`.
+  standalone tools `migrateToRaid.sh`, `hardwareSnapshot.sh`, `pullRemote.sh`,
+  `pullTvPcVideos.sh`.
 - Standalone tools source `organiseMyProjects` `logUtils.sh`; tests substitute
   it via `LOG_UTILS`.
 - linuxMigration is one OMP-managed project rooted at the repository root.

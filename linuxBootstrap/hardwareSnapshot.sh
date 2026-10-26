@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+_hardwareSnapshotDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$_hardwareSnapshotDir/../repoVersion.sh" ]]; then
+    # shellcheck source=../repoVersion.sh
+    source "$_hardwareSnapshotDir/../repoVersion.sh"
+fi
+
 HOST="$(hostname -s)"
 STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/hardwareSnapshot/${HOST}"
 SNAPSHOT_ROOT="$STATE_ROOT/snapshots"
@@ -8,12 +14,13 @@ DIFF_ROOT="$STATE_ROOT/diffs"
 TEMP_HISTORY="$STATE_ROOT/temperatures.csv"
 STAMP="$(date '+%Y-%m-%d_%H%M%S')"
 ISO_TIME="$(date --iso-8601=seconds)"
-
-mkdir -p "$SNAPSHOT_ROOT" "$DIFF_ROOT"
+# Separates collected fields; tabs would collapse an empty field such as a
+# disk without a model.
+FIELD_SEP=$'\x1f'
 
 usage() {
     cat <<'USAGE'
-Usage: hardwareSnapshot [--temps|--diff|--history|--help]
+Usage: hardwareSnapshot [--temps|--diff|--history|--version|--help]
 
 With no option, capture a full hardware snapshot, append temperature history,
 and compare stable hardware configuration with the previous snapshot.
@@ -21,15 +28,31 @@ and compare stable hardware configuration with the previous snapshot.
   --temps    collect and display temperatures only
   --diff     display the most recent hardware configuration diff
   --history  list saved snapshots and temperature-history location
+  --version  show the version
   --help     show this help
+
+Disk temperatures and memory and BIOS details need passwordless sudo for
+smartctl and dmidecode; without it they are left out.
 USAGE
+}
+
+versionDescribe() {
+    if declare -F repoVersionDescribe >/dev/null; then
+        repoVersionDescribe
+    else
+        printf 'unknown'
+    fi
+}
+
+showHeader() {
+    printf 'hardwareSnapshot %s on %s\n\n' "$(versionDescribe)" "$HOST"
 }
 
 rootCommand() {
     if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
         "$@"
     elif command -v sudo >/dev/null 2>&1; then
-        sudo "$@"
+        sudo -n "$@"
     else
         return 1
     fi
@@ -63,21 +86,22 @@ collectSensorTemps() {
     command -v sensors >/dev/null 2>&1 || return 0
 
     sensors > "$outputFile" 2>&1 || true
+    # sensors -u: a chip name, an Adapter line, then unindented "label:"
+    # lines, each followed by its indented readings.
     sensors -u 2>/dev/null | awk '
-        /^[^[:space:]]/ {
-            chip=$0
-            sub(/:$/, "", chip)
-            label=""
-            next
-        }
-        /^[[:space:]]+[^:]+:$/ {
+        /^Adapter:/ { next }
+        /^[^[:space:]].*:$/ {
             label=$0
-            sub(/^[[:space:]]+/, "", label)
             sub(/:$/, "", label)
             next
         }
+        /^[^[:space:]]/ {
+            chip=$0
+            label=""
+            next
+        }
         /^[[:space:]]+temp[0-9]+_input:/ {
-            printf "%s\t%s\t%s\n", chip, label, $2
+            printf "%s\037%s\037%s\n", chip, label, $2
         }
     '
 }
@@ -117,7 +141,7 @@ collectDiskTemps() {
             status="MEASURED"
         fi
 
-        printf '%s\t%s\t%s\t%s\t%s\n' "$identity" "$model" "$device" "$temp" "$status"
+        printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\n' "$identity" "$model" "$device" "$temp" "$status"
         printf '%s: %s°C (%s) [%s]\n' "$identity" "$temp" "$status" "$device" >> "$outputFile"
     done < <(lsblk -dn -o PATH,TYPE 2>/dev/null)
 }
@@ -137,7 +161,7 @@ appendTemperatures() {
     echo "------------"
 
     if [[ -s "$sensorRows" ]]; then
-        while IFS=$'\t' read -r chip sensor temp; do
+        while IFS="$FIELD_SEP" read -r chip sensor temp; do
             printf '%-28s %6s°C\n' "${chip}: ${sensor:-temperature}" "$temp"
             printf '%s,sensor,%s,%s,%s,MEASURED\n' \
                 "$(csvSafe "$ISO_TIME")" "$(csvSafe "$chip")" "$(csvSafe "${sensor:-temperature}")" "$temp" >> "$TEMP_HISTORY"
@@ -145,7 +169,7 @@ appendTemperatures() {
     fi
 
     if [[ -s "$diskRows" ]]; then
-        while IFS=$'\t' read -r identity model device temp status; do
+        while IFS="$FIELD_SEP" read -r identity model device temp status; do
             printf '%-28s %6s°C  %s\n' "$identity" "$temp" "$status"
             printf '%s,disk,%s,%s,%s,%s\n' \
                 "$(csvSafe "$ISO_TIME")" "$(csvSafe "$identity")" "$(csvSafe "${model:-disk}")" "$temp" "$status" >> "$TEMP_HISTORY"
@@ -243,6 +267,7 @@ showHistory() {
 collectTempsOnly() {
     local tempDir="$STATE_ROOT/current"
     mkdir -p "$tempDir"
+    showHeader
     appendTemperatures "$tempDir"
 }
 
@@ -250,9 +275,9 @@ collectFullSnapshot() {
     local snapshotDir="$SNAPSHOT_ROOT/$STAMP"
     local previous diffFile
     previous="$(latestSnapshot || true)"
-    mkdir -p "$snapshotDir"
+    mkdir -p "$snapshotDir" "$DIFF_ROOT"
 
-    echo "Hardware snapshot: $HOST"
+    showHeader
     echo "Saving to: $snapshotDir"
     echo
 
@@ -285,6 +310,7 @@ case "${1:-}" in
     --temps) collectTempsOnly ;;
     --diff) showLatestDiff ;;
     --history) showHistory ;;
+    --version) printf 'hardwareSnapshot %s\n' "$(versionDescribe)" ;;
     --help|-h) usage ;;
     *) usage >&2; exit 2 ;;
 esac

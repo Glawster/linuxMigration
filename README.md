@@ -9,6 +9,7 @@ and launchers are on `PATH`.
 - [linuxBootstrap: machine configuration](linuxBootstrap/linuxBootstrapIndex.md)
   - [Migrating andy-pc storage to raid-pc (migrateToRaid)](linuxBootstrap/documentation/migrateToRaid.md)
   - [raid-pc storage server](linuxBootstrap/documentation/raidPc.md)
+  - [Hardware snapshots and temperature history (hardwareSnapshot)](linuxBootstrap/documentation/hardwareSnapshot.md)
 - [runpodTools: RunPod bootstrap](runpodTools/runpodToolsIndex.md)
 - [Repository-specific instructions](.github/additional-instructions.md)
 - [Development guidelines](.github/agent-instructions.md)
