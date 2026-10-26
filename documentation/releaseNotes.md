@@ -5,6 +5,14 @@ Releases of this repository, newest first. The process is in
 
 ## Unreleased
 
+- Versioning ([ADR 009](../project/adr/009-branchVersions.md)): every branch
+  of work is numbered as an alpha of the next release (`1.4a1`, `1.4a2`, ...)
+  and its merge into `main` is tagged with that number. New `branchVersion`
+  tool: `show`, `start` (number the current branch) and `tag` (tag the merged
+  work), previewing unless `--confirm` is given. Tool headers show a branch's
+  own number, for example `1.4a3 (v1.4a2-1-g1a2b3c4)`.
+- `hardwareSnapshot` is `1.4a1`; the `currentIncrement.md` update (#109) is
+  `1.4a2`; this change is `1.4a3`.
 - `hardwareSnapshot` (new): records a machine's hardware configuration and
   temperatures, reports when the configuration changes between runs, and keeps
   a per-host temperature history with disks identified by serial number
