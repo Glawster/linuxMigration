@@ -21,6 +21,7 @@ case "$HOST" in
 export WINE="/home/andy/.local/share/lutris/runners/wine/wine-10.20-staging-tkg-amd64/bin/wine"'
         alias updateall='sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y && flatpak update -y'
         alias omp08='python -m pip install --upgrade "git+file:///home/andy/Source/organiseMyProjects@v0.8"'
+        alias omp09='python -m pip install --upgrade "git+file:///home/andy/Source/organiseMyProjects@v0.9.1"'
         ;;
 
 

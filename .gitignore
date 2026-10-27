@@ -50,3 +50,4 @@ credentials.json
 credentials.json.gpg
 *.credentials.json
 .coverage
+.claude/settings.local.json
