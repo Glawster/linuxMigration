@@ -5,6 +5,7 @@
   "destinationFsType": "fuse.mergerfs",
   "minFreeBytesAfter": 10737418240,
   "checksum": "sha256sum",
+  "removalVerify": { "movies": "quick", "tv": "quick" },
   "excludes": ["lost+found", "$RECYCLE.BIN", "System Volume Information"],
   "metadataExtensions": ["jpg", "jpeg", "png", "xml", "nfo"],
   "permissions": "Dgo+rx,Fgo+r",

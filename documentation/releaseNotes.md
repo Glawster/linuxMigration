@@ -5,6 +5,9 @@ Releases of this repository, newest first. The process is in
 
 ## Unreleased
 
+- `migrateToRaid`: movie and TV disks are safe to remove after a quick
+  verification (every file's size and date), set per type by `removalVerify`
+  (ADR 010); home video and pictures still need full checksums.
 - `hardwareSnapshot` (new): records a machine's hardware configuration and
   temperatures, reports when the configuration changes between runs, and keeps
   a per-host temperature history with disks identified by serial number

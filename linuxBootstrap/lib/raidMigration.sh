@@ -176,8 +176,9 @@ EOF
 ## check
 
 # Reports whether a mapping's disk is safe to remove. COPY VERIFIED requires
-# a full checksum verification of the source that is mounted now, with no
-# change since. SAFE TO REMOVE additionally requires the protection check of
+# a verification of the source that is mounted now, with no change since, at
+# the level removalVerify sets for its type (full checksums unless the type is
+# accepted as replaceable, ADR 010). SAFE TO REMOVE additionally requires the protection check of
 # the mapping's destination (raid-pc parity, or the local destination's).
 checkMapping() {
     local name="$1" source="${mapSource[$1]}" dest="${mapDest[$1]}" prefix="$workDir/$1.check"
@@ -218,7 +219,9 @@ checkMapping() {
     fi
 
     _say ""
-    if ((copyVerified == 1)); then
+    if ((copyVerified == 1)) && [[ "$(stateGet verifyLevel)" != full ]]; then
+        _say "COPY VERIFIED (quick: removalVerify accepts it for ${mapType[$name]})"
+    elif ((copyVerified == 1)); then
         _say "COPY VERIFIED"
     else
         _say "COPY NOT VERIFIED"
@@ -399,11 +402,13 @@ _checkStateItems() {
     if [[ "$(stateGet verifyStatus)" != verified ]]; then
         _checkResult fail "verification has not succeeded (status: $(stateGet verifyStatus pending))"
         result=1
-    elif [[ "$(stateGet verifyLevel)" != full ]]; then
+    elif [[ "$(stateGet verifyLevel)" == full ]]; then
+        _checkResult ok "full checksum verification completed $(stateGet verifyCompleted)"
+    elif [[ "$(configRemovalVerify "$name")" == quick ]]; then
+        _checkResult ok "quick verification completed $(stateGet verifyCompleted); enough for ${mapType[$name]} (removalVerify)"
+    else
         _checkResult fail "only quick verification is recorded; a full checksum verification is required"
         result=1
-    else
-        _checkResult ok "full checksum verification completed $(stateGet verifyCompleted)"
     fi
     if [[ "$(stateGet conflicts 0)" != 0 ]]; then
         _checkResult fail "$(stateGet conflicts) conflicting destination files need review"
@@ -694,8 +699,10 @@ _mappingVerify() {
     stateHistoryAppend "$name" verified "level=$verifyLevel files=$cmpFiles bytes=$cmpBytes"
     _say ""
     _say "  VERIFIED ($verifyLevel)"
-    if [[ "$verifyLevel" == quick ]]; then
-        _say "  Quick verification never makes a disk safe to remove; use --verify full."
+    if [[ "$verifyLevel" == quick && "$(configRemovalVerify "$name")" == quick ]]; then
+        _say "  Quick verification is enough to remove ${mapType[$name]} (removalVerify)."
+    elif [[ "$verifyLevel" == quick ]]; then
+        _say "  Quick verification never makes ${mapType[$name]} safe to remove; use --verify full."
     fi
 }
 
