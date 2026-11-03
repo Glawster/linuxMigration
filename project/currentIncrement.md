@@ -23,21 +23,26 @@ splitting a show between stores.
 
 Rebalance planning in `linuxBootstrap/lib/raidMigrationPlan.sh`, its hooks in
 `lib/raidMigration.sh` and `lib/raidMigrationStore.sh`, the configuration
-template, tests and the migrateToRaid guide, on branch
-`feature/localMediaRebalance` ([ADR 005](adr/005-rebalancePlan.md)).
+template, tests and the migrateToRaid guide
+([ADR 005](adr/005-rebalancePlan.md)). Merged to `main` in #97; a later planning
+fix is on `feature/replaceableMediaVerify`.
 
 ## Verification
 
 - [x] Automated tests for every acceptance criterion
       (`linuxBootstrap/tests/migrateToRaidTests.sh`)
 - [x] Read-only preview of both plans against the real disks
-- [ ] Review and merge `feature/localMediaRebalance`
-- [ ] Finish the requirement 001 raid-pc migrations
-- [ ] Move `linuxBackup` off `/mnt/video` to a retired USB disk
+- [x] Review and merge `feature/localMediaRebalance` (#97)
+- [x] Copy and verify the requirement 001 raid-pc migrations; `myPicturesMovies`
+      has no recorded source removal
+- [x] Retire `linuxBackup` from `/mnt/video`: replaced by snapshot backups and
+      deleted
 - [ ] Manual acceptance: review the real plans, then the first confirmed,
       fully verified rebalance and removal
 
 ## Next
 
-Review the branch. The real rebalance waits for the requirement 001 migrations
-to finish and for `linuxBackup` to leave `/mnt/video`.
+The real rebalance started on 2026-11-03, targeting 41% on `/mnt/video` and 50%
+on `/mnt/movies`. TV is copied and verified, and movies is copying. When movies
+has verified, run `snapraid sync` on raid-pc, then check and remove the source
+of each mapping to complete manual acceptance.

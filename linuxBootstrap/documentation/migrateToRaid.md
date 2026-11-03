@@ -591,7 +591,7 @@ disabled:
 
 `rebalance.targetPercent` defaults to 50, and the mapping's `type` must be
 `movies` or `tv`. Only the source folder is ever considered, so nothing outside
-`/mnt/video/TV` (such as `linuxBackup`) is moved.
+`/mnt/video/TV` (such as `Downloads`) is moved.
 
 ### How titles are chosen
 
@@ -649,9 +649,9 @@ cycle: the finished cycle's state, manifest and plan are kept as
 If the disk is at or below its target, the run says `Nothing to move` and
 records nothing.
 
-Move anything else off the disk first (for example `linuxBackup` from
-`/mnt/video`): the plan is based on the disk's usage at the time, so leftover
-content makes it move more titles than necessary.
+Clear anything else you no longer need from the disk first: the plan is based
+on the disk's usage at the time, so leftover content makes it move more titles
+than necessary.
 
 ## State and logs
 
