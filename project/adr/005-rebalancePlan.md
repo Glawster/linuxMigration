@@ -25,7 +25,7 @@ keep one fixed scope from start to finish.
    checks are unchanged.
 2. **The plan is the scope.** Planning lists the top-level title folders of the
    source, sizes them from the source manifest, and selects whole folders:
-   first every eligible title already present in the destination, then the
+   first every eligible title with files in the destination, then the
    oldest eligible titles until the disk's projected occupancy
    (`used − planned` over `used + available`, as `df` reports it) is at or
    below the target. For a rebalance mapping, every source manifest (copy,

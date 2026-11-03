@@ -605,8 +605,9 @@ Each top-level folder of the source is one title and is always moved whole.
 Titles without a date come after every dated one; ties sort by name. The plan
 takes, in order:
 
-1. every eligible title that already exists in the destination, whatever its
-   age, so a title is never left split between andy-pc and raid-pc;
+1. every eligible title with files in the destination, whatever its age, so a
+   title is never left split between andy-pc and raid-pc (an empty folder, such
+   as an interrupted copy leaves, does not count);
 2. the oldest eligible titles, until the projected occupancy (used minus
    planned, over used plus available, as `df` reports it) is at or below the
    target.

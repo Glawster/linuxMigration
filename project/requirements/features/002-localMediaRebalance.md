@@ -47,8 +47,8 @@ and every title lives in exactly one store.
     after every dated title.
   - Titles are selected until the disk's projected occupancy is at or below
     50%, measured from the real filesystem usage at planning time.
-  - A title that already exists in the raid-pc pool folder is always selected,
-    whatever its age, so it is reunited on raid-pc.
+  - A title with files in the raid-pc pool folder is always selected, whatever
+    its age, so it is reunited on raid-pc. An empty folder there does not count.
 - Moving uses the requirement 001 pipeline unchanged: preview by default,
   copy and verify with `--confirm`, then `--check` and an explicit
   `--remove-source` that deletes only the moved title folders.
@@ -78,7 +78,7 @@ and every title lives in exactly one store.
 2. Given a show whose `series.xml` status is not `Ended`, or has no readable
    `series.xml`, when the plan is made, then the show is never selected and
    stays entirely local.
-3. Given a title folder that already exists in the raid-pc pool folder, when
+3. Given a title folder holding files in the raid-pc pool folder, when
    the plan is made, then it is selected regardless of age, and the preview
    says why. A show in both places that is still airing is not moved and is
    reported as split.
@@ -132,3 +132,6 @@ and every title lives in exactly one store.
 - 2026-10-23: criterion 5 keeps titles already on raid-pc selected when the
   disk is below target, so they are reunited (criterion 3); design recorded in
   ADR 005.
+- 2026-11-03: criterion 3 counts only folders holding files, so the empty
+  folders left by an interrupted copy do not select every title of a discarded
+  plan.

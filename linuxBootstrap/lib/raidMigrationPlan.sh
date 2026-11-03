@@ -9,12 +9,18 @@
 
 planEmpty=0
 
-# Lists the top-level folders of a destination, NUL-terminated. A destination
-# that does not exist yet has none.
+# Lists the top-level folders of a destination that hold at least one file,
+# NUL-terminated. Empty ones are left by an interrupted copy, which creates every
+# folder first, so they are not titles on the destination. A destination that
+# does not exist yet has none.
 _remoteTopLevelScript='
 [ -d "$1" ] || exit 0
 cd -- "$1" || exit 3
-find . -mindepth 1 -maxdepth 1 -type d -printf "%P\0"
+find . -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d "" folder; do
+    if [ -n "$(find "$folder" ! -type d -print -quit)" ]; then
+        printf "%s\0" "${folder#./}"
+    fi
+done
 '
 
 # Points a rebalance mapping at its recorded plan, if one exists. Used by

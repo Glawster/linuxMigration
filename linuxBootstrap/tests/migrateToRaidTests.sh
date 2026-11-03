@@ -1068,6 +1068,7 @@ migrateToRaidTestsRun() {
     testMigrateToRaidPoolDestinationRefused
     testMigrateToRaidRebalanceConfig
     testMigrateToRaidRebalanceMoviesPlan
+    testMigrateToRaidRebalanceEmptyDestinationFolders
     testMigrateToRaidRebalanceLimits
     testMigrateToRaidRebalanceTv
     testMigrateToRaidOnRaidHost
@@ -1103,7 +1104,8 @@ _mtrRebalanceTvSandbox() {
     local show
     _mtrSandbox
     mtrVideo="$mtrBox/mnt/video"
-    mkdir -p "$mtrVideo/TV" "$mtrVideo/linuxBackup" "$mtrStorage/TV/Split Airing"
+    mkdir -p "$mtrVideo/TV" "$mtrVideo/linuxBackup" "$mtrStorage/TV/Split Airing/Season 02"
+    printf 'episode\n' >"$mtrStorage/TV/Split Airing/Season 02/Split Airing S02E01.mkv"
     printf 'backup\n' >"$mtrVideo/linuxBackup/home.tar"
     for show in 'Old Ended|Ended|1990-01-01' 'New Ended|Ended|2015-05-05' 'Airing Show|Continuing|1985-02-02' \
         'No Metadata||' 'Split Airing|Continuing|2001-01-01' 'Undated Ended|Ended|'; do
@@ -1194,6 +1196,20 @@ testMigrateToRaidRebalanceMoviesPlan() {
     _mtrCheck 'next cycle succeeds' test "$mtrStatus" -eq 0
     _mtrCheck 'finished cycle is archived' test -n "$(find "$mtrState" -name 'moviesRebalance.2*.plan')"
     _mtrCheck 'next cycle moves the next oldest title' test -f "$mtrStorage/Movies/New Film (2020)/New Film (2020).mkv"
+}
+
+# An interrupted copy creates every planned folder before its files arrive. If
+# its plan is discarded, those empty folders must not force titles into the next.
+testMigrateToRaidRebalanceEmptyDestinationFolders() {
+    _mtrRebalanceMoviesSandbox
+    mkdir -p "$mtrStorage/Movies/New Film (2020)" "$mtrStorage/Movies/Undated Film/Extras"
+
+    FAKE_DF_USED_AVAIL='1500 500' _mtrRun --source moviesRebalance
+    _mtrCheck 'preview with empty destination folders succeeds' test "$mtrStatus" -eq 0
+    assertContains "$mtrOutput" 'Plan:         3 titles' 'empty destination folders do not enlarge the plan'
+    assertContains "$mtrOutput" 'Split Film (2021) (already on raid-pc)' 'title with files on raid-pc is still reunited'
+    _mtrCheck 'empty destination folder does not select a title' _mtrNotContains "$mtrOutput" 'New Film (2020) ('
+    _mtrCheck 'nested empty destination folders do not select a title' _mtrNotContains "$mtrOutput" 'Undated Film ('
 }
 
 testMigrateToRaidRebalanceLimits() {
