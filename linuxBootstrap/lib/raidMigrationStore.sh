@@ -48,6 +48,91 @@ declare -gA state=()
 
 ## config
 
+# Prints every option migrateToRaid reads, with the value this run would use
+# after defaults and normalisation, so it shows what the tool will do rather
+# than only what the file says. Selection narrows the mappings shown.
+configList() {
+    local name scope type types=() extensions=()
+    _say ""
+    _sayField "Config file:" "$configFile"
+    _sayField "" "(default) marks a value the file does not set"
+    _say ""
+    _say "General"
+    _configListField "" remoteHost "$remoteHost"
+    _configListField "" remoteUser "$remoteUser"
+    _configListField "" destinationMount "$destinationMount"
+    _configListField "" destinationFsType "$destinationFsType"
+    _configListField "" minFreeBytesAfter "$minFreeBytesAfter"
+    _configListField "" checksum "$checksumCommand"
+    _configListField "" permissions "$transferChmod"
+    _configListField "" excludes "$(_configListJoin "${excludeNames[@]}")"
+    if ((${#metadataExtensions[@]} > 0)); then
+        mapfile -t extensions < <(printf '%s\n' "${!metadataExtensions[@]}" | LC_ALL=C sort)
+    fi
+    _configListField "" metadataExtensions "$(_configListJoin "${extensions[@]}")"
+    _configListField "" protection.name "$protectionName"
+    _configListField "" protection.command "$protectionCommand"
+    _configListField "" protection.successExitCodes "$(_configListJoin "${protectionSuccessCodes[@]}")"
+    _configListField "" localDestination.mount "$localMount"
+    _configListField "" localDestination.fsType "$localFsType"
+    _configListField "" localDestination.source "$localSource"
+    _configListField "" localDestination.uuid "$localUuid"
+    _configListField "" localDestination.protection.name "$localProtectionName"
+    _configListField "" localDestination.protection.command "$localProtectionCommand"
+    _configListField "" localDestination.protection.required "$localProtectionRequired"
+    _configListField "" localDestination.protection.successExitCodes "$(_configListJoin "${localProtectionSuccessCodes[@]}")"
+    # Any type the file does not list needs full checksums before removal.
+    if ((${#removalVerify[@]} > 0)); then
+        mapfile -t types < <(printf '%s\n' "${!removalVerify[@]}" | LC_ALL=C sort)
+    fi
+    for type in "${types[@]}"; do
+        _configListLine "removalVerify.$type" "${removalVerify[$type]}"
+    done
+    _configListLine "removalVerify.(other types)" "full (default)"
+
+    for name in "${selectedNames[@]}"; do
+        # Mapping names are validated by configLoad, so they are safe in a filter.
+        scope="(.mappings[] | select(.name == \"$name\"))"
+        _say ""
+        _say "Mapping $name"
+        _configListField "$scope" label "${mapLabel[$name]}"
+        _configListField "$scope" type "${mapType[$name]}"
+        _configListField "$scope" enabled "${mapEnabled[$name]}"
+        _configListField "$scope" target "${mapTarget[$name]}"
+        _configListField "$scope" source "${mapSource[$name]}"
+        _configListField "$scope" mountPoint "${mapMount[$name]}"
+        _configListField "$scope" destination "${mapDest[$name]}"
+        _configListField "$scope" uuid "${mapUuid[$name]}"
+        _configListField "$scope" excludes "${mapExcludes[$name]//\//, }"
+        _configListField "$scope" rebalance.targetPercent "${mapRebalance[$name]}"
+    done
+}
+
+# Prints one option, saying whether the value came from the file or a default.
+_configListField() {
+    local scope="$1" key="$2" value="$3" inFile=0
+    jq -e "$scope.$key != null" "$configFile" >/dev/null 2>&1 && inFile=1
+    if [[ -n "$value" ]]; then
+        ((inFile == 1)) || value+=" (default)"
+    elif ((inFile == 1)); then
+        value='""'
+    else
+        value="(not set)"
+    fi
+    _configListLine "$key" "$value"
+}
+
+_configListJoin() {
+    local first="${1:-}"
+    (($# == 0)) || shift
+    printf '%s' "$first"
+    (($# == 0)) || printf ', %s' "$@"
+}
+
+_configListLine() {
+    _say "$(printf '  %-46s %s' "$1" "$2")"
+}
+
 configLoad() {
     local file="$1" name label type source dest enabled uuid mount excludes target rebalance extension
     if [[ ! -f "$file" ]]; then

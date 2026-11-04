@@ -48,6 +48,11 @@ raidMigrationMain() {
     commandsRequire
     configLoad "${configOverride:-${XDG_CONFIG_HOME:-$HOME/.config}/$applicationName/config.json}" || exit 1
     selectionResolve || exit 2
+    # Listing only reads the configuration, so it needs no network or work area.
+    if [[ "$action" == list ]]; then
+        configList
+        exit 0
+    fi
     remoteTarget="$remoteHost"
     [[ -n "$remoteUser" ]] && remoteTarget="$remoteUser@$remoteHost"
     destinationHostDetect
@@ -84,6 +89,7 @@ argsParse() {
                 configOverride="$2"
                 shift
                 ;;
+            --list) action=list; actions=$((actions + 1)) ;;
             --remove-source) action=remove; actions=$((actions + 1)) ;;
             --source)
                 _argumentRequireValue "$1" "${2:-}"
@@ -125,7 +131,7 @@ argsParse() {
         shift
     done
     if ((actions > 1)); then
-        echo "ERROR: choose only one of --status, --check, --verify-only, --remove-source" >&2
+        echo "ERROR: choose only one of --status, --list, --check, --verify-only, --remove-source" >&2
         exit 2
     fi
     if ((yesDelete == 1)) && [[ "$action" != remove ]]; then
@@ -159,6 +165,7 @@ first; for TV, ended shows only) until its disk is at the target occupancy.
 
 Reporting:
   --status              Show recorded state of every mapping
+  --list                Show every configuration option with the value in use
   --check [NAME]        Report SAFE / NOT SAFE TO REMOVE DISK
 
 Source removal:
@@ -838,7 +845,7 @@ selectionResolve() {
         fi
     fi
     if ((selectAll == 0 && ${#selectSources[@]} == 0 && ${#selectTypes[@]} == 0)); then
-        if [[ "$action" == status || "$action" == check ]]; then
+        if [[ "$action" == status || "$action" == check || "$action" == list ]]; then
             selectedNames=("${mappingNames[@]}")
             return 0
         fi
@@ -856,7 +863,7 @@ selectionResolve() {
             log_error "no mapping named '$wanted' in $configFile"
             return 1
         fi
-        if [[ "${mapEnabled[$found]}" != true && "$action" != status && "$action" != check ]]; then
+        if [[ "${mapEnabled[$found]}" != true && "$action" != status && "$action" != check && "$action" != list ]]; then
             log_error "mapping $found is disabled in $configFile"
             return 1
         fi
@@ -1008,7 +1015,7 @@ statusShow() {
 runHeader() {
     local mode=apply command
     [[ -n "${dryRun:-}" && "$action" != verify && "$action" != status && "$action" != check ]] && mode=preview
-    [[ "$action" == status || "$action" == check ]] && mode=report
+    [[ "$action" == status || "$action" == check || "$action" == list ]] && mode=report
     printf -v command ' %q' "$@"
     declare -F runStart >/dev/null && runStart
     _say "$applicationName $(versionDescribe) on $(hostname -s 2>/dev/null || printf 'unknown host')"

@@ -142,6 +142,21 @@ before any network or data operation, so nothing can be migrated until the
 raid-pc protection check and the `/mnt/media` filesystem identity have been
 written in.
 
+### Listing the configuration
+
+```bash
+migrateToRaid --list
+migrateToRaid --list --source tvRebalance
+```
+
+`--list` prints every option the tool reads with the value it would use, after
+defaults are applied. `(default)` marks a value the file does not set, and
+`(not set)` an option with no value at all. The general options are always
+shown; `--source`, `--type` or `--all` narrow the mappings, and with none of them
+every mapping is listed, including disabled ones. It only reads the
+configuration, so it can run during a migration and does not contact raid-pc.
+An invalid configuration is reported instead of being listed.
+
 ## Local destination
 
 Mappings with `"target": "local"` copy to a disk mounted on andy-pc,

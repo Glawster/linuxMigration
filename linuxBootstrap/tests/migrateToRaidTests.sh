@@ -295,6 +295,42 @@ testMigrateToRaidConfigInvalid() {
     assertContains "$mtrOutput" 'destination for movie1 is not configured' 'placeholder destination is refused'
 }
 
+testMigrateToRaidList() {
+    _mtrSandbox
+    _mtrRun --list
+    _mtrCheck '--list succeeds' test "$mtrStatus" -eq 0
+    assertContains "$mtrOutput" 'Action:       list (report)' '--list is a report'
+    assertContains "$mtrOutput" "$mtrConfig" '--list names the configuration file'
+    _mtrCheck '--list shows a value from the file' _mtrMatches "$mtrOutput" 'minFreeBytesAfter +1024$'
+    _mtrCheck '--list marks a default' _mtrMatches "$mtrOutput" 'checksum +sha256sum \(default\)$'
+    _mtrCheck '--list marks an unset option' _mtrMatches "$mtrOutput" 'localDestination.mount +\(not set\)$'
+    _mtrCheck '--list shows other types need full checksums' _mtrMatches "$mtrOutput" 'removalVerify.\(other types\) +full \(default\)$'
+    assertContains "$mtrOutput" 'Mapping movie1' '--list shows an enabled mapping'
+    assertContains "$mtrOutput" 'Mapping video1' '--list shows a disabled mapping'
+    _mtrCheck '--list shows a defaulted mapping option' _mtrMatches "$mtrOutput" 'target +remote \(default\)$'
+    _mtrCheck '--list contacts nothing and creates no state' test ! -e "$mtrState/movie1.state"
+
+    _mtrRun --list --source video1
+    _mtrCheck '--list can show one disabled mapping' test "$mtrStatus" -eq 0
+    _mtrCheck '--list --source leaves out other mappings' _mtrNotContains "$mtrOutput" 'Mapping movie1'
+
+    jq '.removalVerify = {movies: "quick"} | .permissions = ""
+        | .mappings[0] += {excludes: ["a", "b"], rebalance: {targetPercent: 40}}' "$mtrConfig" >"$mtrConfig.new"
+    mv "$mtrConfig.new" "$mtrConfig"
+    _mtrRun --list --source movie1
+    _mtrCheck '--list shows removalVerify by type' _mtrMatches "$mtrOutput" 'removalVerify.movies +quick$'
+    _mtrCheck '--list shows an explicitly empty option' _mtrMatches "$mtrOutput" 'permissions +""$'
+    _mtrCheck '--list shows mapping excludes' _mtrMatches "$mtrOutput" 'excludes +a, b$'
+    _mtrCheck '--list shows the rebalance target' _mtrMatches "$mtrOutput" 'rebalance.targetPercent +40$'
+
+    _mtrRun --list --check
+    _mtrCheck '--list counts as an action' test "$mtrStatus" -eq 2
+}
+
+_mtrMatches() {
+    grep -Eq -- "$2" <<<"$1"
+}
+
 ## preflight
 
 testMigrateToRaidMissingSource() {
@@ -1036,6 +1072,7 @@ migrateToRaidTestsRun() {
     testMigrateToRaidVersion
     testMigrateToRaidConfigTemplate
     testMigrateToRaidConfigInvalid
+    testMigrateToRaidList
     testMigrateToRaidMissingSource
     testMigrateToRaidSourceNotMounted
     testMigrateToRaidDestinationUnavailable

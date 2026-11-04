@@ -67,8 +67,8 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 - Pre-flight checks, classification of destination collisions, resumable
   transfer, separate quick or full verification, final source-stability
   checks, persistent state and audit logs.
-- `--status`, `--check` (COPY VERIFIED and SAFE / NOT SAFE TO REMOVE, per
-  mapping and per disk) and explicit `--remove-source`.
+- `--status`, `--list`, `--check` (COPY VERIFIED and SAFE / NOT SAFE TO REMOVE,
+  per mapping and per disk) and explicit `--remove-source`.
 - Automated tests and user documentation.
 
 ## Out of scope
@@ -191,6 +191,9 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
     folder and file, and the existing folder, end readable by other users
     (`permissions`, default `Dgo+rx,Fgo+r`); an empty value keeps the source
     permissions, and an invalid value is refused before anything is copied.
+27. Given a valid configuration, when `--list` runs, then every option is shown
+    with the value in use, marking defaults and unset options, for the selected
+    mappings or all of them, without contacting raid-pc or changing any state.
 
 ## Dependencies and decisions
 
@@ -256,3 +259,4 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 - 2026-10-27: movies and TV can be removed after quick verification
   (`removalVerify`, criterion 11, ADR 010), since they can be downloaded
   again; home video and pictures still need full checksums.
+- 2026-11-04: `--list` shows the configuration options in use (criterion 27).
