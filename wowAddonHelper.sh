@@ -52,12 +52,16 @@ WINE_BOOT="$WINE_DIR/wineboot"
 INSTALLER_DIR="/mnt/games/installers"
 
 # Defaults (override by passing an explicit path argument to install commands)
-DEFAULT_ZYGOR_SETUP="$INSTALLER_DIR/Zygor_Setup_4.8.0.exe"
+DEFAULT_ZYGOR_SETUP="$INSTALLER_DIR/Zygor_Setup_4.13.2.exe"
 DEFAULT_TSM_SETUP="$INSTALLER_DIR/TSM_Desktop_App_Setup.exe"
 
 # Installed app locations (Windows paths inside prefix) — EDIT if yours differ
 ZYGOR_CLIENT_WIN='C:\users\andy\AppData\Local\Zygor\Zygor.exe'
 TSM_CLIENT_WIN='C:\Program Files (x86)\TradeSkillMaster Application\app\TSMApplication.exe'
+
+# Zygor 4.13+ (Electron 11) crashes its GPU process under Wine and shows a blank
+# white window; software rendering avoids that.
+ZYGOR_CLIENT_ARGS=(--disable-gpu)
 
 DEFAULT_WORKDIR="/mnt/games"
 WINEDEBUG_DEFAULT="-all"
@@ -141,7 +145,7 @@ cmd_zygor_client() {
 
   show_env
   log_doing "launching zygor client"
-  ( cd "$DEFAULT_WORKDIR" && wine_start "$ZYGOR_CLIENT_WIN" ) >/dev/null 2>&1 & disown || true
+  ( cd "$DEFAULT_WORKDIR" && wine_start "$ZYGOR_CLIENT_WIN" "${ZYGOR_CLIENT_ARGS[@]}" ) >/dev/null 2>&1 & disown || true
   log_done "zygor client launched"
 }
 
