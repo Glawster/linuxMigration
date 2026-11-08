@@ -5,7 +5,8 @@ set -euo pipefail
 # wowAddonHelper.sh — WoW addon helper (Linux / Wine)
 #
 # Goals:
-# - Launch addon clients using the SAME WoW Wine prefix
+# - Launch Wine addon clients using the SAME WoW Wine prefix
+# - Install and launch the Linux-native TSM desktop AppImage
 # - Never mix Wine versions (no system wine, no alternate runners)
 # - Provide a kill option to stop wineserver processes cleanly
 # - Safe, idempotent, explicit (no magic auto-detection)
@@ -53,11 +54,19 @@ INSTALLER_DIR="/mnt/games/installers"
 
 # Defaults (override by passing an explicit path argument to install commands)
 DEFAULT_ZYGOR_SETUP="$INSTALLER_DIR/Zygor_Setup_4.13.2.exe"
-DEFAULT_TSM_SETUP="$INSTALLER_DIR/TSM_Desktop_App_Setup.exe"
+DEFAULT_TSM_APPIMAGE="$HOME/Downloads/TradeSkillMaster.AppImage"
 
 # Installed app locations (Windows paths inside prefix) — EDIT if yours differ
 ZYGOR_CLIENT_WIN='C:\users\andy\AppData\Local\Zygor\Zygor.exe'
-TSM_CLIENT_WIN='C:\Program Files (x86)\TradeSkillMaster Application\app\TSMApplication.exe'
+
+# TSM is a native AppImage and does not use the Wine runner. Its built-in updater
+# replaces this file in place, so it needs a stable, user-writable location.
+TSM_DIR="/mnt/games/tradeSkillMaster"
+TSM_APPIMAGE="$TSM_DIR/TradeSkillMaster.AppImage"
+TSM_LOG="$HOME/.local/state/wowAddonHelper/tsmDesktop.log"
+
+# The native app still manages addons in the WoW install inside the Wine prefix.
+WOW_DIR="$WINE_PREFIX/drive_c/Program Files (x86)/World of Warcraft"
 
 # Zygor 4.13+ (Electron 11) crashes its GPU process under Wine and shows a blank
 # white window; software rendering avoids that.
@@ -85,6 +94,20 @@ assert_config_ok() {
   require_exec "$WINE_BIN"
   require_exec "$WINE_SERVER"
   require_exec "$WINE_BOOT"
+}
+
+assert_appimage() {
+  # Type 2 AppImages carry the bytes "AI" 0x02 at offset 8 of the ELF header.
+  local magic
+  magic="$(od -An -tx1 -j8 -N3 "$1" | tr -d ' ')"
+  [[ "$magic" == "414902" ]] || die "not a type 2 AppImage: $1"
+}
+
+assert_fuse() {
+  # The AppImage runtime mounts itself using FUSE 2, which is a separate package
+  # from the FUSE 3 that current Ubuntu releases install by default.
+  ldconfig -p | grep -F 'libfuse.so.2' >/dev/null \
+    || die "libfuse.so.2 is missing (install: sudo apt install libfuse2t64)"
 }
 
 # ----------------------------
@@ -125,6 +148,11 @@ show_env() {
   log_value "prefix" "$WINE_PREFIX"
 }
 
+show_tsm_env() {
+  log_value "tsm appimage" "$TSM_APPIMAGE"
+  log_value "wow dir" "$WOW_DIR"
+}
+
 # ----------------------------
 # Commands
 # ----------------------------
@@ -150,23 +178,62 @@ cmd_zygor_client() {
 }
 
 cmd_tsm_install() {
-  assert_config_ok
-  local installer="${1:-$DEFAULT_TSM_SETUP}"
-  require_file "$installer"
+  # Installing replaces a file, so it is a dry run unless --confirm is given.
+  local source_file=""
+  dryRun=1
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -y|--confirm) dryRun="" ;;
+      -*) die "unknown tsm-install option: $1" ;;
+      *)
+        [[ -z "$source_file" ]] || die "tsm-install takes one AppImage path"
+        source_file="$1"
+        ;;
+    esac
+    shift
+  done
+  source_file="${source_file:-$DEFAULT_TSM_APPIMAGE}"
 
-  show_env
-  log_doing "running tsm installer: $installer"
-  ( cd "$(dirname "$installer")" && wine_run "$installer" )
-  log_done "tsm installer finished"
+  require_file "$source_file"
+  assert_appimage "$source_file"
+  assert_fuse
+  [[ ! "$source_file" -ef "$TSM_APPIMAGE" ]] || die "source is already the installed AppImage: $source_file"
+
+  show_tsm_env
+  log_doing "installing tsm desktop app"
+  log_action "copying $source_file to $TSM_APPIMAGE"
+  if [[ -e "$TSM_APPIMAGE" ]]; then
+    log_action "keeping current version as $TSM_APPIMAGE.previous"
+  fi
+
+  if [[ -z "$dryRun" ]]; then
+    mkdir -p "$TSM_DIR"
+    # Copy beside the target first so a failed copy cannot damage the working install.
+    local staged_file="$TSM_APPIMAGE.new"
+    cp -- "$source_file" "$staged_file"
+    chmod 755 "$staged_file"
+    if [[ -e "$TSM_APPIMAGE" ]]; then
+      mv -- "$TSM_APPIMAGE" "$TSM_APPIMAGE.previous"
+    fi
+    mv -- "$staged_file" "$TSM_APPIMAGE"
+    log_done "tsm desktop app installed"
+  else
+    log_info "dry run: pass --confirm to install"
+  fi
 }
 
 cmd_tsm_client() {
-  assert_config_ok
-  assert_win_exe_exists "$TSM_CLIENT_WIN"
+  require_exec "$TSM_APPIMAGE"
+  assert_appimage "$TSM_APPIMAGE"
+  assert_fuse
+  require_dir "$WOW_DIR"
 
-  show_env
+  show_tsm_env
   log_doing "launching tsm desktop app"
-  ( cd "$DEFAULT_WORKDIR" && WINEDEBUG="${WINEDEBUG:-$WINEDEBUG_DEFAULT}" wine_run "$TSM_CLIENT_WIN" ) & disown || true
+  mkdir -p "$(dirname "$TSM_LOG")"
+  # setsid detaches the GUI from this terminal; AppRun chooses the sandbox flag itself.
+  ( cd "$TSM_DIR" && setsid "$TSM_APPIMAGE" "$@" ) >>"$TSM_LOG" 2>&1 </dev/null & disown || true
+  log_value "tsm log" "$TSM_LOG"
   log_done "tsm desktop launched"
 }
 
@@ -238,19 +305,22 @@ Commands:
   zygor-install [installer.exe]   Run Zygor installer in the WoW prefix
   zygor                           Launch installed Zygor client in the WoW prefix
 
-  tsm-install [installer.exe]     Run TSM Desktop installer in the WoW prefix
-  tsm                             Launch installed TSM Desktop app in the WoW prefix
+  tsm-install [--confirm] [file.AppImage]
+                                  Install the native TSM Desktop AppImage (dry run without --confirm)
+  tsm                             Launch the installed native TSM Desktop app
 
-  wineboot                        Run wineboot -u for this prefix (safe)
+  wineboot                     Run wineboot -u for this prefix (safe)
   kill                            Stop wineserver + clean leftover wine procs for this prefix
   status                          Show config + processes tied to this prefix
   env                             Show config only
 
 Notes:
-  - This script ONLY uses:
+  - Wine commands ONLY use:
       WINE_BIN    = $WINE_BIN
       WINEPREFIX  = $WINE_PREFIX
-  - It does NOT call system wine or system wineserver.
+  - They do NOT call system wine or system wineserver.
+  - TSM runs natively from: $TSM_APPIMAGE
+    In the app, set the WoW folder to: $WOW_DIR
 EOF
 }
 
@@ -268,7 +338,7 @@ case "$cmd" in
   wineboot)      cmd_wineboot "$@" ;;
   kill)          cmd_kill_wine "$@" ;;
   status)        cmd_status "$@" ;;
-  env)           assert_config_ok; show_env ;;
+  env)           assert_config_ok; show_env; show_tsm_env ;;
   help|-h|--help|"") usage ;;
   *) die "unknown command: $cmd (try: help)" ;;
 esac
