@@ -1,6 +1,7 @@
 # 008: One version and release tag for the whole repository
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 009](009-branchVersions.md) (every branch
+  of work gets its own alpha version, and every merge is tagged)
 - Date: 2026-10-24
 - Related: [ADR 006](006-migrateOnHostWithDisk.md)
 
