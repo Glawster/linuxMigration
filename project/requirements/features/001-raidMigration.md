@@ -115,13 +115,16 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
 10. Given a different filesystem mounted at a migrated mount point, when any
     operation runs, then it is refused because the recorded UUID and mount
     point do not match.
-11. Given a full verification of the current source, when `--check` runs, then
+11. Given a verification of the current source at the level its type needs
+    (`removalVerify`: full checksums unless the type is listed as `quick`, as
+    the template does for `movies` and `tv`), when `--check` runs, then
     it reports COPY VERIFIED, and SAFE TO REMOVE only if the protection check
     of that mapping's destination also passes (the raid-pc check, or the local
     destination's check unless the owner has explicitly accepted it as
     single-copy storage with `"required": false`, as the template does for
     `/mnt/media`). Otherwise it reports NOT SAFE with reasons. Quick verification
-    is never SAFE.
+    of any other type is never SAFE, and a quick-verified COPY VERIFIED names
+    its basis.
 12. Given mappings that cover parts of a disk, when `--check` runs, then the
     disk is SAFE only when every mapping on it is SAFE and every top-level
     entry belongs to a mapping. Overlapping mappings are rejected.
@@ -197,6 +200,7 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
   (supersedes ADR 003; superseded by ADR 006)
 - [ADR 006: Migrating a disk on the machine it is attached to](../../adr/006-migrateOnHostWithDisk.md)
 - [ADR 007: Newer artwork and metadata replace older copies](../../adr/007-newerMetadataWins.md)
+- [ADR 010: Quick verification is enough to remove replaceable media](../../adr/010-replaceableMediaQuickVerify.md)
 - The raid-pc storage layout and SnapRAID parity are prerequisites for real
   migration to raid-pc, and a mounted `/mnt/media` with its UUID configured is
   a prerequisite for local migration; neither is a prerequisite for this
@@ -249,3 +253,6 @@ Priorities, in order: safety, auditability, resumability, speed, convenience.
   tool-specific one (ADR 008, criterion 25).
 - 2026-10-25: copies are made readable by other users such as Plex, after 45
   private TV folders on raid-pc were invisible to Plex (criterion 26).
+- 2026-10-27: movies and TV can be removed after quick verification
+  (`removalVerify`, criterion 11, ADR 010), since they can be downloaded
+  again; home video and pictures still need full checksums.
