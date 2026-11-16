@@ -9,11 +9,13 @@ HOST="$(hostname -s)"
 case "$HOST" in
     andy-pc)
         alias addons='cd "/mnt/games/lutris/games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_retail_/Interface/AddOns/organiseMyAlts"'
+        alias addonsf='cd "/mnt/games/lutris/games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_forever_/Interface/AddOns"'
         alias lpduplex='lp -d '\''Canon_GX4000_series@c98D55600000.local'\'' -o Duplex=DuplexNoTumble'
         alias lutris='flatpak run net.lutris.Lutris'
         alias m1='cd /mnt/movies/Movies'
         alias qt='pyside6-designer'
         alias savedv='cd "/mnt/games/lutris/games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_retail_/WTF/Account/GLAWSTER/SavedVariables"'
+        alias savedvf='cd "/mnt/games/lutris/games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_forever_/WTF/Account/GLAWSTER/SavedVariables"'
         alias v2='cd /mnt/video/TV'
         alias rmov='cd /mnt/raid/Movies'
         alias rtv='cd /mnt/raid/TV'

@@ -142,6 +142,21 @@ before any network or data operation, so nothing can be migrated until the
 raid-pc protection check and the `/mnt/media` filesystem identity have been
 written in.
 
+### Listing the configuration
+
+```bash
+migrateToRaid --list
+migrateToRaid --list --source tvRebalance
+```
+
+`--list` prints every option the tool reads with the value it would use, after
+defaults are applied. `(default)` marks a value the file does not set, and
+`(not set)` an option with no value at all. The general options are always
+shown; `--source`, `--type` or `--all` narrow the mappings, and with none of them
+every mapping is listed, including disabled ones. It only reads the
+configuration, so it can run during a migration and does not contact raid-pc.
+An invalid configuration is reported instead of being listed.
+
 ## Local destination
 
 Mappings with `"target": "local"` copy to a disk mounted on andy-pc,
@@ -591,7 +606,7 @@ disabled:
 
 `rebalance.targetPercent` defaults to 50, and the mapping's `type` must be
 `movies` or `tv`. Only the source folder is ever considered, so nothing outside
-`/mnt/video/TV` (such as `linuxBackup`) is moved.
+`/mnt/video/TV` (such as `Downloads`) is moved.
 
 ### How titles are chosen
 
@@ -605,8 +620,9 @@ Each top-level folder of the source is one title and is always moved whole.
 Titles without a date come after every dated one; ties sort by name. The plan
 takes, in order:
 
-1. every eligible title that already exists in the destination, whatever its
-   age, so a title is never left split between andy-pc and raid-pc;
+1. every eligible title with files in the destination, whatever its age, so a
+   title is never left split between andy-pc and raid-pc (an empty folder, such
+   as an interrupted copy leaves, does not count);
 2. the oldest eligible titles, until the projected occupancy (used minus
    planned, over used plus available, as `df` reports it) is at or below the
    target.
@@ -648,9 +664,9 @@ cycle: the finished cycle's state, manifest and plan are kept as
 If the disk is at or below its target, the run says `Nothing to move` and
 records nothing.
 
-Move anything else off the disk first (for example `linuxBackup` from
-`/mnt/video`): the plan is based on the disk's usage at the time, so leftover
-content makes it move more titles than necessary.
+Clear anything else you no longer need from the disk first: the plan is based
+on the disk's usage at the time, so leftover content makes it move more titles
+than necessary.
 
 ## State and logs
 

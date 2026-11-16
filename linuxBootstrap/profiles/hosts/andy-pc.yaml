@@ -23,8 +23,11 @@ services:
   - ssh
   - nfs-kernel-server
 
+# /mnt/video is NTFS through FUSE, so its export needs an explicit fsid.
 nfsExports:
-  - /mnt/video 192.168.1.201(rw,sync,no_subtree_check)
+  - /mnt/video 192.168.1.201(rw,sync,no_subtree_check,fsid=11)
+  - /mnt/movies 192.168.1.201(ro,sync,no_subtree_check)
+  - /mnt/media 192.168.1.201(ro,sync,no_subtree_check)
 
 nfsMounts:
   - raid-pc:/mnt/storage /mnt/raid rw,_netdev,nofail,x-systemd.automount

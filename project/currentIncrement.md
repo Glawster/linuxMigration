@@ -6,7 +6,7 @@
 
 ## Status
 
-Blocked
+Active
 <!-- Options: Active, Idle, Blocked, InReview -->
 
 ## Requirement
@@ -24,7 +24,8 @@ splitting a show between stores.
 Rebalance planning in `linuxBootstrap/lib/raidMigrationPlan.sh`, its hooks in
 `lib/raidMigration.sh` and `lib/raidMigrationStore.sh`, the configuration
 template, tests and the migrateToRaid guide
-([ADR 005](adr/005-rebalancePlan.md)). Merged to `main` in #97.
+([ADR 005](adr/005-rebalancePlan.md)). Merged to `main` in #97; a later planning
+fix in #112.
 
 ## Verification
 
@@ -32,20 +33,16 @@ template, tests and the migrateToRaid guide
       (`linuxBootstrap/tests/migrateToRaidTests.sh`)
 - [x] Read-only preview of both plans against the real disks
 - [x] Review and merge `feature/localMediaRebalance` (#97)
-- [ ] Finish the requirement 001 raid-pc migrations
-- [ ] Move `linuxBackup` off `/mnt/video` to a retired USB disk
+- [x] Copy and verify the requirement 001 raid-pc migrations; `myPicturesMovies`
+      has no recorded source removal
+- [x] Retire `linuxBackup` from `/mnt/video`: replaced by snapshot backups and
+      deleted
 - [ ] Manual acceptance: review the real plans, then the first confirmed,
       fully verified rebalance and removal
 
 ## Next
 
-The real rebalance is blocked until two things are done:
-
-- **Requirement 001 migrations.** `myVideo`, `myVideoTV` and `myPictures` are
-  complete. `movie2` is being copied from andy-pc, with `video3` queued after it.
-  A shutdown interrupted the `myPicturesMovies` full verification. It has to be
-  run again, with its disk mounted, before the source can be removed.
-- **`linuxBackup` leaving `/mnt/video`.** It is still there.
-
-Once both are done, preview both rebalance plans again against the real disks,
-because raid-pc free space will have changed.
+The real rebalance started on 2026-11-03, targeting 41% on `/mnt/video` and 50%
+on `/mnt/movies`. TV is copied and verified, and movies is copying. When movies
+has verified, run `snapraid sync` on raid-pc, then check and remove the source
+of each mapping to complete manual acceptance.

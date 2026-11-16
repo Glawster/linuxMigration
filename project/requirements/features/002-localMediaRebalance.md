@@ -20,10 +20,10 @@ and every title lives in exactly one store.
 - raid-pc is the bulk store. Moved titles go into the shared pool folders
   `/mnt/storage/Movies` and `/mnt/storage/TV`, which already hold the content
   migrated by requirement 001.
-- `/mnt/video` also holds `linuxBackup`, `toFile`, `Downloads`, `eBooks` and
-  `Torrents`. Only `TV` is moved off `/mnt/video`. `linuxBackup` (1.3 TB) is
-  moved by hand to one of the retired 4 TB USB disks; without that, `/mnt/video`
-  cannot reach 50% from TV alone.
+- `/mnt/video` also holds `toFile`, `Downloads`, `eBooks` and `Torrents`. Only
+  `TV` is moved off `/mnt/video`. It used to hold `linuxBackup` (1.3 TB) as well,
+  which was retired and deleted once snapshot backups to the My Passport drives
+  replaced it.
 - Sonarr (on tv-pc, through the `/mnt/video` NFS export) keeps filing new
   episodes of airing shows locally, so airing shows stay local; moving one
   would split it again with the next episode.
@@ -47,8 +47,8 @@ and every title lives in exactly one store.
     after every dated title.
   - Titles are selected until the disk's projected occupancy is at or below
     50%, measured from the real filesystem usage at planning time.
-  - A title that already exists in the raid-pc pool folder is always selected,
-    whatever its age, so it is reunited on raid-pc.
+  - A title with files in the raid-pc pool folder is always selected, whatever
+    its age, so it is reunited on raid-pc. An empty folder there does not count.
 - Moving uses the requirement 001 pipeline unchanged: preview by default,
   copy and verify with `--confirm`, then `--check` and an explicit
   `--remove-source` that deletes only the moved title folders.
@@ -61,8 +61,7 @@ and every title lives in exactly one store.
 
 ## Out of scope
 
-- Moving anything from `/mnt/video` other than `TV`, including moving
-  `linuxBackup` to a USB disk.
+- Moving anything from `/mnt/video` other than `TV`.
 - Moving titles back from raid-pc to andy-pc.
 - Updating the Media Center Master, Sonarr or Radarr libraries for the new
   paths; the owner rescans or repoints them.
@@ -78,7 +77,7 @@ and every title lives in exactly one store.
 2. Given a show whose `series.xml` status is not `Ended`, or has no readable
    `series.xml`, when the plan is made, then the show is never selected and
    stays entirely local.
-3. Given a title folder that already exists in the raid-pc pool folder, when
+3. Given a title folder holding files in the raid-pc pool folder, when
    the plan is made, then it is selected regardless of age, and the preview
    says why. A show in both places that is still airing is not moved and is
    reported as split.
@@ -111,8 +110,8 @@ and every title lives in exactly one store.
 - [ADR 005: Rebalancing through a recorded title plan](../../adr/005-rebalancePlan.md):
   how the plan feeds the pipeline, when it is fixed, and how planned titles are
   checked and removed without a disk verdict.
-- Prerequisites for the real run: the requirement 001 raid-pc migrations have
-  finished, and `linuxBackup` has been moved off `/mnt/video`.
+- Prerequisite for the real run: the requirement 001 raid-pc migrations have
+  finished.
 
 ## Verification
 
@@ -132,3 +131,8 @@ and every title lives in exactly one store.
 - 2026-10-23: criterion 5 keeps titles already on raid-pc selected when the
   disk is below target, so they are reunited (criterion 3); design recorded in
   ADR 005.
+- 2026-11-03: `linuxBackup` is retired rather than moved to a USB disk, so it
+  is no longer a prerequisite.
+- 2026-11-03: criterion 3 counts only folders holding files, so the empty
+  folders left by an interrupted copy do not select every title of a discarded
+  plan.

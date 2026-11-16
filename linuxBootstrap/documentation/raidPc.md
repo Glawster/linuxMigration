@@ -8,7 +8,8 @@ without risking the contents of any storage disk.
 
 The host name is `raid-pc`. The first implementation is deliberately limited to
 the Phase 1 hardware described below. Later disk shelves and SAS HBAs are
-expansion work, not prerequisites for the first installation.
+expansion work, not prerequisites for the first installation. A SAS HBA with two
+more data disks has since been added; see [Storage model](#storage-model).
 
 ## Phase 1 hardware baseline
 
@@ -65,46 +66,92 @@ disk:
 The 500 GB system SSD must be clearly distinguished from candidate storage
 HDDs. Discovery must not infer that every non-root disk is safe to erase.
 
-## Initial storage model
+## Storage model
 
-The design target is mergerFS for a single data namespace with SnapRAID for
+The design uses mergerFS for a single data namespace with SnapRAID for
 snapshot parity. This suits predominantly static media and allows disks to be
 added progressively without rebuilding a conventional striped RAID array.
 
-The five 4 TB HDDs become four data disks plus one parity disk. All five
-passed extended SMART self-tests before assignment:
+The original five 4 TB HDDs became four data disks plus one parity disk, and
+all five passed extended SMART self-tests before assignment. Two reused disks
+were later added as `data05` and `data06` on the [SAS HBA](#sas-hba), after
+passing a SMART health check with no reallocated, pending or uncorrectable
+sectors:
 
 | Role | Disk | Notes |
 | --- | --- | --- |
 | `parity01` | Seagate IronWolf `ST4000VN006` | CMR, young; preferred for parity because SnapRAID sync rewrites parity across the whole disk |
-| `data01`–`data04` | three WD Red `WD40EFAX` and one Seagate BarraCuda `ST4000DM004` | SMR; mostly static media, written once, read often |
+| `data01`–`data05` | three WD Red `WD40EFAX` and two Seagate BarraCuda `ST4000DM004` | SMR; mostly static media, written once, read often |
+| `data06` | Seagate Barracuda `ST2000DM001` | 2 TB; reused old `video1` disk. This model has a poor reliability record, so watch its SMART state |
 
-Roles are assigned by serial number, never by `/dev/sdX`. Confirm them on
-raid-pc with `lsblk -o NAME,MODEL,SERIAL,SIZE` before provisioning:
+Roles are assigned by serial number, never by `/dev/sdX`. Device names change
+when disks are added: fitting the HBA moved the motherboard disks from
+`sda`-`sdf` to `sdc`-`sdh`. Confirm roles on raid-pc with
+`lsblk -o NAME,MODEL,SERIAL,SIZE,TRAN,MOUNTPOINT` before provisioning:
 
-| Role | Model | Serial | Recording |
+| Role | Model | Serial | Attached to |
 | --- | --- | --- | --- |
-| `parity01` | `ST4000VN006-3CW104` | `WW662Z03` | CMR |
-| `data01` | `WD40EFAX-68JH4N0` | `WD-WX22D10FNUEA` | SMR |
-| `data02` | `WD40EFAX-68JH4N0` | `WD-WX62D105VVJ9` | SMR |
-| `data03` | `WD40EFAX-68JH4N0` | `WD-WX22D10FNVCU` | SMR |
-| `data04` | `ST4000DM004-2CV104` | `ZFN4TS8H` | SMR |
+| `parity01` | `ST4000VN006-3CW104` | `WW662Z03` | motherboard SATA |
+| `data01` | `WD40EFAX-68JH4N0` | `WD-WX62D105VVJ9` | motherboard SATA |
+| `data02` | `WD40EFAX-68JH4N0` | `WD-WX22D10FNVCU` | motherboard SATA |
+| `data03` | `WD40EFAX-68JH4N0` | `WD-WX22D10FNUEA` | motherboard SATA |
+| `data04` | `ST4000DM004-2CV104` | `ZFN4TS8H` | motherboard SATA |
+| `data05` | `ST4000DM004-2CV104` | `ZFN4TRE1` | SAS HBA |
+| `data06` | `ST2000DM001-1CH164` | `W1E2HY9S` | SAS HBA |
 
 The layout:
 
 ```text
-/mnt/disks/data01
-/mnt/disks/data02
-/mnt/disks/data03
-/mnt/disks/data04
-/mnt/disks/parity01
+/mnt/data01
+/mnt/data02
+/mnt/data03
+/mnt/data04
+/mnt/data05
+/mnt/data06
+/mnt/parity01
 
 /mnt/storage            mergerFS data namespace
 ```
 
-This yields approximately 16 TB of raw data-disk capacity plus one 4 TB parity
-disk before filesystem overhead. SnapRAID parity is snapshot parity and must
-not be represented as real-time RAID protection.
+This yields approximately 22 TB of raw data-disk capacity plus one 4 TB parity
+disk before filesystem overhead. One parity disk recovers from one failed disk
+at a time, across all six data disks. SnapRAID parity is snapshot parity and
+must not be represented as real-time RAID protection.
+
+Each disk is mounted by filesystem UUID in `/etc/fstab` with `nofail`. The
+parity disk must be at least as large as the largest data disk, so data disks
+keep the ext4 default of 5% reserved space, as the parity disk does.
+
+### SAS HBA
+
+A Broadcom/LSI SAS2008 HBA in the main PCIe x16 slot (running at x8, 5 GT/s)
+provides the extra disk ports. It runs firmware 20.00.07.00 and uses the
+`mpt3sas` driver; the driver reports no RAID capability, so disks appear
+individually as SnapRAID needs. Check it with:
+
+```bash
+lspci -nn | grep -i sas
+lsblk -d -o NAME,SIZE,TRAN,MODEL,SERIAL,HCTL
+```
+
+Disks behind the HBA show a transport of `sas` even when they are SATA disks.
+
+### Adding a data disk
+
+The steps are run by hand on raid-pc, and identify the disk only by its
+`/dev/disk/by-id` path:
+
+1. Check SMART health, and confirm that nothing on the disk is still needed.
+2. Clear old signatures, stopping any `md` arrays Linux assembled from it first.
+3. Create one partition and an ext4 filesystem with the next `dataNN` label.
+4. Add its UUID to `/etc/fstab`, and its mount point to the mergerFS line.
+5. Add a `data dN /mnt/dataNN/` line to `/etc/snapraid.conf`.
+6. Reboot to bring up the pool with the new disk, because NFS exports it.
+7. Run `sudo snapraid sync` to protect whatever has been added since the last
+   sync.
+
+New files go to the disk with the most free space (`category.create=mfs`), so a
+newly added disk receives writes first until the disks level out.
 
 Provisioning (partitioning, filesystems, mergerFS and SnapRAID configuration)
 is a separate, explicitly confirmed workflow. `migrateToRaid` does not
@@ -187,8 +234,9 @@ on the internal `/mnt/media` disk.
 
 Copying, verification and source removal to both are performed by
 `migrateToRaid`, run on andy-pc; see the [migration guide](migrateToRaid.md).
-A disk attached directly to raid-pc, such as the old 2 TB video1 disk on USB at
-`/mnt/oldVideo1`, is copied into the pool by hand with rsync on raid-pc.
+A disk attached directly to raid-pc is copied into the pool by hand with rsync
+on raid-pc. The old 2 TB video1 disk was copied this way from `/mnt/oldVideo1`,
+then wiped and reused as `data06`.
 
 ## Maintenance
 
@@ -208,9 +256,10 @@ be inspectable before the machine is treated as the authoritative store.
 
 ## Expansion boundary
 
-Future expansion may introduce an external SAS HBA and rack-mounted JBOD disk
-shelf. The storage design must therefore avoid assumptions that data disks are
-always motherboard SATA devices or that `/dev/sdX` names remain stable.
+Future expansion may introduce a rack-mounted JBOD disk shelf. The storage
+design must therefore avoid assumptions that data disks are always motherboard
+SATA devices or that `/dev/sdX` names remain stable.
 
-Adding an HBA/JBOD must extend the disk inventory and reviewed role mapping; it
-must not require redesigning the host bootstrap or the mergerFS namespace.
+Adding a JBOD or another HBA must extend the disk inventory and reviewed role
+mapping; it must not require redesigning the host bootstrap or the mergerFS
+namespace.
