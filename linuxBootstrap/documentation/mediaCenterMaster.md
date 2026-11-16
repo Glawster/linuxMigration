@@ -47,6 +47,7 @@ Bootstrap creates that launcher under `~/bin`. The repository's legacy
 | `V:` | `/mnt/video` |
 | `R:` | `/mnt/raid/Movies` |
 | `T:` | `/mnt/raid/TV` |
+| `N:` | `/mnt/media/Movies` (new movie downloads, on a local disk) |
 
 Edit `profiles/media.yaml` if the mount layout or preferred Windows letters
 changes. A mapping uses the format `letter|/absolute/Linux/path`.

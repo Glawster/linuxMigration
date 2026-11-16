@@ -26,6 +26,9 @@ services:
 
 nfsMounts:
   - 192.168.1.215:/mnt/video /mnt/video rw,_netdev,nofail,x-systemd.automount,nolock
+  - 192.168.1.215:/mnt/movies /mnt/movies ro,_netdev,nofail,x-systemd.automount,nolock
+  - 192.168.1.215:/mnt/media /mnt/media ro,_netdev,nofail,x-systemd.automount,nolock
+  - raid-pc:/mnt/storage /mnt/raid rw,_netdev,nofail,x-systemd.automount
 
 vscodeExtensions:
   - openai.chatgpt

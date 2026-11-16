@@ -12,12 +12,17 @@ The `media-library` profile provides a Linux workflow comparable to a Media Cent
 
 ## Storage layout
 
-On `andy-pc`, `/mnt/video` is exported over NFS to `tv-pc`.
+On `andy-pc`, `/mnt/video`, `/mnt/movies` and `/mnt/media` are exported over NFS
+to `tv-pc`. Only `/mnt/video` is writable from `tv-pc`.
 
-On `tv-pc`, bootstrap mounts it at the same path:
+On `tv-pc`, bootstrap mounts them at the same paths, and mounts the `raid-pc` pool
+at `/mnt/raid`:
 
 ```text
 /mnt/video
+/mnt/movies
+/mnt/media
+/mnt/raid
 ```
 
 qBittorrent is preconfigured with:
