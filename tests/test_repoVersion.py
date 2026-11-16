@@ -106,7 +106,49 @@ def testLaterAndDirtyCheckouts(checkout: Path) -> None:
     assert repoVersionModule.repoVersion(checkout).endswith("-dirty")
 
 
-def testRepositoryVersionFileIsReleaseNumber() -> None:
+def testBranchVersionShowsWithTheTagItFollows(checkout: Path) -> None:
+    _git(checkout, "init", "-q")
+    _commit(checkout, "first")
+    _git(
+        checkout,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@example.com",
+        "tag",
+        "-a",
+        "v2.5",
+        "-m",
+        "Release v2.5",
+    )
+    (checkout / "VERSION").write_text("2.6a1\n")
+    _commit(checkout, "number the branch")
+    pattern = r"2\.6a1 \(v2\.5-1-g[0-9a-f]+\)"
+    assert re.fullmatch(pattern, repoVersionModule.repoVersion(checkout))
+    assert re.fullmatch(pattern, _bashDescribe(checkout))
+
+
+def testTagWinsAtTheTaggedCommit(checkout: Path) -> None:
+    """A tag added after the fact names its commit whatever VERSION says."""
+    _git(checkout, "init", "-q")
+    _commit(checkout, "first")
+    _git(
+        checkout,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@example.com",
+        "tag",
+        "-a",
+        "v2.6a1",
+        "-m",
+        "2.6a1",
+    )
+    assert repoVersionModule.repoVersion(checkout) == "v2.6a1"
+    assert _bashDescribe(checkout) == "v2.6a1"
+
+
+def testRepositoryVersionFileIsAVersion() -> None:
     assert re.fullmatch(
-        r"\d+\.\d+(\.\d+)?", (REPO_ROOT / "VERSION").read_text().strip()
+        r"\d+\.\d+(\.\d+)?(a\d+)?", (REPO_ROOT / "VERSION").read_text().strip()
     )

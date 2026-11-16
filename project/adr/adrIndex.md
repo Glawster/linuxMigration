@@ -14,5 +14,6 @@ Next available number: 011
 | [005](005-rebalancePlan.md) | Rebalancing through a recorded title plan | Accepted | [002](../requirements/features/002-localMediaRebalance.md) |
 | [006](006-migrateOnHostWithDisk.md) | Migrating a disk on the machine it is attached to | Accepted | [001](../requirements/features/001-raidMigration.md) |
 | [007](007-newerMetadataWins.md) | Newer artwork and metadata replace older copies | Accepted | [001](../requirements/features/001-raidMigration.md) |
-| [008](008-repositoryVersion.md) | One version and release tag for the whole repository | Accepted | — |
+| [008](008-repositoryVersion.md) | One version and release tag for the whole repository | Accepted, amended by [009](009-branchVersions.md) | — |
+| [009](009-branchVersions.md) | A version number for every branch of work | Accepted | — |
 | [010](010-replaceableMediaQuickVerify.md) | Quick verification is enough to remove replaceable media | Accepted | [001](../requirements/features/001-raidMigration.md) |

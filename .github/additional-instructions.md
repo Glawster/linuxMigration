@@ -103,6 +103,7 @@ linuxMigration/
 ├── installLinuxApps.sh                   # Application installer
 ├── setupBattlenetPrefix.sh               # Gaming setup
 ├── migrateToRaid                         # Launcher for linuxBootstrap/migrateToRaid.sh
+├── branchVersion                         # Numbers branches and tags merged work (branchVersion.py)
 ├── hardwareSnapshot                      # Launcher for linuxBootstrap/hardwareSnapshot.sh
 └── [other scripts]                       # Various utilities
 ```
@@ -927,20 +928,61 @@ def process_in_batches(files, batch_size=100):
 
 ## Versioning and releases
 
-This repository has **one version for everything in it**
-([ADR 008](../project/adr/008-repositoryVersion.md)). It replaces the
-release-branch model of the managed `documentation/howToRelease.md`: there
-are no release branches, and releases are tagged on `main`.
+This repository has **one version for everything in it**, and every branch of
+work gets its own number in it ([ADR 008](../project/adr/008-repositoryVersion.md),
+[ADR 009](../project/adr/009-branchVersions.md)). Numbering follows the
+alpha-version rules of the managed `documentation/howToRelease.md`, with one
+exception: there are no release branches. Each branch is squash-merged
+straight into `main`, so `main` carries the number of the last merged branch,
+and every merge is tagged.
 
 ### Version numbers
 
-- `VERSION` at the repository root holds the release number, `X.Y`
-  (`X.Y.Z` only for a hotfix). Between releases it holds the last release.
-- Bump the minor number for new features or changed behaviour, the patch
-  number for a fix released on its own, and the major number for a change
-  that needs existing configuration or state to be migrated.
-- Tools never keep their own version numbers. What changed for each tool goes
-  in `documentation/releaseNotes.md`.
+- `VERSION` at the repository root is the only version source. Tools never
+  keep their own version numbers; what changed for each tool goes in
+  `documentation/releaseNotes.md`.
+- A release is `X.Y` (`X.Y.Z` only for a hotfix). Branches of work between
+  releases are numbered as alpha versions of the next release: after `1.3`,
+  `1.4a1`, `1.4a2` and so on. `1.3a1` would come *before* `1.3`, so it is never
+  used for work after it.
+- Bump the minor number for the next release as normal; use the major number
+  only for a change that needs existing configuration or state to be migrated
+  (set `VERSION` by hand to `2.0a1` on that branch).
+
+### Numbering a branch
+
+Every branch of work takes the next unused number as its **first commit**,
+before any other change:
+
+```bash
+git switch -c feature/myChange main
+branchVersion start            # preview the number it will take
+branchVersion start --confirm  # set VERSION and commit it
+```
+
+`branchVersion` fetches `origin` and picks the number after every version
+already taken by a `v*` tag, by `main` or by any local or remote branch, so
+two open branches never share a number; push the branch soon after numbering
+it so other checkouts see the number. `branchVersion show` prints the
+checkout's version and the next free number.
+
+If `VERSION` conflicts when a branch is rebased or merged, keep the branch's
+own number: it identifies the branch's work.
+
+### Tagging merged work
+
+After a branch's pull request is squash-merged, tag the merge commit with the
+branch's number so the version always finds the work:
+
+```bash
+git fetch origin && git switch main && git pull --ff-only
+branchVersion tag              # preview
+branchVersion tag --confirm    # annotated tag v<VERSION>, pushed to origin
+```
+
+The tag message is `<version>: <merge commit subject>`, so `git tag -n1`
+lists each version with its pull request. Tags are never moved, deleted or
+reused.
 
 ### Reporting the version
 
@@ -950,14 +992,16 @@ Every tool shows what is running at the start of its output and logs:
   `repoVersionDescribe`.
 - Python: `from repoVersion import repoVersion`, then `repoVersion()`.
 
-Both print `git describe` against the release tags:
+Both print `git describe` against the version tags, with the branch's own
+`VERSION` when it has moved on from the tag it follows:
 
 | Output | Meaning |
 | --- | --- |
-| `v1.3` | exactly release v1.3 |
-| `v1.3-4-g1a2b3c4` | 4 commits after v1.3, at commit `1a2b3c4` |
+| `v1.4a2` | exactly the commit tagged v1.4a2 |
+| `v1.4a2-4-g1a2b3c4` | 4 commits after v1.4a2 with `VERSION` unchanged |
+| `1.4a3 (v1.4a2-1-g1a2b3c4)` | a branch numbered 1.4a3, or its merge not yet tagged |
 | `…-dirty` | the checkout has uncommitted changes |
-| `1.3 (1a2b3c4)` | no release tag is reachable; `VERSION` and the commit |
+| `1.3 (1a2b3c4)` | no version tag is reachable; `VERSION` and the commit |
 | `1.3` | not a git checkout; `VERSION` only |
 
 `python3 ~/bin/repoVersion.py` prints the version of a machine's checkout.
@@ -977,20 +1021,15 @@ Tag a release only when the whole repository is in a good state on `main`:
 
 ### Making a release
 
-1. On a branch, set `VERSION` to the new number and add the release to
+1. On a branch, set `VERSION` to the release number, dropping the alpha
+   suffix (`1.4a5` becomes `1.4`), and add the release to
    `documentation/releaseNotes.md`.
 2. Run every test suite (see above); all must pass.
 3. Open a pull request and squash-merge it into `main`.
-4. Tag the merge commit and push the tag:
-
-   ```bash
-   git fetch origin && git switch main && git pull --ff-only
-   git tag -a v1.3 -m "Release v1.3"
-   git push origin v1.3
-   ```
-
+4. Tag the merge commit with `branchVersion tag --confirm`, which makes the
+   annotated `v1.4` tag and pushes it.
 5. Never move, delete or reuse a published tag; fix mistakes with a new
-   release.
+   release. The next branch is numbered `1.5a1`.
 
 ### Deploying a release to a machine
 
@@ -998,7 +1037,7 @@ Each machine runs the tools from its own `~/bin` checkout:
 
 ```bash
 cd ~/bin && git fetch --tags origin
-git switch --detach v1.3          # run exactly a release
+git switch --detach v1.4          # run exactly a release or tagged branch
 git switch main && git pull --ff-only   # or follow main
 python3 repoVersion.py            # confirm what is checked out
 ```

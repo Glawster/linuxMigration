@@ -1,9 +1,11 @@
 """The version of this repository checkout, for tool headers.
 
-Prints the git description of the checkout against its release tags, for
-example ``v1.3``, ``v1.3-4-g1a2b3c4`` (4 commits after v1.3) or
-``v1.3-dirty`` (uncommitted changes). Before the first tag it gives the
-VERSION file with the commit, and without git the VERSION file alone. See
+Prints the git description of the checkout against its version tags, for
+example ``v1.4a2``, ``v1.4a2-4-g1a2b3c4`` (4 commits after v1.4a2) or
+``v1.4a2-dirty`` (uncommitted changes). Away from a tag, a branch whose
+VERSION differs from the tag it follows gives both, for example
+``1.4a3 (v1.4a2-1-g1a2b3c4)``. Before the first tag it gives the VERSION file
+with the commit, and without git the VERSION file alone. See
 .github/additional-instructions.md ("Versioning and releases").
 
 Usage::
@@ -12,6 +14,7 @@ Usage::
     print(f"myTool {repoVersion()}")
 """
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -43,9 +46,13 @@ def repoVersion(root: Path = REPO_ROOT) -> str:
         ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return fileVersion
-    if described.startswith("v"):
-        return described
-    return f"{fileVersion} ({described})"
+    if not described.startswith("v"):
+        return f"{fileVersion} ({described})"
+    # Away from a tag, a branch's own VERSION names the work being run.
+    match = re.fullmatch(r"v(.+)-\d+-g[0-9a-f]+(-dirty)?", described)
+    if match and match.group(1) != fileVersion:
+        return f"{fileVersion} ({described})"
+    return described
 
 
 if __name__ == "__main__":

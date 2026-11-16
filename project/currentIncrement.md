@@ -25,7 +25,7 @@ Rebalance planning in `linuxBootstrap/lib/raidMigrationPlan.sh`, its hooks in
 `lib/raidMigration.sh` and `lib/raidMigrationStore.sh`, the configuration
 template, tests and the migrateToRaid guide
 ([ADR 005](adr/005-rebalancePlan.md)). Merged to `main` in #97; a later planning
-fix is on `feature/replaceableMediaVerify`.
+fix in #112.
 
 ## Verification
 
