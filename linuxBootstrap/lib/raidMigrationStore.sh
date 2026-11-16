@@ -43,6 +43,7 @@ declare -gA mapTarget=()
 declare -gA mapType=()
 declare -gA mapUuid=()
 declare -gA metadataExtensions=()
+declare -gA removalVerify=()
 declare -gA state=()
 
 ## config
@@ -74,6 +75,18 @@ configLoad() {
     while IFS= read -r extension; do
         [[ -n "$extension" ]] && metadataExtensions["${extension,,}"]=1
     done < <(jq -r '(.metadataExtensions // ["jpg", "jpeg", "png", "xml", "nfo"])[] | ltrimstr(".")' "$file")
+    # The verification a type needs before its source may be removed. Types not
+    # listed need full checksums; replaceable media can accept quick (ADR 010).
+    removalVerify=()
+    local verifyType verifyNeeded
+    while IFS=$'\t' read -r verifyType verifyNeeded; do
+        [[ -n "$verifyType" ]] || continue
+        if [[ "$verifyNeeded" != quick && "$verifyNeeded" != full ]]; then
+            log_error "invalid removalVerify for $verifyType (expected quick or full): '$verifyNeeded'"
+            return 1
+        fi
+        removalVerify["${verifyType,,}"]="$verifyNeeded"
+    done < <(jq -r '(.removalVerify // {}) | to_entries[] | "\(.key)\t\(.value)"' "$file")
     # Copied files must stay readable by other local users such as Plex, whatever
     # the source mode; an empty string keeps the source permissions.
     transferChmod="$(jq -r 'if has("permissions") then .permissions // "" else "Dgo+rx,Fgo+r" end' "$file")"
@@ -154,6 +167,12 @@ configLoad() {
         ] | map(tostring | gsub("[\u001f\n]"; " ")) | join("\u001f")' "$file")
     configFile="$file"
     _configOverlapCheck
+}
+
+# Prints the verification level (quick or full) a mapping needs before its
+# source may be removed.
+configRemovalVerify() {
+    printf '%s\n' "${removalVerify[${mapType[$1]}]:-full}"
 }
 
 # Lists the names excluded from a mapping: the global excludes plus the

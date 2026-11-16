@@ -13,6 +13,9 @@ Releases of this repository, newest first. The process is in
   own number, for example `1.4a3 (v1.4a2-1-g1a2b3c4)`.
 - `hardwareSnapshot` is `1.4a1`; the `currentIncrement.md` update (#109) is
   `1.4a2`; this change is `1.4a3`.
+- `migrateToRaid`: movie and TV disks are safe to remove after a quick
+  verification (every file's size and date), set per type by `removalVerify`
+  (ADR 010); home video and pictures still need full checksums.
 - `hardwareSnapshot` (new): records a machine's hardware configuration and
   temperatures, reports when the configuration changes between runs, and keeps
   a per-host temperature history with disks identified by serial number

@@ -89,6 +89,7 @@ Start from the reviewed template in this repository,
 | `destinationFsType` | Optional. Expected filesystem type of `destinationMount`, for example `fuse.mergerfs`. |
 | `minFreeBytesAfter` | Free space that must remain after a copy (default 10 GiB). |
 | `checksum` | `sha256sum` (default), `b2sum` or `md5sum`, used for full verification. |
+| `removalVerify` | The verification each mapping type needs before its disk is safe to remove, for example `{"movies": "quick", "tv": "quick"}`. Unlisted types need `full` (see [Verification](#verification)). |
 | `excludes` | Top-level names never migrated (default `lost+found`, `$RECYCLE.BIN`, `System Volume Information`). |
 | `metadataExtensions` | File extensions treated as artwork or metadata, where the newer copy wins instead of conflicting (default `jpg`, `jpeg`, `png`, `xml`, `nfo`; see [Files already on raid-pc](#files-already-on-raid-pc)). |
 | `permissions` | rsync `--chmod` applied to every copy so other local users, such as Plex, can read it (default `Dgo+rx,Fgo+r`; `""` keeps the source permissions). Folders already at the destination are corrected too. |
@@ -300,7 +301,7 @@ SSH; the pool must still be mounted with `destinationFsType`, and the SnapRAID
 
    ```bash
    migrateToRaid --source movie2                          # preview: "Destination: /mnt/storage/Movies (local)"
-   migrateToRaid --source movie2 --confirm --verify full
+   migrateToRaid --source movie2 --confirm
    migrateToRaid --check movie2
    ```
 
@@ -406,7 +407,18 @@ To verify an already-copied mapping again, for example at the full level, run:
 migrateToRaid --source video3 --verify-only --verify full
 ```
 
-Quick verification never makes a disk safe to remove.
+Which level makes a disk safe to remove depends on what it holds
+(`removalVerify`, [ADR 010](../../project/adr/010-replaceableMediaQuickVerify.md)):
+
+| Type | Needed before removal | Why |
+| --- | --- | --- |
+| `movies`, `tv` | quick | They can be downloaded again; rsync already checked each file's checksum while copying. |
+| `video`, `pictures` and any unlisted type | full | Home video and photos cannot be replaced. |
+
+A full verification reads every byte on both disks, about 10 hours for a
+3.5 TiB disk; a quick one takes minutes. When `--check` accepts a quick
+verification it says so: `COPY VERIFIED (quick: removalVerify accepts it for
+movies)`.
 
 ## Resume behaviour
 
@@ -609,7 +621,7 @@ check refuses the run.
 ```bash
 migrateToRaid --source tvRebalance                      # preview the plan
 migrateToRaid --source tvRebalance --verbose            # ... listing every title
-migrateToRaid --source tvRebalance --confirm --verify full
+migrateToRaid --source tvRebalance --confirm
 migrateToRaid --check tvRebalance                       # SAFE TO REMOVE PLANNED TITLES?
 migrateToRaid --source tvRebalance --remove-source --confirm
 ```
@@ -698,8 +710,8 @@ folder.
 # 2. Preview: checks, sizes, conflicts, rsync command; nothing changes
 migrateToRaid --source video3
 
-# 3. Copy and fully verify (re-run the same command after any interruption)
-migrateToRaid --source video3 --confirm --verify full
+# 3. Copy and verify; quick is enough for TV (re-run after any interruption)
+migrateToRaid --source video3 --confirm
 
 # 4. Review progress across all disks
 migrateToRaid --status

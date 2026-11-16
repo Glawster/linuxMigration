@@ -73,6 +73,45 @@ conda_prompt() {
     fi
 }
 
+# Keep repository context without repeating the full path from home.
+promptPath() {
+    local root relative
+    if command -v git >/dev/null 2>&1 && root=$(git rev-parse --show-toplevel 2>/dev/null); then
+        relative=$(git rev-parse --show-prefix 2>/dev/null)
+        printf '%s' "${root##*/}${relative:+/${relative%/}}"
+    elif [[ "$PWD" == "$HOME" ]]; then
+        printf '~'
+    elif [[ "$PWD" == "$HOME/"* ]]; then
+        printf '~/%s' "${PWD#"$HOME/"}"
+    else
+        printf '%s' "$PWD"
+    fi
+}
+
+# Shorten only the displayed branch name; retain the changed-file count.
+promptGit() {
+    local branch status
+    branch=$(parse_git_branch)
+    [[ -n "$branch" ]] || return 0
+    branch=${branch#feature/}
+    status=$(parse_git_status)
+    printf ' [%s' "$branch"
+    if [ "$status" -gt 0 ] 2>/dev/null; then
+        printf ' *%s' "$status"
+    fi
+    printf ']'
+}
+
+# Allow an explicit label override for hosts whose system names are opaque.
+case "$HOST_SHORT" in
+    sxb1plzcpnl487527)
+        PROMPT_HOST_LABEL="${PROMPT_HOST_LABEL:-clanneolas}"
+        ;;
+    *)
+        PROMPT_HOST_LABEL="${PROMPT_HOST_LABEL:-$HOST_SHORT}"
+        ;;
+esac
+
 # Make the host visually obvious when moving between the three PCs.
 # 96 = cyan (andy-pc), 92 = green (tv-pc), 93 = yellow (raid-pc).
 case "$HOST_SHORT" in
@@ -91,7 +130,7 @@ case "$HOST_SHORT" in
 esac
 
 export CONDA_CHANGEPS1=false
-export PS1="\$(conda_prompt)\[\e[${PROMPT_HOST_COLOUR}m\]\u@\h:\w\[\e[93m\]\$(branch=\$(parse_git_branch); status=\$(parse_git_status); if [ -n \"\$branch\" ]; then output=\" (\$branch\"; if [ \"\$status\" -gt 0 ] 2>/dev/null; then output=\"\$output *\$status\"; fi; output=\"\$output)\"; echo \"\$output\"; fi)\[\e[0m\]\n\$ "
+export PS1="\$(conda_prompt)\[\e[${PROMPT_HOST_COLOUR}m\]\${PROMPT_HOST_LABEL} \$(promptPath)\[\e[93m\]\$(promptGit)\[\e[0m\]\n\$ "
 
 # Prefer vim where it is installed, otherwise fall back to vi.
 if command -v vim >/dev/null 2>&1; then
@@ -143,3 +182,7 @@ fi
 [[ -r "$HOME/.grok/completions/bash/grok.bash" ]] && source "$HOME/.grok/completions/bash/grok.bash"
 
 unset PROMPT_HOST_COLOUR
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion

@@ -615,6 +615,28 @@ testMigrateToRaidCheck() {
     assertContains "$mtrOutput" 'destination no longer matches' 'damaged destination is not safe'
 }
 
+testMigrateToRaidCheckReplaceableQuick() {
+    _mtrSandbox
+    jq '.removalVerify = {"Movies": "quick"}' "$mtrConfig" >"$mtrConfig.new" && mv "$mtrConfig.new" "$mtrConfig"
+    _mtrRun --source movie1 --confirm
+    assertContains "$mtrOutput" 'Quick verification is enough to remove movies' 'quick verification of replaceable media is explained'
+    _mtrRun --check movie1
+    assertContains "$mtrOutput" 'quick verification completed' 'quick verification is accepted for movies'
+    assertContains "$mtrOutput" $'COPY VERIFIED (quick: removalVerify accepts it for movies)\nSNAPRAID PARITY VERIFIED\nSAFE TO REMOVE DISK' 'quick SAFE names its basis'
+    _mtrCheck 'quick-verified replaceable disk check succeeds' test "$mtrStatus" -eq 0
+
+    FAKE_PROTECTION_STATUS=2 _mtrRun --check movie1
+    assertContains "$mtrOutput" 'NOT SAFE TO REMOVE DISK' 'quick verification still needs parity'
+
+    jq '.removalVerify = {"tv": "quick"}' "$mtrConfig" >"$mtrConfig.new" && mv "$mtrConfig.new" "$mtrConfig"
+    _mtrRun --check movie1
+    assertContains "$mtrOutput" 'a full checksum verification is required' 'unlisted types still need checksums'
+
+    jq '.removalVerify = {"movies": "sometimes"}' "$mtrConfig" >"$mtrConfig.new" && mv "$mtrConfig.new" "$mtrConfig"
+    _mtrRun --status
+    assertContains "$mtrOutput" 'invalid removalVerify for movies' 'invalid removalVerify is rejected'
+}
+
 ## removal
 
 testMigrateToRaidRemovalRefused() {
@@ -1031,6 +1053,7 @@ migrateToRaidTestsRun() {
     testMigrateToRaidFullVerification
     testMigrateToRaidFailedVerification
     testMigrateToRaidCheck
+    testMigrateToRaidCheckReplaceableQuick
     testMigrateToRaidRemovalRefused
     testMigrateToRaidRemovalAllowed
     testMigrateToRaidStatus
