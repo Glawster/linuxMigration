@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# Follow Media Center Master's daily log files, moving to the new file at midnight.
+set -euo pipefail
+
+scriptDir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+if [[ -f "$scriptDir/repoVersion.sh" ]]; then
+    # shellcheck source=repoVersion.sh
+    source "$scriptDir/repoVersion.sh"
+fi
+
+logDir="${MCM_LOG_DIR:-$HOME/.wine-mcm/drive_c/users/$USER/AppData/Roaming/Peter Souza IV/Media Center Master}"
+initialLines=20
+
+usage() {
+    cat <<'USAGE'
+Usage: mcmlog [LOG] [THREAD] [-n LINES]
+
+Follow today's Media Center Master log until Ctrl-C. At midnight it moves on to
+the new day's file by itself.
+
+  LOG          activity (default), fileio, webfetch or all
+  THREAD       only show this thread number, for example 126 or #126
+               (fileio and webfetch only: the activity log has no thread labels)
+  -n LINES     lines of existing log to show first (default 20)
+  --version    show the version
+  --help       show this help
+
+Examples:
+  mcmlog
+  mcmlog fileio 126
+  mcmlog webfetch -n 100
+  mcmlog all
+USAGE
+}
+
+die() {
+    printf 'mcmlog: %s\n' "$1" >&2
+    exit 2
+}
+
+logType=""
+thread=""
+while (($#)); do
+    case "$1" in
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        --version)
+            if declare -F repoVersionDescribe >/dev/null; then
+                printf 'mcmlog %s\n' "$(repoVersionDescribe)"
+            else
+                printf 'mcmlog unknown\n'
+            fi
+            exit 0
+            ;;
+        -n)
+            (($# >= 2)) || die "-n needs a number of lines"
+            [[ "$2" =~ ^[0-9]+$ ]] || die "-n needs a number of lines, not '$2'"
+            initialLines="$2"
+            shift 2
+            ;;
+        activity | fileio | webfetch | all)
+            [[ -z "$logType" ]] || die "only one log type can be given"
+            logType="$1"
+            shift
+            ;;
+        \#[0-9]* | [0-9]*)
+            [[ "${1#\#}" =~ ^[0-9]+$ ]] || die "not a thread number: '$1'"
+            [[ -z "$thread" ]] || die "only one thread number can be given"
+            thread="${1#\#}"
+            shift
+            ;;
+        *)
+            die "unknown argument '$1' (see mcmlog --help)"
+            ;;
+    esac
+done
+logType="${logType:-activity}"
+
+# Filtering 'all' would remove tail's file headers, and the activity log has no
+# labels to match, so refuse rather than silently showing nothing.
+if [[ -n "$thread" && "$logType" != fileio && "$logType" != webfetch ]]; then
+    die "a thread number needs fileio or webfetch: the activity log has no thread labels"
+fi
+[[ -d "$logDir" ]] || die "log folder not found: $logDir"
+
+case "$logType" in
+    activity) logNames=(Activity) ;;
+    fileio) logNames=(FileIO) ;;
+    webfetch) logNames=(WebFetch) ;;
+    all) logNames=(Activity FileIO WebFetch) ;;
+esac
+
+# MCM writes CRLF line endings. Every stage stays line-buffered so that output
+# appears as it is written.
+filterLines() {
+    if [[ -n "$thread" ]]; then
+        sed -u 's/\r$//' | grep --line-buffered -F "#$thread ::"
+    else
+        sed -u 's/\r$//'
+    fi
+}
+
+startFrom="-$initialLines"
+while true; do
+    today="$(date +%F)"
+    logFiles=()
+    for logName in "${logNames[@]}"; do
+        logFiles+=("$logDir/$logName log for $today.log")
+    done
+    secondsLeft=$(($(date -d 'tomorrow 00:00' +%s) - $(date +%s)))
+    ((secondsLeft > 0)) || secondsLeft=1
+
+    printf 'mcmlog: following %s log for %s (Ctrl-C to stop)\n' "$logType" "$today" >&2
+
+    # tail -F waits for a file that doesn't exist yet, which is the normal state
+    # until MCM first writes to it each day. --foreground lets Ctrl-C reach tail.
+    set +e
+    timeout --foreground "$secondsLeft" tail -n "$startFrom" -F "${logFiles[@]}" | filterLines
+    tailStatus="${PIPESTATUS[0]}"
+    set -e
+
+    # 124 means the timer ended at midnight. Anything else (Ctrl-C, or the reader
+    # closing the pipe) means stop.
+    ((tailStatus == 124)) || exit "$tailStatus"
+
+    # Show the new day's file from its first line, so nothing is skipped.
+    startFrom="+1"
+done
