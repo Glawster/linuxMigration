@@ -5,6 +5,10 @@ Releases of this repository, newest first. The process is in
 
 ## Unreleased
 
+- `fixDirectPaymentsStatements.sh`: files the Direct Payments timesheet
+  spreadsheets into `myCabinets/Benefits/Statements` again; `1.4a4`'s
+  follow-up commit had pointed it at `Benefits/Bank Statements`, the PDF
+  bank statements folder. This change is `1.4a5`.
 - `fileDpStatements` (new): files Direct Payments bank statements downloaded
   from the bank website, moving each from `~/Downloads` to
   `Bank Statements/<yyyy>/<yyyy-mm-dd> - Direct Payments - Statement - <Mon>.pdf`
