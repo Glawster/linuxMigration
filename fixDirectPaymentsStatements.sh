@@ -4,25 +4,33 @@
 set -euo pipefail
 
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Source logUtils.sh from organiseMyProjects (adjust path if needed)
-_LOG_UTILS="$(python3 -c 'import organiseMyProjects, os; print(os.path.dirname(organiseMyProjects.__file__))' 2>/dev/null)/logUtils.sh"
-if [[ -f "$_LOG_UTILS" ]]; then
-  source "$_LOG_UTILS"
-else
-  # Fallback: basic log function if organiseMyProjects not installed
-  logFile="/dev/null"
-  log_init()  { logFile="${HOME}/.local/state/${1}/${1}-$(date +%Y-%m-%d).log"; mkdir -p "$(dirname "$logFile")"; }
-  log_info()  { echo "...$1"; }
-  log_doing() { echo "$1..."; }
-  log_done()  { echo "...$1"; }
-  log_warn()  { echo "WARNING: $1" >&2; }
-  log_error() { echo "ERROR: $1" >&2; }
-  log_value() { echo "...$1: $2"; }
-  log_action(){ echo "...$1"; }
-  log_box()   { echo "=== $1 ==="; }
-fi
+# Source the shared organiseMyProjects logUtils.sh. LOG_UTILS overrides the
+# lookup. Otherwise ask the active python3, then the py312 environment this
+# repository's .envrc uses, so the script also runs from a shell where no conda
+# environment is active. There is no fallback logger: fail with a clear error.
+_logUtilsFind() {
+    local packageDir python
+    if [[ -n "${LOG_UTILS:-}" ]]; then
+        printf '%s' "$LOG_UTILS"
+        return 0
+    fi
+    for python in python3 "${CONDA_DIR:-$HOME/miniconda3}/envs/py312/bin/python3"; do
+        if packageDir="$("$python" -c 'import organiseMyProjects, os; print(os.path.dirname(organiseMyProjects.__file__))' 2>/dev/null)"; then
+            printf '%s' "$packageDir/logUtils.sh"
+            return 0
+        fi
+    done
+    return 1
+}
 
-log_init "fixDirectPaymentsStatements"
+if ! _LOG_UTILS="$(_logUtilsFind)" || [[ ! -f "$_LOG_UTILS" ]]; then
+    echo "ERROR: organiseMyProjects logUtils.sh not found; install organiseMyProjects or set LOG_UTILS" >&2
+    exit 1
+fi
+# shellcheck source=/dev/null
+source "$_LOG_UTILS"
+
+setApplication "fixDirectPaymentsStatements"
 
 DOCS_DIR="$HOME/Documents"
 dryRun=1
@@ -39,7 +47,7 @@ if [ ! -e "$DOCS_DIR" ]; then
 fi
 
 DOCS_DIR="$(readlink -f "$DOCS_DIR")"
-BASE_TARGET="$DOCS_DIR/myCabinets/Benefits/Bank Statements"
+BASE_TARGET="$DOCS_DIR/myCabinets/Benefits/Statements"
 
 log_value "documents resolved to" "$DOCS_DIR"
 log_value "base target for statements" "$BASE_TARGET"
