@@ -1,0 +1,279 @@
+#!/usr/bin/env bash
+# fileDpStatements: file Direct Payments bank statements from Downloads.
+#
+# Statements are downloaded by hand from the Danske Bank website and arrive in
+# ~/Downloads as "Statement 950246 60153699.PDF", "... (1).PDF" and so on. Each
+# one is moved into the Direct Payments cabinet, named after the statement date
+# printed on page 1:
+#
+#   <target>/<yyyy>/<yyyy-mm-dd> - Direct Payments - Statement - <Mon>.pdf
+#
+# Safe by default: without -y/--confirm it only reports what it would do.
+# Nothing is deleted. A download that is already filed (identical content
+# anywhere in that year's folder) is sent to the desktop Trash, and a download
+# whose target name is taken by a different file is left where it is.
+#
+# Guide: documentation/fileDpStatements.md
+set -euo pipefail
+
+_FILE_DP_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+_ACCOUNT="950246 60153699"
+_APPLICATION="fileDpStatements"
+
+## cli
+
+cliFail() {
+    printf '%s: %s\n' "$_APPLICATION" "$1" >&2
+    exit 2
+}
+
+# Parse arguments into the globals dryRun, sourceDir and targetDir.
+cliParse() {
+    dryRun=1
+    sourceDir="$HOME/Downloads"
+    targetDir="$HOME/Documents/myCabinets/Benefits/Bank Statements"
+
+    while (($#)); do
+        case "$1" in
+            -h | --help)
+                cliUsage
+                exit 0
+                ;;
+            --version)
+                printf '%s %s\n' "$_APPLICATION" "$(cliVersion)"
+                exit 0
+                ;;
+            -y | --confirm)
+                dryRun=""
+                shift
+                ;;
+            --source | --target)
+                (($# >= 2)) || cliFail "$1 needs a folder"
+                if [[ "$1" == --source ]]; then sourceDir="$2"; else targetDir="$2"; fi
+                shift 2
+                ;;
+            *)
+                cliFail "unknown argument '$1' (see $_APPLICATION --help)"
+                ;;
+        esac
+    done
+}
+
+cliUsage() {
+    cat <<'USAGE'
+Usage: fileDpStatements [-y|--confirm] [--source DIR] [--target DIR]
+
+File Direct Payments bank statements downloaded from the bank website into
+the Direct Payments cabinet, one folder per year, named after the statement
+date with the month at the end:
+
+  2026/2026-10-30 - Direct Payments - Statement - Oct.pdf
+
+Previews by default; nothing changes without --confirm.
+
+  -y, --confirm   move the statements (default is a preview)
+  --source DIR    folder holding the downloads (default ~/Downloads)
+  --target DIR    Bank Statements folder (default
+                  ~/Documents/myCabinets/Benefits/Bank Statements)
+  --version       show the version
+  -h, --help      show this help
+
+A statement already filed under any name is sent to the Trash. A statement
+whose target name is taken by a different file is left in the source folder.
+USAGE
+}
+
+# The repository version, or "unknown" outside a checkout.
+cliVersion() {
+    if declare -F repoVersionDescribe >/dev/null; then
+        repoVersionDescribe
+    else
+        printf 'unknown'
+    fi
+}
+
+## environment
+
+# Source the shared organiseMyProjects logUtils.sh. LOG_UTILS overrides the
+# lookup (tests use it). Otherwise ask the active python3, then the py312
+# environment this repository's .envrc uses, so the command also works from a
+# shell where no conda environment is active. There is no fallback logger.
+environmentLogUtilsLoad() {
+    local candidate packageDir python
+    candidate="${LOG_UTILS:-}"
+    if [[ -z "$candidate" ]]; then
+        for python in python3 "${CONDA_DIR:-$HOME/miniconda3}/envs/py312/bin/python3"; do
+            if packageDir="$("$python" -c 'import organiseMyProjects, os; print(os.path.dirname(organiseMyProjects.__file__))' 2>/dev/null)"; then
+                candidate="$packageDir/logUtils.sh"
+                break
+            fi
+        done
+    fi
+    if [[ -z "$candidate" || ! -f "$candidate" ]]; then
+        echo "ERROR: organiseMyProjects logUtils.sh not found; install organiseMyProjects or set LOG_UTILS" >&2
+        exit 1
+    fi
+    # shellcheck source=/dev/null
+    source "$candidate"
+}
+
+# Validate and normalise sourceDir and targetDir.
+environmentPathsValidate() {
+    [[ -d "$sourceDir" ]] || { log_error "Source folder not found: $sourceDir"; exit 1; }
+    [[ -d "$targetDir" ]] || { log_error "Target folder not found: $targetDir"; exit 1; }
+    sourceDir="$(readlink -f "$sourceDir")"
+    targetDir="$(readlink -f "$targetDir")"
+    [[ "$sourceDir" != "$targetDir" ]] || { log_error "Source and target are the same folder"; exit 1; }
+}
+
+# Fail fast when a required external tool is missing.
+environmentToolsCheck() {
+    local tool missing=()
+    for tool in pdftotext gio cmp date; do
+        command -v "$tool" >/dev/null || missing+=("$tool")
+    done
+    if ((${#missing[@]})); then
+        log_error "Missing required tools: ${missing[*]} (pdftotext is in poppler-utils, gio in libglib2.0-bin)"
+        exit 1
+    fi
+}
+
+## statement
+
+# Print the statement date ("30 October 2026") from page-1 text. The date line
+# stands alone under the branch address; the end of the statement period is
+# the fallback.
+statementDateRead() {
+    local text="$1" found
+    found="$(grep -m1 -E '^[0-9]{1,2} [A-Z][a-z]+ [0-9]{4}$' <<<"$text" || true)"
+    if [[ -z "$found" ]]; then
+        found="$(grep -m1 'Period this statement relates to:' <<<"$text" |
+            sed -nE 's/.* to ([0-9]{1,2} [A-Za-z]+ [0-9]{4}).*/\1/p' || true)"
+    fi
+    [[ -n "$found" ]] || return 1
+    printf '%s' "$found"
+}
+
+# Print the first file in yearDir identical to download; fail if none.
+statementDuplicateFind() {
+    local download="$1" yearDir="$2" existing
+    [[ -d "$yearDir" ]] || return 1
+    for existing in "$yearDir"/*; do
+        [[ -f "$existing" ]] || continue
+        if cmp -s -- "$download" "$existing"; then
+            printf '%s' "$existing"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# File one downloaded statement. Increments main's counters filed,
+# duplicates, conflicts and skipped.
+statementFile() {
+    local download="$1" name text statementDate isoDate year month yearDir target existing
+    name="$(basename "$download")"
+
+    # Only act on statements for the Direct Payments account, whatever the
+    # file is called.
+    text="$(pdftotext -l 1 "$download" - 2>/dev/null || true)"
+    if ! grep -q "Account number: $_ACCOUNT" <<<"$text"; then
+        log_warn "not a Direct Payments statement, left in place: $name"
+        ((skipped += 1))
+        return 0
+    fi
+
+    if ! statementDate="$(statementDateRead "$text")" || ! isoDate="$(date -d "$statementDate" +%F 2>/dev/null)"; then
+        log_warn "statement date not found, left in place: $name"
+        ((skipped += 1))
+        return 0
+    fi
+    year="${isoDate:0:4}"
+    month="$(date -d "$statementDate" +%b)"
+    yearDir="$targetDir/$year"
+    target="$yearDir/$isoDate - Direct Payments - Statement - $month.pdf"
+
+    # Already filed? Compare content, not names: earlier statements were
+    # sometimes saved under a download date rather than the statement date.
+    if existing="$(statementDuplicateFind "$download" "$yearDir")"; then
+        log_action "trash $name: already filed as $year/$(basename "$existing")"
+        if [[ -z "${dryRun:-}" ]]; then
+            gio trash -- "$download"
+        fi
+        ((duplicates += 1))
+        return 0
+    fi
+
+    # Never overwrite: a different file under the target name needs a person
+    # to look at it.
+    if [[ -e "$target" ]]; then
+        log_warn "$year/$(basename "$target") already exists with different content; left in place: $name"
+        ((conflicts += 1))
+        return 0
+    fi
+
+    log_action "move $name → $year/$(basename "$target")"
+    if [[ -z "${dryRun:-}" ]]; then
+        mkdir -p -- "$yearDir"
+        mv -n -- "$download" "$target"
+        if [[ -e "$download" || ! -f "$target" ]]; then
+            log_error "Move failed, original kept: $download"
+            exit 1
+        fi
+    fi
+    ((filed += 1))
+}
+
+## main
+
+main() {
+    local download downloads=() filed=0 duplicates=0 conflicts=0 skipped=0 mode
+
+    if [[ -f "$_FILE_DP_DIR/repoVersion.sh" ]]; then
+        # shellcheck source=repoVersion.sh
+        source "$_FILE_DP_DIR/repoVersion.sh"
+    fi
+    cliParse "$@"
+    environmentLogUtilsLoad
+    setApplication "$_APPLICATION"
+    environmentToolsCheck
+    environmentPathsValidate
+
+    mode="confirm"
+    [[ -z "${dryRun:-}" ]] || mode="preview (use --confirm to move files)"
+
+    runStart
+    log_doing "filing direct payments statements"
+    log_value "version" "$(cliVersion)"
+    log_value "source" "$sourceDir"
+    log_value "target" "$targetDir"
+    log_value "mode" "$mode"
+    line
+
+    # The bank names every download after the account; nocaseglob matches
+    # .PDF and .pdf.
+    shopt -s nullglob nocaseglob
+    downloads=("$sourceDir"/Statement*"${_ACCOUNT##* }"*.pdf)
+    shopt -u nullglob nocaseglob
+
+    if ((${#downloads[@]} == 0)); then
+        log_info "no statements found"
+    fi
+    for download in "${downloads[@]}"; do
+        statementFile "$download"
+    done
+
+    line
+    log_value "filed" "$filed"
+    log_value "already filed, trashed" "$duplicates"
+    log_value "name taken, left in place" "$conflicts"
+    log_value "skipped" "$skipped"
+    log_done "filing direct payments statements"
+
+    # A conflict or unreadable statement needs attention.
+    if ((conflicts + skipped > 0)); then
+        exit 1
+    fi
+}
+
+main "$@"

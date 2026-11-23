@@ -11,6 +11,7 @@ and launchers are on `PATH`.
   - [raid-pc storage server](linuxBootstrap/documentation/raidPc.md)
   - [Hardware snapshots and temperature history (hardwareSnapshot)](linuxBootstrap/documentation/hardwareSnapshot.md)
 - [runpodTools: RunPod bootstrap](runpodTools/runpodToolsIndex.md)
+- [Filing Direct Payments statements (fileDpStatements)](documentation/fileDpStatements.md)
 - [Repository-specific instructions](.github/additional-instructions.md)
 - [Development guidelines](.github/agent-instructions.md)
 
@@ -48,6 +49,7 @@ Project records:
 | `migrateToRaid` | Copy, verify and record migration of andy-pc disks to raid-pc, or to the local `/mnt/media` disk ([guide](linuxBootstrap/documentation/migrateToRaid.md)) |
 | `linuxBootstrap/bootstrap.sh` | Preview or apply a machine profile |
 | `omv` | Launch organiseMyVideo |
+| `fileDpStatements` | File Direct Payments bank statements from Downloads into the Direct Payments cabinet by statement date ([guide](documentation/fileDpStatements.md)) |
 
 Tools preview by default and act only with `-y`/`--confirm`.
 

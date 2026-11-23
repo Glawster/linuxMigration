@@ -39,7 +39,7 @@ if [ ! -e "$DOCS_DIR" ]; then
 fi
 
 DOCS_DIR="$(readlink -f "$DOCS_DIR")"
-BASE_TARGET="$DOCS_DIR/myCabinets/directPayments/Statements"
+BASE_TARGET="$DOCS_DIR/myCabinets/Benefits/Bank Statements"
 
 log_value "documents resolved to" "$DOCS_DIR"
 log_value "base target for statements" "$BASE_TARGET"

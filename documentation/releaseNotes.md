@@ -5,6 +5,13 @@ Releases of this repository, newest first. The process is in
 
 ## Unreleased
 
+- `fileDpStatements` (new): files Direct Payments bank statements downloaded
+  from the bank website, moving each from `~/Downloads` to
+  `Bank Statements/<yyyy>/<yyyy-mm-dd> - Direct Payments - Statement - <Mon>.pdf`
+  by the statement date on page 1. Previews unless `--confirm` is given;
+  statements already filed under any name go to the Trash, and a different
+  file under the target name is never overwritten
+  ([guide](fileDpStatements.md)).
 - Versioning ([ADR 009](../project/adr/009-branchVersions.md)): every branch
   of work is numbered as an alpha of the next release (`1.4a1`, `1.4a2`, ...)
   and its merge into `main` is tagged with that number. New `branchVersion`
