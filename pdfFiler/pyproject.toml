@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pdfFiler"
+version = "0.2.0"
+description = "File scanned PDFs from the myCabinets Inbox, suggesting folder, name, type and date."
+requires-python = ">=3.10"
+dependencies = [
+    "organiseMyProjects @ git+https://github.com/Glawster/organiseMyProjects.git@0.10",
+]
+
+[project.scripts]
+pdfFiler = "pdfFiler.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "../tests"]
+testpaths = ["tests"]
+python_files = ["test_[a-z]*.py"]
+python_functions = ["test*"]
+
+[tool.black]
+line-length = 100

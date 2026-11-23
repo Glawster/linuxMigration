@@ -42,6 +42,7 @@ Project records:
 | `kohyaTools/` | Image processing and LoRA training workflows |
 | `runpodTools/` | Modular bootstrap for RunPod instances |
 | `suggestUnwatched/` | Suggest the oldest unwatched shows for removal, from Plex watch state ([guide](suggestUnwatched/suggestUnwatchedIndex.md)) |
+| `pdfFiler/` | Suggest where scanned PDFs belong and file them (`pdfFiler.sh`; [guide](documentation/pdfFiler.md)) |
 
 ## Notable commands
 
@@ -51,7 +52,7 @@ Project records:
 | `linuxBootstrap/bootstrap.sh` | Preview or apply a machine profile |
 | `omv` | Launch organiseMyVideo |
 | `fileDpStatements` | File Direct Payments bank statements from Downloads into the Direct Payments cabinet by statement date ([guide](documentation/fileDpStatements.md)) |
-| `pdfFiler.sh` | File the PDFs in the myCabinets Inbox one at a time, with a preview and dated names ([guide](documentation/pdfFiler.md)) |
+| `pdfFiler.sh` | File the scanned PDFs in the myCabinets Inbox, suggesting the folder, name, type and date from what is already filed ([guide](documentation/pdfFiler.md)) |
 
 Tools preview by default and act only with `-y`/`--confirm`.
 

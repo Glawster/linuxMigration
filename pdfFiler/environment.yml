@@ -1,0 +1,17 @@
+# pdfFiler needs only the standard library and organiseMyProjects. On andy-pc
+# it runs from source in the repository's py312 environment (ADR 011); this
+# file sets up an equivalent environment on a fresh machine:
+#   conda env create -f pdfFiler/environment.yml
+#   conda run -n pdfFiler pip install -e pdfFiler
+# System tools: poppler-utils, zenity, libglib2.0-bin; optional ocrmypdf,
+# feh or eog, wmctrl.
+name: pdfFiler
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pytest
+  - black
+  - pip:
+      - organiseMyProjects @ git+https://github.com/Glawster/organiseMyProjects.git@0.10

@@ -99,7 +99,8 @@ linuxMigration/
 ├── organiseHome.sh                       # Main home directory migration
 ├── organiseOfficeFiles.sh                # Office document organization
 ├── organiseWindowsHome.sh                # Windows migration
-├── pdfFiler.sh                           # PDF organization
+├── pdfFiler.sh                           # Launcher for pdfFiler/ (inbox PDF filing)
+├── pdfFiler/                             # Suggest-and-file scanned PDFs (subproject, ADR 011)
 ├── installLinuxApps.sh                   # Application installer
 ├── setupBattlenetPrefix.sh               # Gaming setup
 ├── migrateToRaid                         # Launcher for linuxBootstrap/migrateToRaid.sh
@@ -1016,7 +1017,7 @@ Tag a release only when the whole repository is in a good state on `main`:
   unrelated: `./linuxBootstrap/tests/runTests.sh` (which includes the
   migrateToRaid tests), `python3 -m pytest tests`, and
   `conda run -n suggestUnwatched python -m pytest suggestUnwatched` (it has
-  its own environment);
+  its own environment), and `(cd pdfFiler && python -m pytest)` in `py312`;
 - the release notes describe every tool that changed since the last release.
 
 ### Making a release

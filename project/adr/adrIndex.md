@@ -3,7 +3,7 @@
 Consequential linuxMigration decisions, numbered `nnn-decisionName.md` and never
 reused. Status values: Proposed, Accepted, Superseded (link the replacement).
 
-Next available number: 011
+Next available number: 013
 
 | ADR | Title | Status | Requirements |
 | --- | --- | --- | --- |
@@ -17,3 +17,5 @@ Next available number: 011
 | [008](008-repositoryVersion.md) | One version and release tag for the whole repository | Accepted, amended by [009](009-branchVersions.md) | — |
 | [009](009-branchVersions.md) | A version number for every branch of work | Accepted | — |
 | [010](010-replaceableMediaQuickVerify.md) | Quick verification is enough to remove replaceable media | Accepted | [001](../requirements/features/001-raidMigration.md) |
+| [011](011-pdfFilerPython.md) | pdfFiler moves to a Python project | Accepted | [005](../requirements/features/005-pdfFilerSuggestions.md) |
+| [012](012-learnFromNames.md) | pdfFiler learns from names and confirmations, not filed content | Accepted | [005](../requirements/features/005-pdfFilerSuggestions.md) |

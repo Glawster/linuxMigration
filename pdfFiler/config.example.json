@@ -1,0 +1,15 @@
+{
+  "rules": [
+    {
+      "name": "Direct Payments bank statement",
+      "match": ["Account number: 950246 60153699"],
+      "folder": "Benefits/Bank Statements",
+      "yearSubfolder": true,
+      "label": "Direct Payments",
+      "type": "Statement",
+      "date": "standaloneLine",
+      "fileName": "{date} - {label} - {type} - {Mon}.pdf",
+      "auto": false
+    }
+  ]
+}

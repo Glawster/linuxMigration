@@ -2,7 +2,7 @@
 
 ## Status
 
-ToDo
+InProgress
 
 ## Outcome
 
@@ -198,9 +198,8 @@ three dialogs, and are named consistently with their neighbours.
 
 - Builds on `pdfFiler.sh` as delivered in `1.4a6` (branch
   `feature/pdf-filer-update`).
-- ADR pending: move `pdfFiler` from Bash to a Python project (layout,
-  environment, the fate of `pdfFiler.sh` and `fileDpStatements`).
-- ADR pending: learn from names only, not the content of filed PDFs.
+- [ADR 011: pdfFiler moves to a Python project](../../adr/011-pdfFilerPython.md).
+- [ADR 012: pdfFiler learns from names and confirmations, not filed content](../../adr/012-learnFromNames.md).
 - [ADR 008: One version and release tag for the whole repository](../../adr/008-repositoryVersion.md)
   (version reporting).
 
@@ -243,3 +242,7 @@ three dialogs, and are named consistently with their neighbours.
   statement). Added the `Statement` period-end date, rejection of future
   dates and of dates inside references, and put blank-page removal out of
   scope (criteria 15, 16 and 17).
+- 2026-11-23: implemented on `feature/pdf-filer-suggestions` (`1.4a7`) with
+  ADRs 011 and 012. 85 tests pass in `pdfFiler/tests`. The index of the real
+  cabinet takes 0.09 s (961 folders, 4,626 PDFs). The three real scans are
+  previewed as in the golden tests. Manual acceptance is still to do.

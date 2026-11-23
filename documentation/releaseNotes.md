@@ -5,6 +5,17 @@ Releases of this repository, newest first. The process is in
 
 ## Unreleased
 
+- `pdfFiler` (requirement 005, `1.4a7`): suggests where each scanned PDF
+  belongs and files it after one **File / Change… / Skip** dialog. It learns
+  from the cabinet's names only (identifiers such as `AV2550339`, each
+  folder's labels and types), from rules in `~/.config/pdfFiler/config.json`,
+  and from reference numbers in PDFs you file. When two folders share a name,
+  the rest of the path decides. Tax documents are dated at the end of the tax
+  year and statements at the end of their period. Future dates and dates
+  inside references are never used. New commands `pdfFiler.sh suggest` and
+  `pdfFiler.sh index show`. It is now a Python project in `pdfFiler/`
+  (ADRs 011 and 012); `pdfFiler.sh` is its launcher and keeps its `1.4a6`
+  options ([guide](pdfFiler.md)).
 - `pdfFiler.sh`: works again, and previews unless `--confirm` is given.
   It looks in `~/Documents/myCabinets` (the old path no longer existed) and
   reads the date from the PDF again (it read an unset variable). It
