@@ -3,7 +3,7 @@
 Requirement records for linuxMigration, following
 [requirements management](../../documentation/requirementsManagement.md).
 
-Next available number: 005
+Next available number: 006
 
 003 is not used: agentSessions was drafted here as requirement 003 and moved to
 organiseMyProjects, where it is requirement 022 and the `agentSessions` console
@@ -14,3 +14,4 @@ script.
 | 001 | [raid-pc storage migration](features/001-raidMigration.md) | Copy, verify and record migration of andy-pc storage to raid-pc or the local `/mnt/media` disk; protection-gated safe disk removal. | InProgress | [Implement](prompt/001-raidMigration.md) | [ADR 001](../adr/001-raidMigrationSafety.md), [ADR 002](../adr/002-localMigrationDestination.md), [ADR 006](../adr/006-migrateOnHostWithDisk.md), [ADR 007](../adr/007-newerMetadataWins.md) |
 | 002 | [Rebalance local movies and TV to raid-pc](features/002-localMediaRebalance.md) | Move the oldest movies and ended TV shows, as whole folders, from `/mnt/movies` and `/mnt/video` to raid-pc until each disk is at most 50% occupied. | InProgress | [Implement](prompt/002-localMediaRebalance.md) | [ADR 005](../adr/005-rebalancePlan.md) |
 | 004 | [Suggest unwatched video folders](features/004-suggestUnwatched.md) | Suggest the oldest unwatched shows from Plex watch state and air dates, with exemptions and a reviewable removal script. | Completed | [Implement](prompt/004-suggestUnwatched.md) | [ADR 008](../adr/008-repositoryVersion.md) |
+| 005 | [Suggest where a scanned PDF is filed](features/005-pdfFilerSuggestions.md) | Suggest the cabinet folder, name, type and date of each inbox PDF from what is already filed and from rules, and file it after one confirmation. | ToDo | [Implement](prompt/005-pdfFilerSuggestions.md) | Pending |
