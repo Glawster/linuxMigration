@@ -27,7 +27,7 @@ from pdfFiler.suggest import suggestionMake
 from pdfFiler.text import textOfPdf
 
 _COMMANDS = {"inbox", "suggest", "index"}
-_REQUIRED_TOOLS = ("pdftotext", "pdftoppm", "zenity", "gio")
+_REQUIRED_TOOLS = ("pdftotext", "pdftoppm", "pdfinfo", "gio")
 
 ## workflow
 
@@ -149,11 +149,8 @@ def indexShowCommand(args: argparse.Namespace, logger, dryRun: bool) -> int:
 
 
 def inboxFileCommand(args: argparse.Namespace, logger, dryRun: bool) -> int:
-    """File the inbox through the dialogs (requirement 005)."""
-    # GUI modules are imported here only: the other commands never need them.
-    from pdfFiler.dialogs import Dialogs
-    from pdfFiler.inbox import Options, inboxFile
-    from pdfFiler.preview import Preview
+    """File the inbox through the filing window (requirement 005)."""
+    from pdfFiler.inbox import Options, inboxFile, inboxIndex
 
     root = _rootValidate(args.root)
     inbox = (args.inbox or root / "Inbox").expanduser()
@@ -162,7 +159,7 @@ def inboxFileCommand(args: argparse.Namespace, logger, dryRun: bool) -> int:
     missing = [tool for tool in _REQUIRED_TOOLS if shutil.which(tool) is None]
     if missing:
         raise ValueError(
-            f"Missing required tools: {', '.join(missing)} (poppler-utils, zenity, libglib2.0-bin)"
+            f"Missing required tools: {', '.join(missing)} (poppler-utils, libglib2.0-bin)"
         )
 
     _header(logger, "filing inbox pdfs", root, args)
@@ -176,28 +173,57 @@ def inboxFileCommand(args: argparse.Namespace, logger, dryRun: bool) -> int:
         configPath=args.config,
         learnedPath=args.learned,
     )
-    preview = Preview()
-    dialogs = Dialogs()
+    index = inboxIndex(options)
+    window = _LazyWindow(index, options.today, dryRun)
     try:
-        counts = inboxFile(options, logger, dialogs, preview)
+        counts = inboxFile(options, logger, window, index)
+        line()
+        logger.value("filed", counts.filed)
+        logger.value("already filed, trashed", counts.duplicates)
+        logger.value("name taken, left in inbox", counts.conflicts)
+        logger.value("skipped", counts.skipped)
+        logger.value("numbers learned", counts.learned)
+        logger.done("filing inbox pdfs")
+        if window.opened and not counts.cancelled:
+            window.message(
+                "info",
+                f"Inbox done: {counts.filed} filed, {counts.duplicates} already filed, "
+                f"{counts.conflicts + counts.skipped} left in the inbox.",
+            )
     finally:
-        preview.cleanup()
-    line()
-    logger.value("filed", counts.filed)
-    logger.value("already filed, trashed", counts.duplicates)
-    logger.value("name taken, left in inbox", counts.conflicts)
-    logger.value("skipped", counts.skipped)
-    logger.value("numbers learned", counts.learned)
-    logger.done("filing inbox pdfs")
-    if not counts.cancelled and (
-        counts.filed or counts.duplicates or counts.conflicts or counts.skipped
-    ):
-        dialogs.message(
-            "info",
-            f"Inbox done: {counts.filed} filed, {counts.duplicates} already filed, "
-            f"{counts.conflicts + counts.skipped} left in the inbox.",
-        )
+        window.close()
     return 0
+
+
+class _LazyWindow:
+    """Opens the filing window only when a PDF needs it, so an empty inbox
+    or auto-rule filing needs no display."""
+
+    def __init__(self, index, today: dt.date, dryRun: bool) -> None:
+        self._arguments = (index, today, dryRun)
+        self._window = None
+
+    @property
+    def opened(self) -> bool:
+        return self._window is not None
+
+    def close(self) -> None:
+        if self._window is not None:
+            self._window.close()
+
+    def decide(self, state, position: int, total: int):
+        return self._open().decide(state, position, total)
+
+    def message(self, kind: str, text: str) -> None:
+        self._open().message(kind, text)
+
+    def _open(self):
+        if self._window is None:
+            # The GUI is imported here only: other commands never need it.
+            from pdfFiler.ui.filingWindow import FilingWindow
+
+            self._window = FilingWindow(*self._arguments)
+        return self._window
 
 
 def suggestCommand(args: argparse.Namespace, logger, dryRun: bool) -> int:

@@ -2,7 +2,7 @@
 
 `pdfFiler` files the scanned PDFs in `~/Documents/myCabinets/Inbox`. For each
 PDF it suggests the cabinet folder, name, type and date from what is already
-filed, and files it after one confirmation:
+filed, and shows them in one filing window, ready to file:
 
 ```text
 Finance/Aviva/AV2550339/2026-04-05 - Aviva, AV2550339 - Tax.pdf
@@ -16,7 +16,7 @@ started with `pdfFiler.sh`. Requirement:
 ## Usage
 
 ```bash
-pdfFiler.sh                 # preview: dialogs run, nothing moves or is learned
+pdfFiler.sh                 # preview: the window runs, nothing moves or is learned
 pdfFiler.sh --confirm       # file the inbox (or -y)
 pdfFiler.sh suggest PDF...  # print the suggestion for PDFs; changes nothing
 pdfFiler.sh index show      # what pdfFiler has learned, and how long it took
@@ -34,22 +34,31 @@ With no command, `pdfFiler.sh` runs `inbox file`.
 
 ## Filing a PDF
 
-PDFs are offered oldest first (`.pdf` or `.PDF`), each once per run. Page 1
-opens in an image window beside the dialogs.
+PDFs are offered oldest first (`.pdf` or `.PDF`), each once per run, in one
+filing window ([ADR 013](../project/adr/013-filingWindow.md)):
 
-- **With a suggestion**, one dialog shows the new path, the reasons and the
-  other likely folders:
-  - **File** files it as shown.
-  - **Change…** opens the folder, type and date dialogs. The folder dialog
-    starts in the suggested folder, and the type list has the suggestion
-    first.
-  - **Skip** leaves the PDF in the inbox.
-- **Without a suggestion**, the folder, type, date and *Proceed?* dialogs are
-  shown, as in `1.4a6`.
-- **A rule marked `auto`** files without any dialog, but only with
-  `--confirm`.
+- **Left:** page 1 of the PDF. ◀ ▶ change page, and **Zoom** (or a click on
+  the page) shows it at full size.
+- **Right:** the fields, already filled in from the suggestion:
+  - **Folder:** the list holds the suggestion and the other likely folders;
+    **Browse…** picks any folder inside the cabinets.
+  - **Type**, **Date** and **Label**.
 
-Cancelling the folder, type or date dialog stops the run.
+  Choosing another folder recalculates the label, type and date you have not
+  typed into.
+- **File as** shows the whole new name on one line, and updates as you
+  type. Problems appear beneath it in red and disable **File**: no folder, a
+  bad or future date, or a name already taken. When the folder already holds
+  this scan, **File** becomes **Trash duplicate**.
+- **Why suggested** gives the reasons, such as "matched AV2550339".
+- **Buttons:**
+  - **File** (Enter) files it as shown.
+  - **Skip** (Esc) leaves it in the inbox.
+  - **Stop**, or closing the window, ends the run.
+
+With no suggestion, the same window opens with the folder empty. In a
+preview, a yellow banner says nothing will move. **A rule marked `auto`**
+files without the window, but only with `--confirm`.
 
 ## How the suggestion is made
 
@@ -158,13 +167,14 @@ Nothing is overwritten or deleted.
 
 ## Requirements and logs
 
-- Required: `pdftotext` and `pdftoppm` (poppler-utils), `zenity` and `gio`
-  (libglib2.0-bin).
-- Optional: `ocrmypdf` for scans without text, `feh` or `eog` for the preview,
-  and `wmctrl` to place the preview window.
-- Python with organiseMyProjects. `pdfFiler.sh` uses `PDF_FILER_PYTHON`, then
-  the active `python3`, then the `py312` Conda environment. Use
-  `pdfFiler/environment.yml` on a fresh machine.
+- Required: `pdftotext`, `pdftoppm` and `pdfinfo` (poppler-utils), and `gio`
+  (libglib2.0-bin). zenity, feh and wmctrl are no longer used.
+- Optional: `ocrmypdf` for scans without text.
+- Python with organiseMyProjects and tkinter (both in `py312`). `pdfFiler.sh`
+  uses `PDF_FILER_PYTHON`, then the active `python3`, then the `py312` Conda
+  environment. Use `pdfFiler/environment.yml` on a fresh machine.
+- The window opens only when a PDF needs it, so `suggest`, `index show` and
+  auto rules work without a display.
 - Logs go to `~/.local/state/pdfFiler/`.
 
 ## Tests
@@ -174,7 +184,11 @@ cd pdfFiler && python -m pytest     # in py312
 ```
 
 The tests use generated PDFs read by the real `pdftotext`, on temporary
-cabinets. There are golden examples modelled on the Aviva tax letter, the
-MBNA renewal and the Aviva ISA statement (with fictional numbers), and on the
-Direct Payments rule. The CLI tests run the real `pdfFiler.sh` with zenity,
-the preview and `gio` replaced.
+cabinets:
+
+- golden examples modelled on the Aviva tax letter, the MBNA renewal and the
+  Aviva ISA statement (with fictional numbers), and on the Direct Payments
+  rule;
+- the form logic and the workflow, with a scripted window;
+- the real filing window on the display (skipped without one);
+- the real `pdfFiler.sh`, run with no display.

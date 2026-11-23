@@ -1,29 +1,32 @@
-"""`inbox file`: offer each inbox PDF with a suggestion, then file it.
+"""`inbox file`: show each inbox PDF in the filing window, then file it.
 
-This module joins the core (suggestions, filing) to the GUI (dialogs,
-preview). Dialogs and preview are passed in, so tests can replace them.
+This module joins the core (suggestions, form, filing) to the GUI. The
+window is passed in, so tests can replace it; it needs only
+`decide(state, position, total) -> Decision` and `message(kind, text)`.
 """
 
 from __future__ import annotations
 
 import datetime as dt
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Protocol
 
 from pdfFiler.cabinet import CabinetIndex, cabinetIndexBuild
-from pdfFiler.dates import dateChoose, dateFromFilename
-from pdfFiler.dialogs import CHANGE, FILE, SKIP, Dialogs
 from pdfFiler.filing import FilingError, filingCheck, filingMove, filingTrash, inboxList
+from pdfFiler.form import FILE, SKIP, STOP, Decision, FormState, formCreate
 from pdfFiler.learned import Learned, learnedLoad, learnedNumbersFind, learnedRecord
-from pdfFiler.naming import KEEP_ORIGINAL, dateStrategyFor, fileNameBuild, typeChoose, typesOffered
-from pdfFiler.preview import Preview
 from pdfFiler.rules import Rule, rulesLoad
 from pdfFiler.suggest import Suggestion, suggestionMake
 from pdfFiler.text import textOfPdf
 
-DEFAULT_TEMPLATE = "{date} - {label} - {type}.pdf"
-_PREVIEW_NOTE = "\n\n(Preview: nothing will move. Run with --confirm to file.)"
+
+class Window(Protocol):
+    """What `inbox file` needs from the filing window."""
+
+    def decide(self, state: FormState, position: int, total: int) -> Decision: ...
+
+    def message(self, kind: str, text: str) -> None: ...
 
 
 @dataclass
@@ -48,48 +51,47 @@ class Counts:
     cancelled: bool = False
 
 
-class _Stop(Exception):
-    """The user cancelled the run."""
-
-
 ## inbox
 
 
-def inboxFile(options: Options, logger, dialogs: Dialogs, preview: Preview) -> Counts:
+def inboxIndex(options: Options) -> CabinetIndex:
+    """The cabinet index for a run (the window needs it too)."""
+    return cabinetIndexBuild(options.root)
+
+
+def inboxFile(
+    options: Options, logger, window: Window, index: CabinetIndex | None = None
+) -> Counts:
     """File every inbox PDF, oldest first. The list is taken once, so a PDF
     the user skips is not offered again in the same run."""
-    run = _InboxRun(options, logger, dialogs, preview)
+    run = _InboxRun(options, logger, window, index or inboxIndex(options))
     return run.all()
 
 
 class _InboxRun:
-    def __init__(self, options: Options, logger, dialogs: Dialogs, preview: Preview) -> None:
+    def __init__(self, options: Options, logger, window: Window, index: CabinetIndex) -> None:
         self.options = options
         self.logger = logger
-        self.dialogs = dialogs
-        self.preview = preview
+        self.window = window
         self.counts = Counts()
-        self.index: CabinetIndex = cabinetIndexBuild(options.root)
+        self.index = index
         self.rules: list[Rule] = rulesLoad(options.configPath)
         self.learned: Learned = learnedLoad(options.learnedPath)
 
     def all(self) -> Counts:
         pdfs = inboxList(self.options.inbox)
         self.logger.value("pdfs in inbox", len(pdfs))
-        try:
-            for pdf in pdfs:
-                try:
-                    self.one(pdf)
-                finally:
-                    self.preview.close()
-        except _Stop:
-            self.counts.cancelled = True
-            self.logger.info("cancelled by user")
+        for position, pdf in enumerate(pdfs, start=1):
+            if not self.one(pdf, position, len(pdfs)):
+                self.counts.cancelled = True
+                self.logger.info("stopped by user")
+                break
         return self.counts
 
     ## one pdf
 
-    def one(self, pdf: Path) -> None:
+    def one(self, pdf: Path, position: int, total: int) -> bool:
+        """File one PDF; False when the user stops the run."""
         self.logger.value("pdf", pdf.name)
         text = textOfPdf(pdf)
         suggestion = suggestionMake(
@@ -98,80 +100,34 @@ class _InboxRun:
         if suggestion is not None:
             self.logger.info(
                 "suggested %s because %s",
-                self._shown(suggestion.folder, suggestion.fileName()),
+                f"{suggestion.folder}/{suggestion.fileName() or '(date unknown)'}",
                 suggestion.reasonText(),
             )
 
-        # A sure rule files without dialogs, and only with --confirm.
+        # A sure rule files without the window, and only with --confirm.
         if suggestion and suggestion.rule and suggestion.rule.auto and suggestion.date:
             if self.options.dryRun:
                 self.logger.info("auto rule %s: preview only", suggestion.rule.name)
-            self._place(pdf, self._destination(suggestion), text, suggestion.folder, quiet=True)
-            return
+            self._place(pdf, self._destination(suggestion), text, quiet=True)
+            return True
 
-        if not self.preview.show(pdf):
-            self.dialogs.message("warning", f"Preview could not be generated for {pdf.name}")
-
-        if suggestion is not None and suggestion.date is not None:
-            answer = self.dialogs.suggestionAsk(self._suggestionText(pdf, suggestion))
-            if answer == FILE:
-                self._place(pdf, self._destination(suggestion), text, suggestion.folder)
-                return
-            if answer == SKIP:
-                self.logger.info("skipped, left in inbox: %s", pdf.name)
-                self.counts.skipped += 1
-                return
-            assert answer == CHANGE
-        self._manual(pdf, text, suggestion)
-
-    def _manual(self, pdf: Path, text: str, suggestion: Suggestion | None) -> None:
-        """The 1.4a6 dialogs, filled in with the suggestion where there is one."""
-        start = self.options.root
-        if suggestion and (self.options.root / suggestion.folder).is_dir():
-            start = self.options.root / suggestion.folder
-        chosen = self.dialogs.folderChoose(start)
-        if chosen is None:
-            raise _Stop
-        chosen = chosen.resolve()
-        root = self.options.root.resolve()
-        if root not in chosen.parents:
-            self.dialogs.message("error", f"Folder must be inside {root}")
-            self.logger.warning("folder outside cabinets, left in inbox: %s", pdf.name)
+        state = formCreate(pdf, text, suggestion, self.index, self.options.today)
+        decision = self.window.decide(state, position, total)
+        if decision.action == STOP:
+            return False
+        if decision.action == SKIP:
+            self.logger.info("skipped, left in inbox: %s", pdf.name)
             self.counts.skipped += 1
-            return
-        relative = chosen.relative_to(root)
-        info = self.index.folder(relative)
-        sameFolder = suggestion is not None and relative == suggestion.folder
-
-        suggestedType = suggestion.docType if sameFolder else typeChoose(text, info, self.index)[0]
-        docType = self.dialogs.typeChoose(pdf.name, typesOffered(suggestedType, info))
-        if docType is None:
-            raise _Stop
-        label = suggestion.label if sameFolder else info.labelUsual()
-        namePart = re.sub(r'[\\/:*?"<>|]', "-", pdf.stem) if docType == KEEP_ORIGINAL else docType
-
-        date = None
-        if sameFolder and docType == suggestion.docType:
-            date = suggestion.date
-        date = date or dateChoose(text, dateStrategyFor(docType), self.options.today)
-        date = date or dateFromFilename(pdf.name, self.options.today)
-        date = date or self._dateAsk()
-
-        template = suggestion.nameTemplate if sameFolder else DEFAULT_TEMPLATE
-        destination = chosen / fileNameBuild(template, date, label, namePart)
-        question = f"File:\n{pdf.name}\n\nAs:\n{destination}\n\nProceed?"
-        if not self.dialogs.proceedAsk(question + (_PREVIEW_NOTE if self.options.dryRun else "")):
-            self.logger.info("declined, left in inbox: %s", pdf.name)
-            self.counts.skipped += 1
-            return
-        self._place(pdf, destination, text, relative)
+            return True
+        assert decision.action == FILE and decision.check and decision.check.destination
+        self._place(pdf, decision.check.destination, text)
+        return True
 
     ## filing
 
-    def _place(
-        self, pdf: Path, destination: Path, text: str, folder: Path, quiet: bool = False
-    ) -> None:
+    def _place(self, pdf: Path, destination: Path, text: str, quiet: bool = False) -> None:
         """File, trash as already filed, or leave because the name is taken."""
+        folder = destination.parent.relative_to(self.options.root)
         check = filingCheck(pdf, destination)
         if check.outcome == "duplicate":
             self.logger.action(f"trash {pdf.name}: already filed as {check.existing.name}")
@@ -181,7 +137,7 @@ class _InboxRun:
             return
         if check.outcome == "conflict":
             if not quiet:
-                self.dialogs.message(
+                self.window.message(
                     "error",
                     f"A different file already exists:\n{destination}\n\n{pdf.name} stays in the inbox.",
                 )
@@ -192,7 +148,7 @@ class _InboxRun:
             )
             self.counts.conflicts += 1
             return
-        self.logger.action(f"move {pdf.name} → {self._shown(folder, destination.name)}")
+        self.logger.action(f"move {pdf.name} → {folder.as_posix()}/{destination.name}")
         if self.options.dryRun:
             self.counts.filed += 1
             return
@@ -218,36 +174,5 @@ class _InboxRun:
 
     ## utilities
 
-    def _dateAsk(self) -> dt.date:
-        problem = "No date found in the PDF or its name."
-        while True:
-            entered = self.dialogs.dateAsk(problem=problem)
-            if entered is None:
-                raise _Stop
-            try:
-                value = dt.date.fromisoformat(entered)
-            except ValueError:
-                problem = f"'{entered}' is not a valid date."
-                continue
-            if value > self.options.today:
-                problem = f"{entered} is in the future."
-                continue
-            return value
-
     def _destination(self, suggestion: Suggestion) -> Path:
         return self.options.root / suggestion.folder / suggestion.fileName()
-
-    def _shown(self, folder: Path, name: str | None) -> str:
-        return f"{folder}/{name}" if name else f"{folder}/(date unknown)"
-
-    def _suggestionText(self, pdf: Path, suggestion: Suggestion) -> str:
-        lines = [
-            f"File:\n{pdf.name}",
-            f"As:\n{suggestion.folder}/{suggestion.fileName()}",
-            f"Because:\n{suggestion.reasonText()}",
-        ]
-        if suggestion.runnerUps:
-            others = ", ".join(str(candidate.folder) for candidate in suggestion.runnerUps)
-            lines.append(f"Other folders (Change…):\n{others}")
-        text = "\n\n".join(lines)
-        return text + (_PREVIEW_NOTE if self.options.dryRun else "")

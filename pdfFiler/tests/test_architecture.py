@@ -6,8 +6,19 @@ import ast
 from pathlib import Path
 
 PACKAGE = Path(__file__).resolve().parents[1] / "src" / "pdfFiler"
-CORE = ("cabinet", "dates", "filing", "learned", "naming", "rules", "suggest", "text")
-GUI = {"pdfFiler.dialogs", "pdfFiler.preview", "pdfFiler.inbox"}
+CORE = (
+    "cabinet",
+    "dates",
+    "filing",
+    "form",
+    "inbox",
+    "learned",
+    "naming",
+    "rules",
+    "suggest",
+    "text",
+)
+GUI = {"tkinter", "pdfFiler.ui", "pdfFiler.ui.filingWindow", "pdfFiler.ui.pageView"}
 
 
 def test_coreModulesDoNotImportGui() -> None:

@@ -3,8 +3,8 @@
 # file sets up an equivalent environment on a fresh machine:
 #   conda env create -f pdfFiler/environment.yml
 #   conda run -n pdfFiler pip install -e pdfFiler
-# System tools: poppler-utils, zenity, libglib2.0-bin; optional ocrmypdf,
-# feh or eog, wmctrl.
+# System tools: poppler-utils, libglib2.0-bin; optional ocrmypdf. The
+# filing window uses tkinter (part of conda's python).
 name: pdfFiler
 channels:
   - conda-forge

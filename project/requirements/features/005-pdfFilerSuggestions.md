@@ -112,9 +112,11 @@ three dialogs, and are named consistently with their neighbours.
   `{year}` subfolder), a label, a type, a date strategy and an optional
   `auto` flag. The Direct Payments statements become a rule, so
   `fileDpStatements` can be retired or kept as a shortcut.
-- **One confirmation:** shows the proposed path and the reason ("matched
-  AV2550339"), with **File** and **Change…**. **Change…** opens the existing
-  folder, type and date dialogs filled in with the suggestion.
+- **One filing window** ([ADR 013](../../adr/013-filingWindow.md)): page 1
+  of the PDF beside the folder (with the other likely folders and Browse…),
+  type, date and label, all filled in and editable. The full filed name is
+  shown on one line and updates as the fields change. It also shows the
+  reason ("matched AV2550339"), with **File**, **Skip** and **Stop**.
 - **Automatic filing:** with `--confirm`, a PDF matched by a rule marked
   `auto` is filed without dialogs. Without `--confirm` nothing moves, as
   today.
@@ -158,14 +160,17 @@ three dialogs, and are named consistently with their neighbours.
    type.
 6. Given a `Tax` document covering 6 April 2025 to 5 April 2026, when the date
    is chosen, then it is `2026-04-05`.
-7. Given a suggestion, when the PDF is offered, then one dialog shows the path
-   and reason. **File** files it, and **Change…** opens the folder, type and
-   date dialogs pre-filled with the suggestion.
+7. Given a suggestion, when the PDF is offered, then one window shows page 1,
+   the fields filled in with the suggestion, the full destination on one
+   line, and the reason. **File** files it. Changing any field updates the
+   destination at once, and choosing another folder recalculates the label,
+   type and date that were not typed in.
 8. Given a rule marked `auto` and `--confirm`, when the inbox is filed, then
    the matching PDF is filed with no dialog. Without `--confirm`, nothing
    moves.
-9. Given a PDF with no suggestion, when it is offered, then the `1.4a6`
-   dialogs are shown unchanged.
+9. Given a PDF with no suggestion, when it is offered, then the same window
+   is shown with the folder empty, and **File** is disabled until a folder
+   inside the cabinets is chosen.
 10. Given an existing different file at the proposed path, or identical
     content already in the folder, when filing, then the `1.4a6` behaviour
     applies (left in the inbox, or sent to the Trash).
@@ -200,6 +205,7 @@ three dialogs, and are named consistently with their neighbours.
   `feature/pdf-filer-update`).
 - [ADR 011: pdfFiler moves to a Python project](../../adr/011-pdfFilerPython.md).
 - [ADR 012: pdfFiler learns from names and confirmations, not filed content](../../adr/012-learnFromNames.md).
+- [ADR 013: One tkinter filing window replaces the zenity dialogs](../../adr/013-filingWindow.md).
 - [ADR 008: One version and release tag for the whole repository](../../adr/008-repositoryVersion.md)
   (version reporting).
 
@@ -223,8 +229,9 @@ three dialogs, and are named consistently with their neighbours.
   references. Expected result:
   `Finance/Aviva/AV2585522/2026-05-22 - Aviva, AV2585522 - Statement.pdf`.
 - A golden test for the Direct Payments rule, matching `fileDpStatements`.
-- A production-path test of the CLI with zenity, `gio` and the preview as
-  doubles, covering acceptance criteria 7 to 10.
+- Tests of the real filing window on the display (criteria 7 and 9), and of
+  the workflow with a scripted window and the real form, filing and `gio`
+  double (criteria 7 to 10).
 - Timing check of `pdfFiler index show` against the real cabinet (criterion
   11).
 - Manual acceptance: file the real Aviva letter from the inbox, then a mixed
@@ -246,3 +253,6 @@ three dialogs, and are named consistently with their neighbours.
   ADRs 011 and 012. 85 tests pass in `pdfFiler/tests`. The index of the real
   cabinet takes 0.09 s (961 folders, 4,626 PDFs). The three real scans are
   previewed as in the golden tests. Manual acceptance is still to do.
+- 2026-11-23: after the first real run, the zenity confirmation was replaced
+  by one filing window (ADR 013) at the user's request, with the filed name on
+  one line. Criteria 7 and 9 were revised.

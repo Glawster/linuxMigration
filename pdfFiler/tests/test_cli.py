@@ -1,49 +1,26 @@
 """Production path: the real pdfFiler.sh launcher and CLI.
 
-zenity, feh, wmctrl and gio are command doubles (fakeBin); zenity answers
-from PDF_ZENITY_* variables and records each dialog. HOME is temporary, so
-the default config and learned.json never touch the real ones.
+These runs need no display: the filing window opens only when a PDF needs
+it, so they use an empty inbox, an auto rule, `suggest` and `index show`.
+The window itself is tested in test_window.py. HOME is temporary, so the
+default config and learned.json never touch the real ones.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-from conftest import AVIVA_TAX_LINES, MBNA_RENEWAL_LINES
+from conftest import MBNA_RENEWAL_LINES
 
 LAUNCHER = Path(__file__).resolve().parents[2] / "pdfFiler.sh"
-
-_ZENITY = r"""#!/usr/bin/env bash
-# zenity double: answers from PDF_ZENITY_* and logs each dialog kind.
-echo "$1" >>"$PDF_ZENITY_LOG"
-case "$1" in
-    --question)
-        if [[ "$*" == *--extra-button=Skip* ]]; then
-            case "${PDF_ZENITY_SUGGESTION:-file}" in
-                file) exit 0 ;;
-                skip) echo Skip; exit 1 ;;
-                *) exit 1 ;;
-            esac
-        fi
-        exit "${PDF_ZENITY_PROCEED:-0}" ;;
-    --file-selection) [[ -n "${PDF_ZENITY_FOLDER:-}" ]] || exit 1; echo "$PDF_ZENITY_FOLDER" ;;
-    --list) echo "${PDF_ZENITY_TYPE:-Invoice}" ;;
-    --entry) [[ -n "${PDF_ZENITY_DATE:-}" ]] || exit 1; echo "$PDF_ZENITY_DATE" ;;
-    *) exit 0 ;;
-esac
-"""
+EXAMPLE_CONFIG = Path(__file__).resolve().parents[1] / "config.example.json"
 
 
-def _run(cabinet: Path, tmp_path: Path, fakeBin: Path, *args: str, **answers: str):
-    zenity = fakeBin / "zenity"
-    zenity.write_text(_ZENITY)
-    zenity.chmod(0o755)
-    dialogLog = tmp_path / "dialogs.log"
-    dialogLog.write_text("")
+def _run(tmp_path: Path, *args: str, root: Path | None = None):
     home = tmp_path / "home"
     home.mkdir(exist_ok=True)
     env = dict(os.environ)
@@ -51,78 +28,64 @@ def _run(cabinet: Path, tmp_path: Path, fakeBin: Path, *args: str, **answers: st
         HOME=str(home),
         XDG_STATE_HOME=str(tmp_path / "state"),
         PDF_FILER_PYTHON=sys.executable,
-        PDF_ZENITY_LOG=str(dialogLog),
-        **{f"PDF_ZENITY_{key.upper()}": value for key, value in answers.items()},
+        DISPLAY="",  # prove no window is needed; a window would fail, not hang
     )
-    result = subprocess.run(
-        (
-            [str(LAUNCHER), *args, "--root", str(cabinet)]
-            if args[:1] != ("--version",)
-            else [str(LAUNCHER), *args]
-        ),
-        capture_output=True,
-        text=True,
-        env=env,
-        timeout=60,
-    )
+    command = [str(LAUNCHER), *args] + (["--root", str(root)] if root else [])
+    result = subprocess.run(command, capture_output=True, text=True, env=env, timeout=60)
     # organiseMyProjects logs to stderr; reports print to stdout.
     result.output = result.stdout + result.stderr
-    return result, dialogLog.read_text().split()
+    return result
 
 
-def test_previewByDefaultMovesNothing(cabinet, inboxPdf, tmp_path, fakeBin) -> None:
-    pdf = inboxPdf("2026-11-23.pdf", AVIVA_TAX_LINES)
-
-    result, dialogs = _run(cabinet, tmp_path, fakeBin)
-
-    assert result.returncode == 0, result.stderr
-    assert pdf.exists()
-    assert "Finance/Aviva/AV1111111/2026-04-05 - Aviva, AV1111111 - Tax.pdf" in result.output
-    assert "preview" in result.output
-    assert dialogs.count("--question") == 1
+def _autoRule(tmp_path: Path) -> None:
+    raw = json.loads(EXAMPLE_CONFIG.read_text())
+    raw["rules"][0]["auto"] = True
+    config = tmp_path / "home/.config/pdfFiler/config.json"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(json.dumps(raw))
 
 
-def test_confirmFilesSuggestionAndLearns(cabinet, inboxPdf, tmp_path, fakeBin) -> None:
-    inboxPdf("renewal.pdf", MBNA_RENEWAL_LINES)
-
-    result, _ = _run(cabinet, tmp_path, fakeBin, "--confirm")
-
-    assert result.returncode == 0, result.stderr
-    assert (cabinet / "Insurance/MBNA/2025-10-20 - Insurance, MBNA - Renewal.pdf").is_file()
-    learned = tmp_path / "home/.config/pdfFiler/learned.json"
-    assert "MBNAUKM4HAP100000001" in learned.read_text()
+_DP_LINES = [
+    "Danske Bank",
+    "30 October 2026",
+    "Account number: 950246 60153699",
+    "Period this statement relates to: 01 October 2026 to 30 October 2026",
+]
 
 
-def test_skipButtonLeavesPdf(cabinet, inboxPdf, tmp_path, fakeBin) -> None:
-    pdf = inboxPdf("renewal.pdf", MBNA_RENEWAL_LINES)
+def test_emptyInboxPreviewNeedsNoWindow(cabinet, tmp_path, fakeBin) -> None:
+    result = _run(tmp_path, root=cabinet)
 
-    result, _ = _run(cabinet, tmp_path, fakeBin, "-y", suggestion="skip")
-
-    assert result.returncode == 0, result.stderr
-    assert pdf.exists()
-    assert "skipped: 1" in result.output
+    assert result.returncode == 0, result.output
+    assert "pdfs in inbox: 0" in result.output and "preview" in result.output
 
 
-def test_changeWithCancelledFolderStopsRun(cabinet, inboxPdf, tmp_path, fakeBin) -> None:
-    pdf = inboxPdf("renewal.pdf", MBNA_RENEWAL_LINES)
+def test_autoRuleFilesThroughTheLauncher(cabinet, inboxPdf, tmp_path, fakeBin) -> None:
+    _autoRule(tmp_path)
+    pdf = inboxPdf("Statement 950246 60153699.PDF", _DP_LINES)
+    target = (
+        cabinet / "Benefits/Bank Statements/2026/2026-10-30 - Direct Payments - Statement - Oct.pdf"
+    )
 
-    result, dialogs = _run(cabinet, tmp_path, fakeBin, "-y", suggestion="change")
+    preview = _run(tmp_path, root=cabinet)
+    assert preview.returncode == 0, preview.output
+    assert pdf.exists() and not target.exists()
 
-    assert result.returncode == 0, result.stderr
-    assert pdf.exists()
-    assert dialogs == ["--question", "--file-selection"]
-    assert "cancelled by user" in result.output
+    confirmed = _run(tmp_path, "--confirm", root=cabinet)
+    assert confirmed.returncode == 0, confirmed.output
+    assert target.is_file() and not pdf.exists()
+    assert "filed: 1" in confirmed.output
 
 
 def test_suggestCommandChangesNothing(cabinet, inboxPdf, tmp_path, fakeBin) -> None:
     pdf = inboxPdf("renewal.pdf", MBNA_RENEWAL_LINES)
 
-    result, dialogs = _run(cabinet, tmp_path, fakeBin, "suggest", str(pdf))
+    result = _run(tmp_path, "suggest", str(pdf), root=cabinet)
 
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.output
     assert "file as  Insurance/MBNA/2025-10-20 - Insurance, MBNA - Renewal.pdf" in result.output
     assert "or       Finance/MBNA" in result.output
-    assert pdf.exists() and dialogs == []
+    assert pdf.exists()
 
 
 def test_indexShowListsWhatWasLearned(cabinet, tmp_path, fakeBin) -> None:
@@ -134,10 +97,10 @@ def test_indexShowListsWhatWasLearned(cabinet, tmp_path, fakeBin) -> None:
         ' "conflicts": [{"identifier": "X123456", "folders": ["A", "B"]}]}'
     )
 
-    result, _ = _run(cabinet, tmp_path, fakeBin, "index", "show")
+    result = _run(tmp_path, "index", "show", root=cabinet)
 
-    assert result.returncode == 0, result.stderr
-    assert "AV1111111" in result.output and "name     Finance/Aviva/AV1111111" in result.output
+    assert result.returncode == 0, result.output
+    assert "name     Finance/Aviva/AV1111111" in result.output
     assert "learned  Insurance/MBNA" in result.output
     assert "X123456: A, B" in result.output
     assert "label: Aviva, AV1111111" in result.output
@@ -145,15 +108,15 @@ def test_indexShowListsWhatWasLearned(cabinet, tmp_path, fakeBin) -> None:
 
 
 def test_missingCabinetsFails(tmp_path, fakeBin) -> None:
-    result, _ = _run(tmp_path / "missing", tmp_path, fakeBin)
+    result = _run(tmp_path, root=tmp_path / "missing")
 
     assert result.returncode == 1
-    assert "Cabinets folder not found" in result.output + result.stderr
+    assert "Cabinets folder not found" in result.output
 
 
-def test_versionAndHelp(tmp_path, fakeBin, cabinet) -> None:
-    version, _ = _run(cabinet, tmp_path, fakeBin, "--version")
-    assert version.returncode == 0 and version.stdout.startswith("pdfFiler ")
+def test_version(tmp_path, fakeBin) -> None:
+    result = _run(tmp_path, "--version")
+    assert result.returncode == 0 and result.stdout.startswith("pdfFiler ")
 
 
 def test_systemTmpdirIsLeftAlone(cabinet, inboxPdf, tmp_path, fakeBin, monkeypatch) -> None:
@@ -162,10 +125,10 @@ def test_systemTmpdirIsLeftAlone(cabinet, inboxPdf, tmp_path, fakeBin, monkeypat
     systemTmp.mkdir()
     (systemTmp / "keep.txt").write_text("keep")
     monkeypatch.setenv("TMPDIR", str(systemTmp))
-    inboxPdf("renewal.pdf", MBNA_RENEWAL_LINES)
+    _autoRule(tmp_path)
+    inboxPdf("Statement 950246 60153699.PDF", _DP_LINES)
 
-    result, _ = _run(cabinet, tmp_path, fakeBin, "-y")
+    result = _run(tmp_path, "-y", root=cabinet)
 
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.output
     assert (systemTmp / "keep.txt").read_text() == "keep"
-    assert not [path for path in systemTmp.iterdir() if path.name.startswith("pdfFiler-")]
