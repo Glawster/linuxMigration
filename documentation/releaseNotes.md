@@ -5,6 +5,19 @@ Releases of this repository, newest first. The process is in
 
 ## Unreleased
 
+- `pdfFiler.sh`: works again, and previews unless `--confirm` is given.
+  It looks in `~/Documents/myCabinets` (the old path no longer existed) and
+  reads the date from the PDF again (it read an unset variable). It
+  understands written-out months such as `30 October 2026`, prefers labelled
+  dates, and rejects dates that do not exist. It never overwrites a different
+  file, sends a PDF already filed to the Trash, and picks up `.PDF` files. A
+  declined PDF is no longer offered over and over. A year folder takes its
+  parent's name (`... - Bank Statements - Statement.pdf`), and the preview
+  window always closes. It no longer reuses the `TMPDIR` variable, which
+  broke temporary files after the first PDF. It uses organiseMyProjects
+  logging without an active conda environment and adds `--root`, `--inbox`
+  and `--version`. This change is `1.4a6`
+  ([guide](pdfFiler.md)).
 - `fixDirectPaymentsStatements.sh`: files the Direct Payments timesheet
   spreadsheets into `myCabinets/Benefits/Statements` again; `1.4a4`'s
   follow-up commit had pointed it at `Benefits/Bank Statements`, the PDF

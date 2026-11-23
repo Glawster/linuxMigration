@@ -12,6 +12,7 @@ and launchers are on `PATH`.
   - [Hardware snapshots and temperature history (hardwareSnapshot)](linuxBootstrap/documentation/hardwareSnapshot.md)
 - [runpodTools: RunPod bootstrap](runpodTools/runpodToolsIndex.md)
 - [Filing Direct Payments statements (fileDpStatements)](documentation/fileDpStatements.md)
+- [Filing inbox PDFs (pdfFiler)](documentation/pdfFiler.md)
 - [Repository-specific instructions](.github/additional-instructions.md)
 - [Development guidelines](.github/agent-instructions.md)
 
@@ -50,6 +51,7 @@ Project records:
 | `linuxBootstrap/bootstrap.sh` | Preview or apply a machine profile |
 | `omv` | Launch organiseMyVideo |
 | `fileDpStatements` | File Direct Payments bank statements from Downloads into the Direct Payments cabinet by statement date ([guide](documentation/fileDpStatements.md)) |
+| `pdfFiler.sh` | File the PDFs in the myCabinets Inbox one at a time, with a preview and dated names ([guide](documentation/pdfFiler.md)) |
 
 Tools preview by default and act only with `-y`/`--confirm`.
 
