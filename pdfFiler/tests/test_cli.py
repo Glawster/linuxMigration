@@ -53,11 +53,11 @@ _DP_LINES = [
 ]
 
 
-def test_emptyInboxPreviewNeedsNoWindow(cabinet, tmp_path, fakeBin) -> None:
+def test_emptyInboxNeedsNoWindow(cabinet, tmp_path, fakeBin) -> None:
     result = _run(tmp_path, root=cabinet)
 
     assert result.returncode == 0, result.output
-    assert "pdfs in inbox: 0" in result.output and "preview" in result.output
+    assert "pdfs in inbox: 0" in result.output and "mode: confirm" in result.output
 
 
 def test_autoRuleFilesThroughTheLauncher(cabinet, inboxPdf, tmp_path, fakeBin) -> None:
@@ -67,14 +67,22 @@ def test_autoRuleFilesThroughTheLauncher(cabinet, inboxPdf, tmp_path, fakeBin) -
         cabinet / "Benefits/Bank Statements/2026/2026-10-30 - Direct Payments - Statement - Oct.pdf"
     )
 
-    preview = _run(tmp_path, root=cabinet)
-    assert preview.returncode == 0, preview.output
-    assert pdf.exists() and not target.exists()
-
-    confirmed = _run(tmp_path, "--confirm", root=cabinet)
-    assert confirmed.returncode == 0, confirmed.output
+    result = _run(tmp_path, root=cabinet)
+    assert result.returncode == 0, result.output
     assert target.is_file() and not pdf.exists()
-    assert "filed: 1" in confirmed.output
+    assert "filed: 1" in result.output
+
+
+def test_confirmFlagStillFiles(cabinet, inboxPdf, tmp_path, fakeBin) -> None:
+    _autoRule(tmp_path)
+    pdf = inboxPdf("Statement 950246 60153699.PDF", _DP_LINES)
+    target = (
+        cabinet / "Benefits/Bank Statements/2026/2026-10-30 - Direct Payments - Statement - Oct.pdf"
+    )
+
+    result = _run(tmp_path, "--confirm", root=cabinet)
+    assert result.returncode == 0, result.output
+    assert target.is_file() and not pdf.exists()
 
 
 def test_suggestCommandChangesNothing(cabinet, inboxPdf, tmp_path, fakeBin) -> None:

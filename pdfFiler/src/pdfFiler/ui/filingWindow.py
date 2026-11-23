@@ -44,18 +44,16 @@ from pdfFiler.form import (
 from pdfFiler.ui.widgets.pageView import PageView
 
 _STYLES = Path(__file__).resolve().parent / "styles" / "filingWindow.qss"
-_PREVIEW_BANNER = "Preview: nothing will move. Run with --confirm to file."
 
 
 class FilingWindow(QMainWindow):
     """File, Skip or Stop for each PDF, with every field editable."""
 
-    def __init__(self, index: CabinetIndex, today: dt.date, dryRun: bool) -> None:
+    def __init__(self, index: CabinetIndex, today: dt.date) -> None:
         self.app = QApplication.instance() or QApplication(sys.argv[:1])
         super().__init__()
         self.index = index
         self.today = today
-        self.dryRun = dryRun
         self._state: FormState | None = None
         self._check: FormCheck | None = None
         self._decision: Decision | None = None
@@ -112,8 +110,6 @@ class FilingWindow(QMainWindow):
         self.titleLabel = QLabel(objectName="titleLabel")
         header.addWidget(self.titleLabel)
         header.addStretch(1)
-        if self.dryRun:
-            header.addWidget(QLabel(_PREVIEW_BANNER, objectName="previewBanner"))
         return header
 
     def _createContent(self) -> QWidget:

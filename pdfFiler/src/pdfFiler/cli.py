@@ -4,8 +4,8 @@
   pdfFiler suggest PDF... [--root DIR]
   pdfFiler index show [--root DIR]
 
-With no subcommand it runs `inbox file`, so `pdfFiler.sh --confirm` keeps
-working as in 1.4a6.
+With no subcommand it runs `inbox file`. `--confirm` is the default:
+files move, and Skip in the window leaves a PDF in the inbox.
 """
 
 from __future__ import annotations
@@ -49,11 +49,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     setApplication(APPLICATION)
-    # Only `inbox file` changes anything, so only it runs as a preview.
-    dryRun = args.handler is inboxFileCommand and not args.confirm
-    logger = getLogger(includeConsole=True, dryRun=dryRun)
+    # Filing moves files. --confirm is the default, so the logger never
+    # marks actions as a preview. suggest and index show still change nothing.
+    logger = getLogger(includeConsole=True, dryRun=False)
     try:
-        return args.handler(args, logger, dryRun)
+        return args.handler(args, logger)
     except ValueError as error:
         logger.error(str(error))
         return 1
@@ -65,8 +65,8 @@ def parserBuild() -> argparse.ArgumentParser:
         prog="pdfFiler",
         description=(
             "File scanned PDFs from the myCabinets Inbox, suggesting the folder, "
-            "name, type and date from what is already filed. Previews unless "
-            "--confirm is given; never overwrites or deletes."
+            "name, type and date from what is already filed. Files are moved; "
+            "--confirm is accepted and is the default. Never overwrites."
         ),
     )
     parser.add_argument("--version", action="store_true", help="show the version")
@@ -80,7 +80,11 @@ def parserBuild() -> argparse.ArgumentParser:
         "--inbox", type=Path, help="folder to file from (default <root>/Inbox)"
     )
     inboxFileParser.add_argument(
-        "-y", "--confirm", action="store_true", help="move the files (default is a preview)"
+        "-y",
+        "--confirm",
+        action="store_true",
+        default=True,
+        help="move the files (the default; accepted so existing commands keep working)",
     )
     inboxFileParser.set_defaults(handler=inboxFileCommand)
 
@@ -114,7 +118,7 @@ def repoVersionRead(repoRoot: Path | None = None) -> str:
 ## commands
 
 
-def indexShowCommand(args: argparse.Namespace, logger, dryRun: bool) -> int:
+def indexShowCommand(args: argparse.Namespace, logger) -> int:
     """Print what the index and learned.json hold (criterion 12)."""
     root = _rootValidate(args.root)
     _header(logger, "showing the index", root, args)
@@ -148,7 +152,7 @@ def indexShowCommand(args: argparse.Namespace, logger, dryRun: bool) -> int:
     return 0
 
 
-def inboxFileCommand(args: argparse.Namespace, logger, dryRun: bool) -> int:
+def inboxFileCommand(args: argparse.Namespace, logger) -> int:
     """File the inbox through the filing window (requirement 005)."""
     from pdfFiler.inbox import Options, inboxFile, inboxIndex
 
@@ -164,17 +168,16 @@ def inboxFileCommand(args: argparse.Namespace, logger, dryRun: bool) -> int:
 
     _header(logger, "filing inbox pdfs", root, args)
     logger.value("inbox", inbox.resolve())
-    logger.value("mode", "preview (use --confirm to move files)" if dryRun else "confirm")
+    logger.value("mode", "confirm")
     line()
     options = Options(
         root=root,
         inbox=inbox.resolve(),
-        dryRun=dryRun,
         configPath=args.config,
         learnedPath=args.learned,
     )
     index = inboxIndex(options)
-    window = _LazyWindow(index, options.today, dryRun)
+    window = _LazyWindow(index, options.today)
     try:
         counts = inboxFile(options, logger, window, index)
         line()
@@ -199,8 +202,8 @@ class _LazyWindow:
     """Opens the filing window only when a PDF needs it, so an empty inbox
     or auto-rule filing needs no display."""
 
-    def __init__(self, index, today: dt.date, dryRun: bool) -> None:
-        self._arguments = (index, today, dryRun)
+    def __init__(self, index, today: dt.date) -> None:
+        self._arguments = (index, today)
         self._window = None
 
     @property
@@ -226,7 +229,7 @@ class _LazyWindow:
         return self._window
 
 
-def suggestCommand(args: argparse.Namespace, logger, dryRun: bool) -> int:
+def suggestCommand(args: argparse.Namespace, logger) -> int:
     """Print the suggestion for each PDF; nothing moves or is learned."""
     root = _rootValidate(args.root)
     _header(logger, "suggesting", root, args)

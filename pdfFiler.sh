@@ -2,6 +2,7 @@
 # pdfFiler.sh: launcher for the pdfFiler Python project (ADR 011).
 #
 #   pdfFiler.sh [-y|--confirm] [--root DIR] [--inbox DIR]   file the inbox
+#                                                            (--confirm is the default)
 #   pdfFiler.sh suggest PDF...                              show suggestions
 #   pdfFiler.sh index show                                  what it has learned
 #   pdfFiler.sh --help

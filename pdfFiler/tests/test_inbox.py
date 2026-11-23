@@ -54,19 +54,18 @@ class FakeLogger:
         return log
 
 
-def _options(cabinet: Path, tmp_path: Path, confirm: bool = True, config=None) -> Options:
+def _options(cabinet: Path, tmp_path: Path, config=None) -> Options:
     return Options(
         root=cabinet,
         inbox=cabinet / "Inbox",
-        dryRun=not confirm,
         configPath=config or tmp_path / "no-config.json",
         learnedPath=tmp_path / "learned.json",
         today=TODAY,
     )
 
 
-def _run(cabinet, tmp_path, *steps, confirm=True, config=None):
-    options = _options(cabinet, tmp_path, confirm, config)
+def _run(cabinet, tmp_path, *steps, config=None):
+    options = _options(cabinet, tmp_path, config)
     index = inboxIndex(options)
     window = FakeWindow(index, *steps)
     logger = FakeLogger()
@@ -157,31 +156,18 @@ _DP_LINES = [
 ]
 
 
-def test_autoRuleFilesWithoutWindowOnlyWithConfirm(cabinet, inboxPdf, tmp_path, fakeBin) -> None:
-    # criterion 8
+def test_autoRuleFilesWithoutTheWindow(cabinet, inboxPdf, tmp_path, fakeBin) -> None:
+    # criterion 8: an auto rule files with no window. --confirm is the default.
     pdf = inboxPdf("Statement 950246 60153699.PDF", _DP_LINES)
     target = (
         cabinet / "Benefits/Bank Statements/2026/2026-10-30 - Direct Payments - Statement - Oct.pdf"
     )
 
-    _, preview, _ = _run(cabinet, tmp_path, confirm=False, config=_autoConfig(tmp_path))
-    assert pdf.exists() and not target.exists() and preview.shown == []
-
-    counts, confirmed, _ = _run(cabinet, tmp_path, config=_autoConfig(tmp_path))
-    assert counts.filed == 1 and target.is_file() and confirmed.shown == []
+    counts, window, _ = _run(cabinet, tmp_path, config=_autoConfig(tmp_path))
+    assert counts.filed == 1 and target.is_file() and not pdf.exists() and window.shown == []
 
 
 ## safety (criterion 10)
-
-
-def test_previewMovesAndLearnsNothing(cabinet, inboxPdf, tmp_path, fakeBin) -> None:
-    pdf = inboxPdf("renewal.pdf", MBNA_RENEWAL_LINES)
-
-    counts, _, logger = _run(cabinet, tmp_path, FILE, confirm=False)
-
-    assert pdf.exists() and counts.filed == 1
-    assert not (tmp_path / "learned.json").exists()
-    assert any(line.startswith("action: move renewal.pdf") for line in logger.lines)
 
 
 def test_confirmLearnsNumbers(cabinet, inboxPdf, tmp_path, fakeBin) -> None:

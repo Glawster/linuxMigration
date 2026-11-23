@@ -53,8 +53,9 @@ Project records:
 | `omv` | Launch organiseMyVideo |
 | `fileDpStatements` | File Direct Payments bank statements from Downloads into the Direct Payments cabinet by statement date ([guide](documentation/fileDpStatements.md)) |
 | `pdfFiler.sh` | File the scanned PDFs in the myCabinets Inbox, suggesting the folder, name, type and date from what is already filed ([guide](documentation/pdfFiler.md)) |
+| `scanToInbox.sh` | Duplex-scan with NAPS2 into the myCabinets Inbox ([guide](documentation/pdfFiler.md)) |
 
-Tools preview by default and act only with `-y`/`--confirm`.
+Most tools preview by default and act only with `-y`/`--confirm`. `pdfFiler.sh` files by default; `--confirm` is accepted and means the same thing. **Skip** in the filing window leaves a PDF in the inbox.
 
 ## Versions
 

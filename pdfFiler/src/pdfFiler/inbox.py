@@ -35,7 +35,6 @@ class Options:
 
     root: Path
     inbox: Path
-    dryRun: bool
     configPath: Path
     learnedPath: Path
     today: dt.date = field(default_factory=dt.date.today)
@@ -104,10 +103,9 @@ class _InboxRun:
                 suggestion.reasonText(),
             )
 
-        # A sure rule files without the window, and only with --confirm.
+        # A sure rule files without the window. Skip is not offered.
         if suggestion and suggestion.rule and suggestion.rule.auto and suggestion.date:
-            if self.options.dryRun:
-                self.logger.info("auto rule %s: preview only", suggestion.rule.name)
+            self.logger.info("auto rule %s", suggestion.rule.name)
             self._place(pdf, self._destination(suggestion), text, quiet=True)
             return True
 
@@ -131,8 +129,7 @@ class _InboxRun:
         check = filingCheck(pdf, destination)
         if check.outcome == "duplicate":
             self.logger.action(f"trash {pdf.name}: already filed as {check.existing.name}")
-            if not self.options.dryRun:
-                filingTrash(pdf)
+            filingTrash(pdf)
             self.counts.duplicates += 1
             return
         if check.outcome == "conflict":
@@ -149,9 +146,6 @@ class _InboxRun:
             self.counts.conflicts += 1
             return
         self.logger.action(f"move {pdf.name} → {folder.as_posix()}/{destination.name}")
-        if self.options.dryRun:
-            self.counts.filed += 1
-            return
         try:
             filingMove(pdf, destination)
         except FilingError as error:

@@ -25,7 +25,7 @@ from pdfFiler.ui.filingWindow import FilingWindow  # noqa: E402
 
 @pytest.fixture
 def window(cabinet: Path):
-    filingWindow = FilingWindow(cabinetIndexBuild(cabinet), TODAY, dryRun=True)
+    filingWindow = FilingWindow(cabinetIndexBuild(cabinet), TODAY)
     # Watchdog: a test that never presses a button ends instead of hanging,
     # and fails.
     fired = []

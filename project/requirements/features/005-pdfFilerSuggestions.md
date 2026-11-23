@@ -117,11 +117,10 @@ three dialogs, and are named consistently with their neighbours.
   type, date and label, all filled in and editable. The full filed name is
   shown on one line and updates as the fields change. It also shows the
   reason ("matched AV2550339"), with **File**, **Skip** and **Stop**.
-- **Automatic filing:** with `--confirm`, a PDF matched by a rule marked
-  `auto` is filed without dialogs. Without `--confirm` nothing moves, as
-  today.
-- All `1.4a6` safety behaviour is kept: preview by default, never overwrite,
-  already-filed content to the Trash, decline moves on.
+- **Automatic filing:** a PDF matched by a rule marked `auto` is filed
+  without the window. `-y`/`--confirm` is accepted and is the default:
+  files move, duplicates go to the Trash, and learned numbers are saved.
+  **Skip** leaves a PDF in the inbox. Nothing is overwritten.
 - A Python implementation with GUI-free core logic, CLI subcommands such as
   `pdfFiler inbox file` and `pdfFiler index show`, and organiseMyProjects
   logging.
@@ -165,9 +164,9 @@ three dialogs, and are named consistently with their neighbours.
    line, and the reason. **File** files it. Changing any field updates the
    destination at once, and choosing another folder recalculates the label,
    type and date that were not typed in.
-8. Given a rule marked `auto` and `--confirm`, when the inbox is filed, then
-   the matching PDF is filed with no dialog. Without `--confirm`, nothing
-   moves.
+8. Given a rule marked `auto`, when the inbox is filed, then the matching
+   PDF is filed with no dialog. `-y`/`--confirm` is accepted and is the
+   default, so the same filing happens when the flag is omitted.
 9. Given a PDF with no suggestion, when it is offered, then the same window
    is shown with the folder empty, and **File** is disabled until a folder
    inside the cabinets is chosen.
@@ -187,8 +186,8 @@ three dialogs, and are named consistently with their neighbours.
 14. Given a PDF filed into `Insurance/MBNA` whose text contains
     "Policy Number: MBNAUKM4HAP604983305", when the next inbox PDF contains
     `MBNAUKM4HAP604983305`, then `Insurance/MBNA` is suggested first with the
-    reason naming that number. Without `--confirm`, nothing is saved to
-    `learned.json`.
+    reason naming that number. The number is saved when the PDF is filed.
+    **Skip** does not save it.
 15. Given a `Statement` whose text contains "for 23/02/2026" and
     "to 22/05/2026" in either order, on separate lines, when the date is
     chosen, then it is `2026-05-22`.
@@ -257,3 +256,5 @@ three dialogs, and are named consistently with their neighbours.
   by one filing window (ADR 013) at the user's request, with the filed name on
   one line. Criteria 7 and 9 were revised. The window was then rebuilt in Qt
   (PySide6) instead of tkinter, at the user's preference.
+- 2026-11-23: `--confirm` is the default. The filing window moves files;
+  **Skip** leaves a PDF in the inbox. Criteria 8 and 14 were revised.
