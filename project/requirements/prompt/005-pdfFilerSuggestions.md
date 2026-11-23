@@ -21,7 +21,9 @@
 - Keep every `1.4a6` safety guarantee: preview by default (`-y`/`--confirm`
   to act), never overwrite, already-filed content to the Trash, move rather
   than delete.
-- Build the index from names only; never open filed PDFs.
+- Build the index from names only; never open filed PDFs. Reference numbers
+  learned from confirmed filings go to `~/.config/pdfFiler/learned.json` and
+  are saved only with `--confirm`.
 - Core logic (index, matching, naming, type, dates, rules) must not import the
   GUI layer and must be testable without it.
 - Use organiseMyProjects logging (`setApplication`, `runStart`, `line`), with
@@ -34,7 +36,8 @@
 - Implementation: a `pdfFiler/` project folder, as agreed in the ADR,
   following `documentation/repositoryLayout.md`.
 - Tests: that project's `tests/`, including golden tests for the Aviva
-  example and the Direct Payments rule.
+  example, the MBNA renewal (same-named folders and a learned policy number)
+  and the Direct Payments rule.
 - Documentation: `documentation/pdfFiler.md`, README entries and release
   notes.
 
@@ -49,5 +52,5 @@ shellcheck pdfFiler.sh       # while the Bash version remains
 
 - Test results and the golden-test outputs.
 - `pdfFiler index show` output and its timing against the real cabinet.
-- The suggested path for the real Aviva letter in the inbox, previewed with
-  nothing moved.
+- The suggested paths for the real Aviva and MBNA letters in the inbox,
+  previewed with nothing moved.

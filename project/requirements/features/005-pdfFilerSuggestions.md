@@ -37,6 +37,17 @@ three dialogs, and are named consistently with their neighbours.
   number on page 1 decides the folder, year subfolder, name and date.
 - OCR text contains errors ("Piease"). Long identifiers such as `AV2550339`
   usually survive and are the strongest evidence.
+- A second scan the same day, an MBNA Home Emergency renewal (policy
+  `MBNAUKM4HAP604983305`, letter dated `20/10/2025`), shows three gaps:
+  - Its policy number appears in no name, so there is no identifier match.
+  - "MBNA" names two folders: `Finance/MBNA` (39 credit-card files) and
+    `Insurance/MBNA` (one file, `2025-10-29 - Insurance, MBNA - Policy
+    Documents.pdf`). Counting files would pick the wrong one; the words
+    "insurance" and "policy" in the letter point to `Insurance/MBNA`.
+  - The right type, `Renewal`, has never been used in `Insurance/MBNA`.
+
+  `pdfFiler.sh` already reads its date correctly as the letter date,
+  `2025-10-20`, not the renewal date.
 
 ## Scope
 
@@ -52,13 +63,27 @@ three dialogs, and are named consistently with their neighbours.
     user config pattern.
 
   Each suggestion keeps the reason that produced it.
+- **Choosing between folders with the same name:** when folders score
+  equally (`Finance/MBNA` and `Insurance/MBNA`), the words of the rest of each
+  folder's path found in the text decide ("insurance", plus the
+  folder-specific keywords "policy", "cover" and "premium" for
+  `Insurance`). The runner-up is kept and offered under **Change…**.
+- **Learning from confirmations:** when a PDF is filed, reference numbers
+  found next to labels such as "Policy Number", "Account number", "Plan" or
+  "Reference" in *that* PDF's text are saved against the chosen folder in
+  `~/.config/pdfFiler/learned.json`. They then count as identifiers, so the
+  next letter about the same policy matches strongly. A number already saved
+  against a different folder is not overwritten; the conflict is logged and
+  shown by `pdfFiler index show`.
 - **Naming:** the label is the folder's most used label (`Aviva, AV2550339`),
   falling back to the folder name. A year folder uses its parent, as in
   `1.4a6`.
-- **Type:** keyword evidence in the text (statement, tax, renewal, policy
-  schedule, certificate of insurance, P60, payslip, invoice, receipt), limited
-  to the types already used in the chosen folder. Otherwise the folder's most
-  used type.
+- **Type:** chosen from the standard type list (the `1.4a6` list plus any
+  type used in the cabinet's names) by keyword evidence in the text
+  (statement, tax, renewal, policy schedule, certificate of insurance, P60,
+  payslip, invoice, receipt). It is not limited to the types already used in
+  the chosen folder. The folder's own types settle ties. With no evidence,
+  the folder's most used type is used.
 - **Date strategy per type**, settable by rules:
   - the `1.4a6` reading for most types;
   - for `Tax`, the end of the UK tax year (5 April) that the document covers;
@@ -81,7 +106,8 @@ three dialogs, and are named consistently with their neighbours.
 
 ## Out of scope
 
-- Reading the content of already-filed PDFs to learn from (names only).
+- Reading the content of already-filed PDFs to learn from (names only). The
+  text of the PDF being filed is read at filing time, as today.
 - Fuzzy matching of OCR-damaged identifiers.
 - Machine learning or any online service. Everything runs locally.
 - Renaming existing inconsistently named files (a candidate for a separate
@@ -103,8 +129,10 @@ three dialogs, and are named consistently with their neighbours.
 4. Given a folder whose most used label is `Aviva, AV2550339`, when a PDF is
    filed there, then its name uses that label, not the folder name.
 5. Given text containing "tax" evidence and a folder whose types include
-   `Tax`, when the type is chosen, then it is `Tax`. Given no keyword
-   evidence, it is the folder's most used type.
+   `Tax`, when the type is chosen, then it is `Tax`. Given text containing
+   "renewal" evidence and a folder that has only used `Policy Documents`, then
+   it is `Renewal`. Given no keyword evidence, it is the folder's most used
+   type.
 6. Given a `Tax` document covering 6 April 2025 to 5 April 2026, when the date
    is chosen, then it is `2026-04-05`.
 7. Given a suggestion, when the PDF is offered, then one dialog shows the path
@@ -121,8 +149,18 @@ three dialogs, and are named consistently with their neighbours.
 11. Given the current cabinet (about 4,600 filed PDFs), when the index is
     built, then it takes under two seconds and opens no PDF.
 12. Given `pdfFiler index show`, when run, then it lists the learned
-    identifiers with their folders, and each folder's labels and types, for
-    review.
+    identifiers with their folders (and whether each came from a name or a
+    confirmation), each folder's labels and types, and any conflicting saved
+    numbers, for review.
+13. Given folders `Finance/MBNA` (39 files) and `Insurance/MBNA` (one file),
+    and an inbox PDF containing "MBNA", "insurance" and "policy", when
+    suggestions are made, then `Insurance/MBNA` is suggested first with
+    `Finance/MBNA` as the runner-up under **Change…**.
+14. Given a PDF filed into `Insurance/MBNA` whose text contains
+    "Policy Number: MBNAUKM4HAP604983305", when the next inbox PDF contains
+    `MBNAUKM4HAP604983305`, then `Insurance/MBNA` is suggested first with the
+    reason naming that number. Without `--confirm`, nothing is saved to
+    `learned.json`.
 
 ## Dependencies and decisions
 
@@ -142,6 +180,12 @@ three dialogs, and are named consistently with their neighbours.
   tax letter (no real personal data), filed against a temporary cabinet
   shaped like `Finance/Aviva/AV2550339`. Expected result:
   `Finance/Aviva/AV2550339/2026-04-05 - Aviva, AV2550339 - Tax.pdf`.
+- A golden test: a generated PDF reproducing the relevant text of the MBNA
+  Home Emergency renewal, against a temporary cabinet with both
+  `Finance/MBNA` and `Insurance/MBNA`. Expected result:
+  `Insurance/MBNA/2025-10-20 - Insurance, MBNA - Renewal.pdf`, with
+  `Finance/MBNA` as runner-up. Then a second PDF with the same policy number
+  matches by the learned number.
 - A golden test for the Direct Payments rule, matching `fileDpStatements`.
 - A production-path test of the CLI with zenity, `gio` and the preview as
   doubles, covering acceptance criteria 7 to 10.
@@ -154,3 +198,7 @@ three dialogs, and are named consistently with their neighbours.
 
 - 2026-11-23: created from the review of `pdfFiler.sh` (Stage 2) and the
   Aviva letter scanned that day; prototype results recorded in Context.
+- 2026-11-23: refined before delivery from a second scan (MBNA Home
+  Emergency renewal). Added choosing between folders with the same name,
+  types beyond those already in the folder, and learning reference numbers
+  from confirmed filings (criteria 5, 12, 13 and 14).
