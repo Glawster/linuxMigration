@@ -36,8 +36,9 @@
 - Implementation: a `pdfFiler/` project folder, as agreed in the ADR,
   following `documentation/repositoryLayout.md`.
 - Tests: that project's `tests/`, including golden tests for the Aviva
-  example, the MBNA renewal (same-named folders and a learned policy number)
-  and the Direct Payments rule.
+  example, the MBNA renewal (same-named folders and a learned policy number),
+  the Aviva ISA statement (period-end date, future and embedded dates) and
+  the Direct Payments rule.
 - Documentation: `documentation/pdfFiler.md`, README entries and release
   notes.
 
@@ -52,5 +53,5 @@ shellcheck pdfFiler.sh       # while the Bash version remains
 
 - Test results and the golden-test outputs.
 - `pdfFiler index show` output and its timing against the real cabinet.
-- The suggested paths for the real Aviva and MBNA letters in the inbox,
-  previewed with nothing moved.
+- The suggested paths for the three real scans in the inbox (Aviva tax
+  letter, MBNA renewal, Aviva ISA statement), previewed with nothing moved.

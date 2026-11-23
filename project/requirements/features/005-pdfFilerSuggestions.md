@@ -48,6 +48,19 @@ three dialogs, and are named consistently with their neighbours.
 
   `pdfFiler.sh` already reads its date correctly as the letter date,
   `2025-10-20`, not the renewal date.
+- A third scan, an eight-page Aviva ISA statement for account `AV2585522`
+  ("Statement for 23/02/2026 to 22/05/2026"), matches its folder by
+  identifier, including the `AV2585522-001` sub-account references. It shows
+  two date gaps:
+  - Filed statements are dated at the end of their period (`2025-05-22`,
+    `2024-02-22`). `pdfFiler.sh` reads `2026-05-22` only because OCR happened
+    to put "to 22/05/2026" before "for 23/02/2026".
+  - OCR misread one date as `23/02/2028`, a valid calendar date in the
+    future.
+
+  Its document reference `PDOEA02-20260524-21923-000145` embeds `20260524`
+  and must not be taken as the date. Pages 7 and 8 are blank backs of duplex
+  sheets.
 
 ## Scope
 
@@ -87,7 +100,14 @@ three dialogs, and are named consistently with their neighbours.
 - **Date strategy per type**, settable by rules:
   - the `1.4a6` reading for most types;
   - for `Tax`, the end of the UK tax year (5 April) that the document covers;
+  - for `Statement`, the end of the stated period: the date after "to" in
+    "for/from X to Y" or "Period … to …", found even when OCR splits or
+    reorders the lines. Falls back to the `1.4a6` reading;
   - for a rule, a named strategy such as `standaloneLine` (bank statements).
+- **Future dates rejected:** for every strategy, a candidate date later than
+  the day the PDF is filed is never used as the document date. Dates inside
+  longer references (such as `PDOEA02-20260524-…`) are never read from the
+  text; the file-name fallback is unchanged.
 - **Rules:** each has text to match, a target folder (optionally with a
   `{year}` subfolder), a label, a type, a date strategy and an optional
   `auto` flag. The Direct Payments statements become a rule, so
@@ -113,6 +133,9 @@ three dialogs, and are named consistently with their neighbours.
 - Renaming existing inconsistently named files (a candidate for a separate
   requirement).
 - The scanner's hardware button, and gscan2pdf configuration.
+- Changing the PDF itself, including removing blank pages. Blank duplex backs
+  are removed at scan time (gscan2pdf's unpaper clean-up, or `ADF Front` for
+  one-sided post).
 - Committing real personal documents to the repository as test data.
 
 ## Acceptance criteria
@@ -161,6 +184,15 @@ three dialogs, and are named consistently with their neighbours.
     `MBNAUKM4HAP604983305`, then `Insurance/MBNA` is suggested first with the
     reason naming that number. Without `--confirm`, nothing is saved to
     `learned.json`.
+15. Given a `Statement` whose text contains "for 23/02/2026" and
+    "to 22/05/2026" in either order, on separate lines, when the date is
+    chosen, then it is `2026-05-22`.
+16. Given text whose only plausible date is in the future (for example OCR's
+    `23/02/2028` on 2026-11-23), when the date is chosen, then that date is
+    not used: an earlier valid date in the text is used, or the file name, or
+    the user is asked.
+17. Given the reference `PDOEA02-20260524-21923-000145` in the text, when the
+    date is chosen, then `2026-05-24` is not taken from it.
 
 ## Dependencies and decisions
 
@@ -186,6 +218,11 @@ three dialogs, and are named consistently with their neighbours.
   `Insurance/MBNA/2025-10-20 - Insurance, MBNA - Renewal.pdf`, with
   `Finance/MBNA` as runner-up. Then a second PDF with the same policy number
   matches by the learned number.
+- A golden test: a generated PDF reproducing the relevant text of the Aviva
+  ISA statement, with the period lines in reversed order, an OCR-damaged
+  future date, the `PDOEA02-20260524-…` reference and `AV2585522-001`
+  references. Expected result:
+  `Finance/Aviva/AV2585522/2026-05-22 - Aviva, AV2585522 - Statement.pdf`.
 - A golden test for the Direct Payments rule, matching `fileDpStatements`.
 - A production-path test of the CLI with zenity, `gio` and the preview as
   doubles, covering acceptance criteria 7 to 10.
@@ -202,3 +239,7 @@ three dialogs, and are named consistently with their neighbours.
   Emergency renewal). Added choosing between folders with the same name,
   types beyond those already in the folder, and learning reference numbers
   from confirmed filings (criteria 5, 12, 13 and 14).
+- 2026-11-23: refined before delivery from a third scan (Aviva ISA
+  statement). Added the `Statement` period-end date, rejection of future
+  dates and of dates inside references, and put blank-page removal out of
+  scope (criteria 15, 16 and 17).
