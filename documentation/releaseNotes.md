@@ -6,7 +6,7 @@ Releases of this repository, newest first. The process is in
 ## Unreleased
 
 - `pdfFiler` (requirement 005, `1.4a7`): suggests where each scanned PDF
-  belongs and shows it in one filing window (ADR 013): page 1 beside the
+  belongs and shows it in one Qt filing window (ADR 013): page 1 beside the
   folder, type, date and label, all filled in and editable, with the filed
   name on one line and **File / Skip / Stop**. It learns
   from the cabinet's names only (identifiers such as `AV2550339`, each

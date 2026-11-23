@@ -18,7 +18,7 @@ CORE = (
     "suggest",
     "text",
 )
-GUI = {"tkinter", "pdfFiler.ui", "pdfFiler.ui.filingWindow", "pdfFiler.ui.pageView"}
+GUI_PREFIXES = ("PySide6", "tkinter", "pdfFiler.ui")
 
 
 def test_coreModulesDoNotImportGui() -> None:
@@ -34,4 +34,5 @@ def test_coreModulesDoNotImportGui() -> None:
             if isinstance(node, ast.Import)
             for alias in node.names
         }
-        assert not imported & GUI, f"{name}.py imports {imported & GUI}"
+        gui = {module for module in imported if module.startswith(GUI_PREFIXES)}
+        assert not gui, f"{name}.py imports {gui}"

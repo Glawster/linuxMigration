@@ -1,0 +1,35 @@
+/* pdfFiler filing window. Colours on top of the desktop's own Qt theme. */
+
+QLabel#titleLabel {
+    font-size: 13pt;
+    font-weight: bold;
+}
+
+QLabel#previewBanner {
+    background: #fff3c4;
+    color: #5c4400;
+    border-radius: 4px;
+    padding: 4px 10px;
+}
+
+QLineEdit#fileAs {
+    font-weight: bold;
+    padding: 4px;
+}
+
+QLabel#status[level="problem"] {
+    color: #b00020;
+}
+
+QLabel#status[level="duplicate"] {
+    color: #8a5a00;
+}
+
+QLabel#keysHint {
+    font-size: 9pt;
+}
+
+QPushButton#fileButton {
+    font-weight: bold;
+    min-width: 9em;
+}

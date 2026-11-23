@@ -9,6 +9,7 @@ description = "File scanned PDFs from the myCabinets Inbox, suggesting folder, n
 requires-python = ">=3.10"
 dependencies = [
     "organiseMyProjects @ git+https://github.com/Glawster/organiseMyProjects.git@0.10",
+    "PySide6>=6.5",
 ]
 
 [project.scripts]
@@ -16,6 +17,9 @@ pdfFiler = "pdfFiler.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+pdfFiler = ["ui/styles/*.qss"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "../tests"]

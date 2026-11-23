@@ -4,7 +4,7 @@
 #   conda env create -f pdfFiler/environment.yml
 #   conda run -n pdfFiler pip install -e pdfFiler
 # System tools: poppler-utils, libglib2.0-bin; optional ocrmypdf. The
-# filing window uses tkinter (part of conda's python).
+# filing window is Qt (PySide6).
 name: pdfFiler
 channels:
   - conda-forge
@@ -14,4 +14,5 @@ dependencies:
   - pytest
   - black
   - pip:
+      - PySide6>=6.5
       - organiseMyProjects @ git+https://github.com/Glawster/organiseMyProjects.git@0.10

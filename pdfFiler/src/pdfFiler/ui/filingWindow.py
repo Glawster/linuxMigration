@@ -1,16 +1,33 @@
-"""The filing window: page view on the left, the filled-in form on the right.
+"""FilingWindow: the page on the left, the filled-in filing form on the right.
 
 One window is reused for every PDF in a run. `decide()` shows a form and
-returns the user's Decision: File, Skip or Stop.
+returns the user's Decision: File, Skip or Stop (ADR 013).
 """
 
 from __future__ import annotations
 
 import datetime as dt
-import tempfile
-import tkinter as tk
+import sys
 from pathlib import Path
-from tkinter import filedialog, font, messagebox, ttk
+
+from PySide6.QtCore import QEventLoop, Qt
+from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
+from PySide6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QFileDialog,
+    QFormLayout,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
+)
 
 from pdfFiler.cabinet import CabinetIndex
 from pdfFiler.form import (
@@ -24,183 +41,186 @@ from pdfFiler.form import (
     formFolderSet,
     formTypeSet,
 )
-from pdfFiler.ui.pageView import PageView
+from pdfFiler.ui.widgets.pageView import PageView
 
+_STYLES = Path(__file__).resolve().parent / "styles" / "filingWindow.qss"
 _PREVIEW_BANNER = "Preview: nothing will move. Run with --confirm to file."
-_RED = "#b00020"
-_AMBER = "#8a5a00"
 
 
-class FilingWindow:
+class FilingWindow(QMainWindow):
     """File, Skip or Stop for each PDF, with every field editable."""
 
     def __init__(self, index: CabinetIndex, today: dt.date, dryRun: bool) -> None:
+        self.app = QApplication.instance() or QApplication(sys.argv[:1])
+        super().__init__()
         self.index = index
         self.today = today
         self.dryRun = dryRun
-        self.root = tk.Tk(className="pdfFiler")
-        self._scratch = Path(tempfile.mkdtemp(prefix="pdfFiler-"))
         self._state: FormState | None = None
         self._check: FormCheck | None = None
         self._decision: Decision | None = None
+        self._loop: QEventLoop | None = None
         self._createLayout()
 
     ## public
-
-    def close(self) -> None:
-        """Close the window and remove its page images."""
-        try:
-            self.root.destroy()
-        except tk.TclError:
-            pass
-        for path in self._scratch.glob("*"):
-            path.unlink()
-        self._scratch.rmdir()
 
     def decide(self, state: FormState, position: int, total: int) -> Decision:
         """Show one PDF's form and wait for File, Skip or Stop."""
         self._state = state
         self._decision = None
-        self.root.title(f"pdfFiler - {state.pdf.name} ({position} of {total})")
-        self._titleLabel.configure(text=f"{state.pdf.name}   ({position} of {total})")
+        self.setWindowTitle(f"pdfFiler - {state.pdf.name} ({position} of {total})")
+        self.titleLabel.setText(f"{state.pdf.name}   ({position} of {total})")
         self._fieldsShow()
-        self.root.deiconify()
-        self.root.lift()
         self.pageView.load(state.pdf)
-        self.folderBox.focus_set()
-        self.root.mainloop()
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.folderBox.setFocus()
+        self._loop = QEventLoop()
+        self._loop.exec()
+        self._loop = None
         return self._decision or Decision(STOP)
 
     def message(self, kind: str, text: str) -> None:
         """Show an info, warning or error message over the window."""
-        show = {"error": messagebox.showerror, "warning": messagebox.showwarning}.get(
-            kind, messagebox.showinfo
+        show = {"error": QMessageBox.critical, "warning": QMessageBox.warning}.get(
+            kind, QMessageBox.information
         )
-        show("pdfFiler", text, parent=self.root)
+        show(self, "pdfFiler", text)
 
     ## layout
 
     def _createLayout(self) -> None:
-        self.root.geometry("1500x950+40+40")
-        self.root.minsize(1100, 700)
-        style = ttk.Style(self.root)
-        if "clam" in style.theme_names():
-            style.theme_use("clam")
-        family = _familyChoose(self.root)
-        for name in ("TkDefaultFont", "TkTextFont", "TkHeadingFont", "TkMenuFont"):
-            font.nametofont(name).configure(family=family, size=11)
-        self._boldFont = font.Font(self.root, family=family, size=11, weight="bold")
-        self.root.protocol("WM_DELETE_WINDOW", lambda: self._decide(STOP))
-        self.root.bind("<Return>", lambda _event: self._fileIfReady())
-        self.root.bind("<KP_Enter>", lambda _event: self._fileIfReady())
-        self.root.bind("<Escape>", lambda _event: self._decide(SKIP))
+        self.resize(1500, 950)
+        self.setMinimumSize(1100, 700)
+        if _STYLES.is_file():
+            self.setStyleSheet(_STYLES.read_text(encoding="utf-8"))
+        central = QWidget(self)
+        layout = QVBoxLayout(central)
+        layout.addLayout(self._createHeader())
+        splitter = QSplitter(Qt.Orientation.Horizontal, central)
+        self.pageView = PageView(splitter)
+        splitter.addWidget(self.pageView)
+        splitter.addWidget(self._createContent())
+        splitter.setSizes([700, 800])
+        layout.addWidget(splitter, 1)
+        self.setCentralWidget(central)
+        self._createShortcuts()
 
-        self._createHeader()
-        body = ttk.PanedWindow(self.root, orient="horizontal")
-        body.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-        self.pageView = PageView(body, self._scratch)
-        body.add(self.pageView, weight=1)
-        side = ttk.Frame(body, padding=(14, 0, 0, 0))
-        body.add(side, weight=1)
-        self._createForm(side)
-        self._createFooter(side)
-
-    def _createHeader(self) -> None:
-        header = ttk.Frame(self.root, padding=(10, 10, 10, 6))
-        header.pack(fill="x")
-        self._titleLabel = ttk.Label(header, font=self._boldFont)
-        self._titleLabel.pack(side="left")
+    def _createHeader(self) -> QHBoxLayout:
+        header = QHBoxLayout()
+        self.titleLabel = QLabel(objectName="titleLabel")
+        header.addWidget(self.titleLabel)
+        header.addStretch(1)
         if self.dryRun:
-            tk.Label(header, text=_PREVIEW_BANNER, background="#fff3c4", foreground="#5c4400",
-                     padx=10, pady=3).pack(side="right")  # fmt: skip
+            header.addWidget(QLabel(_PREVIEW_BANNER, objectName="previewBanner"))
+        return header
 
-    def _createForm(self, parent: ttk.Frame) -> None:
-        form = ttk.Frame(parent)
-        form.pack(fill="x")
-        form.columnconfigure(1, weight=1)
+    def _createContent(self) -> QWidget:
+        side = QWidget()
+        layout = QVBoxLayout(side)
+        layout.setContentsMargins(14, 0, 0, 0)
+        layout.addLayout(self._createFields())
+        layout.addWidget(self._separator())
+        layout.addLayout(self._createResult())
+        layout.addStretch(1)
+        layout.addLayout(self._createFooter())
+        return side
 
-        ttk.Label(form, text="Folder").grid(row=0, column=0, sticky="w", pady=4)
-        self.folderBox = ttk.Combobox(form)
-        self.folderBox.grid(row=0, column=1, sticky="ew", pady=4)
-        ttk.Button(form, text="Browse…", command=self._folderBrowse).grid(
-            row=0, column=2, padx=(6, 0)
-        )
-        self.folderBox.bind("<<ComboboxSelected>>", lambda _event: self._folderChanged())
-        self.folderBox.bind("<KeyRelease>", self._keyed(self._folderChanged))
+    def _createFields(self) -> QFormLayout:
+        fields = QFormLayout()
+        fields.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
-        ttk.Label(form, text="Type").grid(row=1, column=0, sticky="w", pady=4)
-        self.typeBox = ttk.Combobox(form)
-        self.typeBox.grid(row=1, column=1, columnspan=2, sticky="ew", pady=4)
-        self.typeBox.bind("<<ComboboxSelected>>", lambda _event: self._typeChanged())
-        self.typeBox.bind("<KeyRelease>", self._keyed(self._typeChanged))
+        self.folderBox = QComboBox(editable=True)
+        self.folderBox.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        browse = QPushButton("Browse…")
+        browse.clicked.connect(self._folderBrowse)
+        folderRow = QHBoxLayout()
+        folderRow.addWidget(self.folderBox, 1)
+        folderRow.addWidget(browse)
+        fields.addRow("Folder", folderRow)
 
-        ttk.Label(form, text="Date").grid(row=2, column=0, sticky="w", pady=4)
-        self.dateEntry = ttk.Entry(form, width=14)
-        self.dateEntry.grid(row=2, column=1, sticky="w", pady=4)
-        self.dateEntry.bind(
-            "<KeyRelease>", self._keyed(lambda: self._typed("date", self.dateEntry))
-        )
+        self.typeBox = QComboBox(editable=True)
+        self.typeBox.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        fields.addRow("Type", self.typeBox)
 
-        ttk.Label(form, text="Label").grid(row=3, column=0, sticky="w", pady=4)
-        self.labelEntry = ttk.Entry(form)
-        self.labelEntry.grid(row=3, column=1, columnspan=2, sticky="ew", pady=4)
-        self.labelEntry.bind(
-            "<KeyRelease>", self._keyed(lambda: self._typed("label", self.labelEntry))
-        )
+        self.dateEdit = QLineEdit(placeholderText="YYYY-MM-DD", maxLength=10)
+        self.dateEdit.setFixedWidth(130)
+        fields.addRow("Date", self.dateEdit)
 
-        ttk.Separator(parent).pack(fill="x", pady=12)
-        ttk.Label(parent, text="File as").pack(anchor="w")
-        # One line, the full path; it scrolls rather than wrapping.
-        self.fileAsVar = tk.StringVar()
-        self.fileAsEntry = ttk.Entry(parent, textvariable=self.fileAsVar, state="readonly",
-                                     font=self._boldFont)  # fmt: skip
-        self.fileAsEntry.pack(fill="x", pady=(2, 6))
-        self.statusLabel = ttk.Label(parent, wraplength=640, justify="left")
-        self.statusLabel.pack(anchor="w", pady=(0, 10))
-        ttk.Label(parent, text="Why suggested").pack(anchor="w")
-        self.whyLabel = ttk.Label(parent, wraplength=640, justify="left", foreground="#444444")
-        self.whyLabel.pack(anchor="w", pady=(2, 0))
+        self.labelEdit = QLineEdit()
+        fields.addRow("Label", self.labelEdit)
 
-    def _createFooter(self, parent: ttk.Frame) -> None:
-        footer = ttk.Frame(parent)
-        footer.pack(side="bottom", fill="x", pady=(10, 0))
-        ttk.Label(footer, text="Enter = File    Esc = Skip", foreground="#666666").pack(side="left")
-        self.fileButton = ttk.Button(footer, text="File", command=self._fileIfReady)
-        self.fileButton.pack(side="right")
-        ttk.Button(footer, text="Skip", command=lambda: self._decide(SKIP)).pack(
-            side="right", padx=6
-        )
-        ttk.Button(footer, text="Stop", command=lambda: self._decide(STOP)).pack(side="right")
+        # Only the user's own changes reach these handlers: `activated` and
+        # `textEdited` do not fire when the form is filled in by code.
+        self.folderBox.activated.connect(lambda _index: self._folderChanged())
+        self.folderBox.lineEdit().textEdited.connect(lambda _text: self._folderChanged())
+        self.typeBox.activated.connect(lambda _index: self._typeChanged())
+        self.typeBox.lineEdit().textEdited.connect(lambda _text: self._typeChanged())
+        self.dateEdit.textEdited.connect(lambda _text: self._typed("date", self.dateEdit))
+        self.labelEdit.textEdited.connect(lambda _text: self._typed("label", self.labelEdit))
+        return fields
+
+    def _createResult(self) -> QVBoxLayout:
+        result = QVBoxLayout()
+        result.addWidget(QLabel("File as"))
+        # One line, the whole path; it scrolls rather than wrapping.
+        self.fileAsEdit = QLineEdit(objectName="fileAs", readOnly=True)
+        result.addWidget(self.fileAsEdit)
+        self.statusLabel = QLabel(objectName="status", wordWrap=True)
+        result.addWidget(self.statusLabel)
+        result.addSpacing(10)
+        result.addWidget(QLabel("Why suggested"))
+        self.whyLabel = QLabel(objectName="why", wordWrap=True)
+        result.addWidget(self.whyLabel)
+        return result
+
+    def _createFooter(self) -> QHBoxLayout:
+        footer = QHBoxLayout()
+        footer.addWidget(QLabel("Enter = File    Esc = Skip", objectName="keysHint"))
+        footer.addStretch(1)
+        self.stopButton = QPushButton("Stop")
+        self.skipButton = QPushButton("Skip")
+        self.fileButton = QPushButton("File", objectName="fileButton")
+        self.stopButton.clicked.connect(lambda: self._decide(STOP))
+        self.skipButton.clicked.connect(lambda: self._decide(SKIP))
+        self.fileButton.clicked.connect(self._fileIfReady)
+        for button in (self.stopButton, self.skipButton, self.fileButton):
+            button.setAutoDefault(False)
+            footer.addWidget(button)
+        return footer
+
+    def _createShortcuts(self) -> None:
+        for key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            QShortcut(QKeySequence(key), self, activated=self._fileIfReady)
+        QShortcut(QKeySequence(Qt.Key.Key_Escape), self, activated=lambda: self._decide(SKIP))
 
     ## fields
 
     def _fieldsShow(self) -> None:
         """Copy the form state into the widgets."""
         state = self._state
-        self.folderBox.configure(values=state.folderChoices)
-        _entrySet(self.folderBox, state.folder)
-        self.typeBox.configure(values=state.typeChoices)
-        _entrySet(self.typeBox, state.docType)
-        _entrySet(self.dateEntry, state.date)
-        _entrySet(self.labelEntry, state.label)
-        self.whyLabel.configure(text="; ".join(state.reasons))
+        _comboFill(self.folderBox, state.folderChoices, state.folder)
+        _comboFill(self.typeBox, state.typeChoices, state.docType)
+        self.dateEdit.setText(state.date)
+        self.labelEdit.setText(state.label)
+        self.whyLabel.setText("; ".join(state.reasons))
         self._refresh()
 
     def _folderChanged(self) -> None:
-        formFolderSet(self._state, self.folderBox.get(), self.index, self.today)
-        self.typeBox.configure(values=self._state.typeChoices)
-        _entrySet(self.typeBox, self._state.docType)
-        _entrySet(self.dateEntry, self._state.date)
-        _entrySet(self.labelEntry, self._state.label)
+        formFolderSet(self._state, self.folderBox.currentText(), self.index, self.today)
+        _comboFill(self.typeBox, self._state.typeChoices, self._state.docType)
+        self.dateEdit.setText(self._state.date)
+        self.labelEdit.setText(self._state.label)
         self._refresh()
 
     def _typeChanged(self) -> None:
-        formTypeSet(self._state, self.typeBox.get(), self.today)
-        _entrySet(self.dateEntry, self._state.date)
+        formTypeSet(self._state, self.typeBox.currentText(), self.today)
+        self.dateEdit.setText(self._state.date)
         self._refresh()
 
-    def _typed(self, name: str, entry: ttk.Entry) -> None:
-        setattr(self._state, name, entry.get())
+    def _typed(self, name: str, edit: QLineEdit) -> None:
+        setattr(self._state, name, edit.text())
         self._state.edited.add(name)
         self._refresh()
 
@@ -208,26 +228,43 @@ class FilingWindow:
         """Show the one-line destination and anything stopping the file."""
         check = formCheck(self._state, self.today)
         self._check = check
-        self.fileAsVar.set(check.shown or "—")
-        self.fileAsEntry.xview_moveto(0)
+        self.fileAsEdit.setText(check.shown or "—")
+        self.fileAsEdit.setCursorPosition(0)
         if check.problem:
-            self.statusLabel.configure(text=check.problem, foreground=_RED)
-            self.fileButton.configure(text="File", state="disabled")
+            self._statusShow(check.problem, "problem")
+            self.fileButton.setText("File")
+            self.fileButton.setEnabled(False)
         elif check.outcome == "duplicate":
-            self.statusLabel.configure(
-                text=f"Already filed as {check.existing.name}: this scan will go to the Trash.",
-                foreground=_AMBER,
+            self._statusShow(
+                f"Already filed as {check.existing.name}: this scan will go to the Trash.",
+                "duplicate",
             )
-            self.fileButton.configure(text="Trash duplicate", state="normal")
+            self.fileButton.setText("Trash duplicate")
+            self.fileButton.setEnabled(True)
         else:
-            self.statusLabel.configure(text="")
-            self.fileButton.configure(text="File", state="normal")
+            self._statusShow("", "ok")
+            self.fileButton.setText("File")
+            self.fileButton.setEnabled(True)
+
+    def _statusShow(self, text: str, level: str) -> None:
+        self.statusLabel.setText(text)
+        self.statusLabel.setProperty("level", level)
+        # Re-apply the style so the [level=...] rule takes effect.
+        self.statusLabel.style().unpolish(self.statusLabel)
+        self.statusLabel.style().polish(self.statusLabel)
 
     ## actions
 
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 (Qt override)
+        """Closing the window stops the run."""
+        if self._loop is not None:
+            self._decide(STOP)
+        event.accept()
+
     def _decide(self, action: str) -> None:
         self._decision = Decision(action, self._check if action == FILE else None)
-        self.root.quit()
+        if self._loop is not None:
+            self._loop.quit()
 
     def _fileIfReady(self) -> None:
         if self._check is not None and self._check.problem is None:
@@ -236,11 +273,8 @@ class FilingWindow:
     def _folderBrowse(self) -> None:
         root = self._state.root
         start = root / self._state.folder if self._state.folder else root
-        chosen = filedialog.askdirectory(
-            parent=self.root,
-            initialdir=str(start if start.is_dir() else root),
-            mustexist=True,
-            title="Choose filing folder",
+        chosen = QFileDialog.getExistingDirectory(
+            self, "Choose filing folder", str(start if start.is_dir() else root)
         )
         if not chosen:
             return
@@ -248,43 +282,21 @@ class FilingWindow:
         if root.resolve() not in chosenPath.parents:
             self.message("error", f"The folder must be inside {root}")
             return
-        _entrySet(self.folderBox, chosenPath.relative_to(root.resolve()).as_posix())
+        self.folderBox.setEditText(chosenPath.relative_to(root.resolve()).as_posix())
         self._folderChanged()
 
-    def _keyed(self, action):
-        """Run an action on typing, but not for keys handled by the window."""
+    ## utilities
 
-        def handler(event: tk.Event) -> None:
-            if event.keysym not in ("Return", "KP_Enter", "Escape", "Tab"):
-                action()
-
-        return handler
-
-
-## utilities
-
-# Tk without Xft support (conda's default build) sees only X core fonts;
-# texgyreheros is the best sans among them.
-_FAMILIES = (
-    "Ubuntu",
-    "DejaVu Sans",
-    "Noto Sans",
-    "Cantarell",
-    "Liberation Sans",
-    "texgyreheros",
-    "latin modern sans",
-)
+    @staticmethod
+    def _separator() -> QFrame:
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
+        return line
 
 
-def _familyChoose(root: tk.Misc) -> str:
-    available = {name.casefold(): name for name in font.families(root)}
-    for family in _FAMILIES:
-        if family.casefold() in available:
-            return available[family.casefold()]
-    return font.nametofont("TkDefaultFont").cget("family")
-
-
-def _entrySet(widget: ttk.Entry, value: str) -> None:
-    if widget.get() != value:
-        widget.delete(0, "end")
-        widget.insert(0, value)
+def _comboFill(box: QComboBox, values: list[str], current: str) -> None:
+    """Replace a combo box's items and text without firing user signals."""
+    box.clear()
+    box.addItems(values)
+    box.setEditText(current)

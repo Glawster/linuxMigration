@@ -19,4 +19,4 @@ Next available number: 014
 | [010](010-replaceableMediaQuickVerify.md) | Quick verification is enough to remove replaceable media | Accepted | [001](../requirements/features/001-raidMigration.md) |
 | [011](011-pdfFilerPython.md) | pdfFiler moves to a Python project | Accepted, amended by [013](013-filingWindow.md) | [005](../requirements/features/005-pdfFilerSuggestions.md) |
 | [012](012-learnFromNames.md) | pdfFiler learns from names and confirmations, not filed content | Accepted | [005](../requirements/features/005-pdfFilerSuggestions.md) |
-| [013](013-filingWindow.md) | One tkinter filing window replaces the zenity dialogs | Accepted | [005](../requirements/features/005-pdfFilerSuggestions.md) |
+| [013](013-filingWindow.md) | One Qt filing window replaces the zenity dialogs | Accepted | [005](../requirements/features/005-pdfFilerSuggestions.md) |

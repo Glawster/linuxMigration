@@ -37,8 +37,8 @@ With no command, `pdfFiler.sh` runs `inbox file`.
 PDFs are offered oldest first (`.pdf` or `.PDF`), each once per run, in one
 filing window ([ADR 013](../project/adr/013-filingWindow.md)):
 
-- **Left:** page 1 of the PDF. ◀ ▶ change page, and **Zoom** (or a click on
-  the page) shows it at full size.
+- **Left:** page 1 of the PDF, drawn by Qt. ◀ ▶ change page, and **Fit
+  width** / **Fit page** switch the zoom.
 - **Right:** the fields, already filled in from the suggestion:
   - **Folder:** the list holds the suggestion and the other likely folders;
     **Browse…** picks any folder inside the cabinets.
@@ -170,7 +170,7 @@ Nothing is overwritten or deleted.
 - Required: `pdftotext`, `pdftoppm` and `pdfinfo` (poppler-utils), and `gio`
   (libglib2.0-bin). zenity, feh and wmctrl are no longer used.
 - Optional: `ocrmypdf` for scans without text.
-- Python with organiseMyProjects and tkinter (both in `py312`). `pdfFiler.sh`
+- Python with organiseMyProjects and PySide6 (both in `py312`). `pdfFiler.sh`
   uses `PDF_FILER_PYTHON`, then the active `python3`, then the `py312` Conda
   environment. Use `pdfFiler/environment.yml` on a fresh machine.
 - The window opens only when a PDF needs it, so `suggest`, `index show` and
@@ -190,5 +190,5 @@ cabinets:
   Aviva ISA statement (with fictional numbers), and on the Direct Payments
   rule;
 - the form logic and the workflow, with a scripted window;
-- the real filing window on the display (skipped without one);
+- the real Qt filing window, driven off-screen;
 - the real `pdfFiler.sh`, run with no display.

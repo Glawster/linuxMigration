@@ -205,7 +205,7 @@ three dialogs, and are named consistently with their neighbours.
   `feature/pdf-filer-update`).
 - [ADR 011: pdfFiler moves to a Python project](../../adr/011-pdfFilerPython.md).
 - [ADR 012: pdfFiler learns from names and confirmations, not filed content](../../adr/012-learnFromNames.md).
-- [ADR 013: One tkinter filing window replaces the zenity dialogs](../../adr/013-filingWindow.md).
+- [ADR 013: One Qt filing window replaces the zenity dialogs](../../adr/013-filingWindow.md).
 - [ADR 008: One version and release tag for the whole repository](../../adr/008-repositoryVersion.md)
   (version reporting).
 
@@ -255,4 +255,5 @@ three dialogs, and are named consistently with their neighbours.
   previewed as in the golden tests. Manual acceptance is still to do.
 - 2026-11-23: after the first real run, the zenity confirmation was replaced
   by one filing window (ADR 013) at the user's request, with the filed name on
-  one line. Criteria 7 and 9 were revised.
+  one line. Criteria 7 and 9 were revised. The window was then rebuilt in Qt
+  (PySide6) instead of tkinter, at the user's preference.
